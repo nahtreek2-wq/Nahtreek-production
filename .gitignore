@@ -21,3 +21,5 @@ node_modules/
 **/nahtreek-preview-*.json
 .DS_Store
 **/.android-signing/
+.gradle/
+.cxx/

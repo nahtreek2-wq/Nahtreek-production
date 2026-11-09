@@ -14,11 +14,24 @@ discovery priority and the member badge. Code:
 2. Pro authorizes in Razorpay Checkout (subscription checkout in the pro app).
 3. `POST /api/v1/memberships/confirm` re-fetches the subscription and applies
    `ACTIVE`; webhooks (`subscription.activated/charged`) confirm the same.
+   Confirm waits out the first-charge lag (re-reads `created`/`pending` up
+   to ~9s) and otherwise answers "still confirming — do not pay again" so
+   the app polls instead of stranding the user; a `halted`/`cancelled`
+   mandate answers "no money was taken, start a fresh checkout".
 4. Access is effective while the paid period runs, including a
    cancelled-but-paid tail. `PAST_DUE` keeps the tail; `PAUSED`/`EXPIRED` lose
    perks immediately.
-5. Cancel is always at period end. Dead past-due/paused rows can be replaced
-   by a fresh subscribe; the halted predecessor never charges again.
+5. Cancel works in every state. Active rows cancel at period end (paid tail
+   kept, notification sent). `PENDING` checkouts always clear locally —
+   Razorpay itself refuses to cancel a mandate with no billing cycle, so a
+   provider failure there is swallowed and the row resets to `NONE`. If the
+   provider cancel throws for an active row, the server re-reads the mandate
+   and syncs locally when Razorpay already ended it (dashboard cancel,
+   retried tap) instead of failing the user.
+6. Subscribe never orphans: a live checkout resumes on its short URL (no
+   duplicate mandates) and an already-`active` mandate replays as-is; only
+   dead (cancelled/completed/expired) mandates mint a fresh subscription.
+   Demo AI rows keep the demo until the real mandate confirms.
 6. `POST /api/v1/internal/memberships/reconcile` (cron secret) expires lapsed
    rows and heals `memberPriority` flags. Webhooks dedupe by Razorpay event
    id and ignore stale-subscription events.
@@ -54,11 +67,16 @@ memberships change only from the pro app or billing webhooks).
 ## Still manual
 
 - Test plans created (`RAZORPAY_MEMBERSHIP_PLAN_ID` ₹399, `RAZORPAY_AI_PLAN_ID`
-  ₹99); subscribe verified live, checkout completion still needs a human tap.
+  ₹129); subscribe + cancel verified live, full checkout completion still
+  needs a human tap.
+- Register the webhook: set `RAZORPAY_WEBHOOK_SECRET` on the API project and
+  add `POST /api/v1/internal/memberships/webhook` in the Razorpay dashboard
+  (subscription events). Until then activation relies on confirm + app
+  polling, and dashboard-side cancels only sync when the user taps cancel.
 - Schedule the reconcile endpoint (daily) wherever cron/CI runs it.
 - Live-mode rerun: subscribe → autopay → charged → cancel → expiry.
 
-## Home AI subscription (₹99/month, client-side)
+## Home Plus subscription (₹129/month, client-side)
 
 Same engine, second product: Home users get 5 free AI chats, then chat,
 project plans and photo uploads need the ₹129/month Plus subscription —
@@ -82,4 +100,4 @@ rows of type `USER_TEXT`.
 - The shared `internal/memberships` webhook also routes AI events (looked up by
   provider subscription id, then `notes.aiSubscriptionId`); reconcile expires
   lapsed AI rows too.
-- Setup: create the ₹99/month plan in Razorpay and set `RAZORPAY_AI_PLAN_ID`.
+- Setup: create the ₹129/month plan in Razorpay and set `RAZORPAY_AI_PLAN_ID`.

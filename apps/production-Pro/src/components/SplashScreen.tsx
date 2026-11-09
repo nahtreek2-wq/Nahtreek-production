@@ -3,13 +3,19 @@ import {ActivityIndicator, Animated, Image, StyleSheet, Text, View} from 'react-
 import {useReducedMotion} from '../../../../packages/mobile-ui/useReducedMotion';
 import {ProColors, ProType} from '../theme/professionalTheme';
 
-export function SplashScreen({ready, onFinish}: {ready: boolean; onFinish: () => void}) {
+export function SplashScreen({ready, onFinish, instant = false}: {ready: boolean; onFinish: () => void; instant?: boolean}) {
   const opacity = useRef(new Animated.Value(1)).current;
   const finished = useRef(false);
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (!ready) {return;}
+    if (instant) {
+      if (finished.current) {return;}
+      finished.current = true;
+      onFinish();
+      return;
+    }
     const timer = setTimeout(() => {
       if (finished.current) {return;}
       finished.current = true;
@@ -26,7 +32,7 @@ export function SplashScreen({ready, onFinish}: {ready: boolean; onFinish: () =>
       });
     }, 0);
     return () => clearTimeout(timer);
-  }, [onFinish, opacity, ready, reducedMotion]);
+  }, [instant, onFinish, opacity, ready, reducedMotion]);
 
   return (
     <Animated.View

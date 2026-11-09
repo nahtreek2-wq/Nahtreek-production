@@ -15,6 +15,13 @@ export function isPaywallError(cause: unknown) {
   return cause instanceof ApiError && cause.status === 402;
 }
 
+// The first subscription charge lands seconds after the GPay success screen.
+// The server says "still confirming" while it waits — the app polls instead
+// of showing a dead-end error.
+export function isConfirmingError(cause: unknown) {
+  return cause instanceof Error && /still confirming/i.test(cause.message);
+}
+
 export function quotaLabel(view: AiSubscriptionView | null): string | null {
   if (!view || view.effective) return null;
   const left = Math.max(0, view.freeQuota - view.freeUsed);
@@ -36,9 +43,12 @@ export function activateDemoAi() {
 }
 
 // Runs the Razorpay subscription checkout, then confirms with our API so the
-// row only flips ACTIVE after the provider says the mandate is real.
+// row only flips ACTIVE after the provider says the mandate is real. When the
+// server replays an already-effective subscription (no live checkout to run),
+// checkout is skipped and the fresh status is returned instead.
 export async function subscribeAi(): Promise<AiSubscriptionView> {
-  const started = await api.post<{keyId: string; subscriptionId: string; shortUrl: string | null}>('/ai-billing/subscribe', {});
+  const started = await api.post<{effective: boolean; keyId: string; subscriptionId: string | null; shortUrl: string | null}>('/ai-billing/subscribe', {});
+  if ((started.effective && !started.shortUrl) || !started.subscriptionId) return fetchAiSubscription();
   await RazorpayCheckout.open({
     key: started.keyId,
     subscription_id: started.subscriptionId,
@@ -46,5 +56,9 @@ export async function subscribeAi(): Promise<AiSubscriptionView> {
     description: 'Unlimited AI chats, plans, uploads + Plus booking perks — ₹129/month',
     theme: {color: '#FACC15'},
   });
+  return api.post<AiSubscriptionView>('/ai-billing/confirm', {});
+}
+
+export function confirmAiSubscription() {
   return api.post<AiSubscriptionView>('/ai-billing/confirm', {});
 }

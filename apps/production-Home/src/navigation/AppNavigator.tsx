@@ -216,6 +216,7 @@ export function AppNavigator() {
     return (
       <SplashScreen
         isReady={isHydrated && persistedNav.ready}
+        instant={!!persistedNav.initialState}
         onFinish={() => setSplashFinished(true)}
       />
     );

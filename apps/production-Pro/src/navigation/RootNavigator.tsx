@@ -179,7 +179,7 @@ function MessagesNavigator() {
   );
 }
 
-export function RootNavigator() {
+export function RootNavigator({instantSplash = false}: {instantSplash?: boolean} = {}) {
   const [splashFinished, setSplashFinished] = useState(false);
   const hydrated = useSessionStore(state => state.hydrated);
   const accessToken = useSessionStore(state => state.accessToken);
@@ -190,7 +190,7 @@ export function RootNavigator() {
   }, [hydrate]);
   const finishSplash = useCallback(() => setSplashFinished(true), []);
   if (!hydrated || !splashFinished) {
-    return <SplashScreen ready={hydrated} onFinish={finishSplash} />;
+    return <SplashScreen ready={hydrated} instant={instantSplash} onFinish={finishSplash} />;
   }
   if (!accessToken || !user) {
     return (

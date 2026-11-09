@@ -25,6 +25,8 @@ import type {ProfileStackParamList} from '../navigation/types';
 import {mediaUrl, saveProfessionalPhoto} from '../services/media';
 import {useQueryClient} from '@tanstack/react-query';
 import {MotionReveal} from '../components/MotionReveal';
+import {ProIconChip} from '../components/ProIconChip';
+import type {IconChipTone} from '../components/ProIconChip';
 import {WorkVisual} from '../components/WorkVisual';
 import {ProColors, ProSpacing, ProType} from '../theme/professionalTheme';
 import {useReducedMotion} from '../../../../packages/mobile-ui/useReducedMotion';
@@ -57,6 +59,16 @@ type ProfileActionRowProps = {
   onPress: () => void;
 };
 
+const ROW_TONES: Record<string, IconChipTone> = {
+  'cash-multiple': 'amber',
+  'crown-outline': 'amber',
+  'star-circle-outline': 'amber',
+  'bell-outline': 'blue',
+  'tune-variant': 'slate',
+  'file-certificate-outline': 'green',
+  'shield-check-outline': 'green',
+};
+
 function ProfileActionRow({
   icon,
   title,
@@ -76,13 +88,7 @@ function ProfileActionRow({
         last && styles.actionRowLast,
         pressed && (reducedMotion ? styles.rowPressed : styles.actionRowPressed),
       ]}>
-      <View style={styles.actionIcon}>
-        <MaterialCommunityIcons
-          name={icon}
-          size={21}
-          color={ProColors.secondary}
-        />
-      </View>
+      <ProIconChip name={icon} tone={ROW_TONES[icon] ?? 'navy'} size={44} iconSize={23} />
       <View style={styles.flex}>
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowText}>{description}</Text>
@@ -534,11 +540,7 @@ export function ProfileScreen() {
           disabled={signingOut}
           onPress={signOut}
           style={({pressed}) => [styles.signOut, pressed && styles.rowPressed]}>
-          <MaterialCommunityIcons
-            name="logout-variant"
-            size={19}
-            color={ProColors.error}
-          />
+          <ProIconChip name="logout-variant" tone="red" size={38} iconSize={20} />
           <Text style={styles.signOutText}>
             {signingOut ? 'Signing out…' : 'Sign out'}
           </Text>

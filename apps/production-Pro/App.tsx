@@ -87,7 +87,7 @@ export default function App() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <StatusBar barStyle="light-content" backgroundColor={Colors.navyDeep} />
-        <AppErrorBoundary><ConnectivityNotice />{hydrated && persistedNav.ready ? (<NavigationContainer ref={navigationRef} initialState={persistedNav.initialState} onStateChange={persistedNav.onStateChange}><RootNavigator /></NavigationContainer>) : null}</AppErrorBoundary>
+        <AppErrorBoundary><ConnectivityNotice />{hydrated && persistedNav.ready ? (<NavigationContainer ref={navigationRef} initialState={persistedNav.initialState} onStateChange={persistedNav.onStateChange}><RootNavigator instantSplash={!!persistedNav.initialState} /></NavigationContainer>) : null}</AppErrorBoundary>
         <ProToast />
       </QueryClientProvider>
     </SafeAreaProvider>

@@ -27,6 +27,14 @@ const REMOTE_STATUS: Record<string, MembershipStatus> = {
   cancelled: MembershipStatus.CANCELLED, completed: MembershipStatus.EXPIRED, expired: MembershipStatus.EXPIRED,
 };
 
+// Razorpay charges the first subscription cycle asynchronously: right after
+// the customer pays in GPay/UPI the subscription still reads created/pending
+// for a few seconds. Confirm retries across that window instead of failing
+// a payment that is already on its way.
+const SETTLED_POLL_ATTEMPTS = 3;
+const SETTLED_POLL_GAP_MS = 3000;
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 type Row = {id: string; professionalProfileId: string; providerSubscriptionId: string | null; status: MembershipStatus;
   currentPeriodStart: Date | null; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean; lastChargeAt: Date | null};
 
@@ -88,25 +96,38 @@ export class MembershipsService {
       data: {memberPriority: m ? this.isEffective(m) : false}});
   }
 
+  // Re-reads the provider's subscription before minting a new one: an
+  // already-active mandate replays as-is, a live checkout resumes on its
+  // short URL, and only dead (cancelled/completed/expired) mandates fall
+  // through to a fresh subscription. A failed re-read also falls through so
+  // the create path below reports the outage with its proper error.
+  private async resumeCheckout(m: Row): Promise<(ReturnType<MembershipsService['viewOf']> & {keyId: string; subscriptionId: string | null; shortUrl: string | null}) | null> {
+    if (!m.providerSubscriptionId) return null;
+    const remote = await this.provider.fetchSubscription(m.providerSubscriptionId).catch(() => null);
+    if (!remote || remote.id !== m.providerSubscriptionId) return null;
+    if (remote.status === 'active') {
+      const updated = await this.applyRemote(m, remote);
+      return {...this.viewOf(updated), keyId: this.provider.keyId, subscriptionId: m.providerSubscriptionId, shortUrl: null};
+    }
+    if (['created', 'authenticated', 'pending'].includes(remote.status)) {
+      const updated = await this.applyRemote(m, remote);
+      return {...this.viewOf(updated), keyId: this.provider.keyId, subscriptionId: m.providerSubscriptionId, shortUrl: remote.short_url ?? null};
+    }
+    return null;
+  }
+
   async subscribe(userId: string) {
     const planId = this.planId();
     const profile = await this.profileOf(userId);
     let m = await this.db.membership.findUnique({where: {professionalProfileId: profile.id}});
     if (!m) m = await this.db.membership.create({data: {professionalProfileId: profile.id}});
+    const resumed = await this.resumeCheckout(m);
+    if (resumed) return resumed;
     // Active and voluntarily-cancelled rows keep their paid tail; dead
     // past-due/paused rows fall through and get replaced by a fresh checkout.
     // The halted predecessor never charges again, so superseding is safe.
     if (this.isEffective(m) && (m.status === MembershipStatus.ACTIVE || m.status === MembershipStatus.CANCELLED))
       return {...this.viewOf(m), keyId: this.provider.keyId, subscriptionId: m.providerSubscriptionId, shortUrl: null as string | null};
-    if (m.providerSubscriptionId && m.status === MembershipStatus.PENDING) {
-      try {
-        const remote = await this.provider.fetchSubscription(m.providerSubscriptionId);
-        if (['created', 'authenticated', 'pending'].includes(remote.status) && remote.short_url)
-          return {...this.viewOf(m), keyId: this.provider.keyId, subscriptionId: m.providerSubscriptionId, shortUrl: remote.short_url};
-      } catch (error) {
-        this.toProviderError(error);
-      }
-    }
     try {
       const plan = await this.provider.fetchPlan(planId);
       if (plan.amount !== MEMBERSHIP_FEE_PAISE || plan.currency !== 'INR' || plan.period !== 'monthly')
@@ -133,19 +154,35 @@ export class MembershipsService {
     }
   }
 
+  private async fetchSubscriptionSettled(subscriptionId: string): Promise<RazorpaySubscription> {
+    let remote: RazorpaySubscription;
+    try {
+      remote = await this.provider.fetchSubscription(subscriptionId);
+    } catch (error) {
+      this.toProviderError(error);
+    }
+    for (let attempt = 1; attempt < SETTLED_POLL_ATTEMPTS && ['created', 'pending'].includes(remote!.status); attempt += 1) {
+      await sleep(SETTLED_POLL_GAP_MS);
+      try {
+        remote = await this.provider.fetchSubscription(subscriptionId);
+      } catch (error) {
+        this.toProviderError(error);
+      }
+    }
+    return remote!;
+  }
+
   async confirm(userId: string) {
     this.planId();
     const profile = await this.profileOf(userId);
     const m = await this.db.membership.findUnique({where: {professionalProfileId: profile.id}});
     if (!m?.providerSubscriptionId) throw new ConflictException('No membership checkout to confirm');
     if (this.isEffective(m)) return this.viewOf(m);
-    let remote: RazorpaySubscription;
-    try {
-      remote = await this.provider.fetchSubscription(m.providerSubscriptionId);
-    } catch (error) {
-      this.toProviderError(error);
-    }
-    return this.viewOf(await this.applyRemote(m, remote!));
+    const remote = await this.fetchSubscriptionSettled(m.providerSubscriptionId);
+    const updated = await this.applyRemote(m, remote);
+    if (!this.isEffective(updated) && ['created', 'pending'].includes(remote.status))
+      throw new ConflictException('Payment is still confirming at Razorpay. Wait a minute, then refresh the membership screen.');
+    return this.viewOf(updated);
   }
 
   async cancel(userId: string, dto: CancelMembershipDto) {
@@ -154,19 +191,39 @@ export class MembershipsService {
     const m = await this.db.membership.findUnique({where: {professionalProfileId: profile.id}});
     if (!m?.providerSubscriptionId) throw new NotFoundException('No membership to cancel');
     if (m.status === MembershipStatus.CANCELLED || m.status === MembershipStatus.EXPIRED) return this.viewOf(m);
+    if (m.status === MembershipStatus.PENDING) {
+      // A never-authorized checkout has no billing cycle, so Razorpay itself
+      // refuses to cancel it — drop the dead checkout best-effort and always
+      // free the row, otherwise the user is stuck on "Complete authorization"
+      // with no working cancel.
+      await this.provider.cancelSubscription(m.providerSubscriptionId).catch(() => undefined);
+      const updated = await this.db.membership.update({where: {id: m.id},
+        data: {providerSubscriptionId: null, status: MembershipStatus.NONE, cancelAtPeriodEnd: false}});
+      await this.db.auditLog.create({data: {userId, entity: 'Membership', entityId: m.id,
+        action: 'MEMBERSHIP_CHECKOUT_CANCELLED', metadata: {reason: dto.reason ?? null}}});
+      return this.viewOf(updated);
+    }
     try {
       await this.provider.cancelSubscription(m.providerSubscriptionId);
     } catch (error) {
+      // A mandate already ended at Razorpay (dashboard cancel, retried tap)
+      // fails the cancel call — sync the local row to the provider truth
+      // instead of failing the user.
+      const remote = await this.provider.fetchSubscription(m.providerSubscriptionId).catch(() => null);
+      if (remote && ['cancelled', 'completed', 'expired'].includes(remote.status)) {
+        const synced = await this.applyRemote(m, remote);
+        await this.db.auditLog.create({data: {userId, entity: 'Membership', entityId: m.id,
+          action: 'MEMBERSHIP_CANCELLED', metadata: {reason: dto.reason ?? null, synced: true}}});
+        await this.syncPriority(profile.id);
+        await this.tell(profile.userId, 'Membership ended',
+          this.isEffective(synced) ? 'Your benefits continue until the paid period ends.' : 'Your membership was cancelled.',
+          'MEMBERSHIP_ENDED', m.id);
+        return this.viewOf(synced);
+      }
       this.toProviderError(error);
     }
-    let updated: Row;
-    if (m.status === MembershipStatus.PENDING) {
-      updated = await this.db.membership.update({where: {id: m.id},
-        data: {providerSubscriptionId: null, status: MembershipStatus.NONE}});
-    } else {
-      updated = await this.db.membership.update({where: {id: m.id},
-        data: {status: MembershipStatus.CANCELLED, cancelAtPeriodEnd: true}});
-    }
+    const updated: Row = await this.db.membership.update({where: {id: m.id},
+      data: {status: MembershipStatus.CANCELLED, cancelAtPeriodEnd: true}});
     await this.db.auditLog.create({data: {userId, entity: 'Membership', entityId: m.id,
       action: 'MEMBERSHIP_CANCELLED', metadata: {reason: dto.reason ?? null}}});
     await this.syncPriority(profile.id);
@@ -205,7 +262,7 @@ export class MembershipsService {
     return {lifetimeSavingsPaisa, jobsAtMemberRate};
   }
 
-  private async handleAiWebhookEvent(ai: {id: string; userId: string; providerSubscriptionId: string | null},
+  private async handleAiWebhookEvent(ai: {id: string; userId: string; providerSubscriptionId: string | null; status: MembershipStatus; currentPeriodStart: Date | null; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean; lastChargeAt: Date | null},
       event: {id?: string; event?: string; payload?: any}, entity: any) {
     if (await this.db.aiSubscriptionEvent.findUnique({where: {providerEventId: event.id!}})) return {ok: true, duplicate: true};
     await this.db.aiSubscriptionEvent.create({data: {aiSubscriptionId: ai.id, providerEventId: event.id!,
@@ -265,10 +322,10 @@ export class MembershipsService {
     return {ok: true};
   }
 
-  private async aiApplyRemote(ai: {id: string; providerSubscriptionId: string | null; status?: MembershipStatus}, remote: RazorpaySubscription, charged = false): Promise<{status: MembershipStatus}> {
-    if (ai.providerSubscriptionId && remote.id !== ai.providerSubscriptionId) return {status: ai.status ?? MembershipStatus.NONE};
+  private async aiApplyRemote(ai: {id: string; providerSubscriptionId: string | null; status: MembershipStatus; currentPeriodStart: Date | null; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean; lastChargeAt: Date | null}, remote: RazorpaySubscription, charged = false) {
+    if (ai.providerSubscriptionId && remote.id !== ai.providerSubscriptionId) return ai;
     const status = REMOTE_STATUS[remote.status];
-    if (!status) return {status: ai.status ?? MembershipStatus.NONE};
+    if (!status) return ai;
     const start = typeof remote.current_start === 'number' ? new Date(remote.current_start * 1000) : undefined;
     const end = typeof remote.current_end === 'number' ? new Date(remote.current_end * 1000) : undefined;
     return this.db.aiSubscription.update({where: {id: ai.id}, data: {status,
@@ -465,17 +522,32 @@ export class MembershipsService {
     const planId = this.aiPlanId();
     let row = await this.db.aiSubscription.findUnique({where: {userId}});
     if (!row) row = await this.db.aiSubscription.create({data: {userId}});
-    if (this.isEffective(row) && (row.status === MembershipStatus.ACTIVE || row.status === MembershipStatus.CANCELLED))
-      return {...this.aiViewOf(row), keyId: this.provider.keyId, subscriptionId: row.providerSubscriptionId, shortUrl: null as string | null};
-    if (row.providerSubscriptionId && row.status === MembershipStatus.PENDING) {
-      try {
-        const remote = await this.provider.fetchSubscription(row.providerSubscriptionId);
-        if (['created', 'authenticated', 'pending'].includes(remote.status) && remote.short_url)
-          return {...this.aiViewOf(row), keyId: this.provider.keyId, subscriptionId: row.providerSubscriptionId, shortUrl: remote.short_url};
-      } catch (error) {
-        this.toProviderError(error);
+    if (row.providerSubscriptionId) {
+      const remote = await this.provider.fetchSubscription(row.providerSubscriptionId).catch(() => null);
+      // A remote id that does not match the row is stale: fall through to a
+      // fresh subscription below instead of resuming a stranger's checkout.
+      const stale = !remote || remote.id !== row.providerSubscriptionId;
+      if (!stale && remote?.status === 'active') {
+        const updated = await this.aiApplyRemote(row, remote);
+        return {...this.aiViewOf(updated), keyId: this.provider.keyId, subscriptionId: row.providerSubscriptionId, shortUrl: null as string | null};
       }
+      if (!stale && remote && ['created', 'authenticated', 'pending'].includes(remote.status)) {
+        // A live checkout resumes on its short URL — but a demo-effective row
+        // keeps its demo status until the real mandate actually confirms.
+        const demo = this.isEffective(row) && !row.lastChargeAt;
+        const updated = demo ? row : await this.aiApplyRemote(row, remote);
+        return {...this.aiViewOf(updated), keyId: this.provider.keyId, subscriptionId: row.providerSubscriptionId, shortUrl: remote.short_url ?? null};
+      }
+      // Dead (cancelled/completed/expired) or unreadable mandates fall
+      // through to a fresh subscription; the create path below reports a real
+      // provider outage with its proper error.
     }
+    if (this.isEffective(row) && (row.status === MembershipStatus.ACTIVE || row.status === MembershipStatus.CANCELLED)
+      && row.providerSubscriptionId)
+      return {...this.aiViewOf(row), keyId: this.provider.keyId, subscriptionId: row.providerSubscriptionId, shortUrl: null as string | null};
+    // A demo-effective row has no provider id: starting a real checkout must
+    // not kill the demo — the demo stays until the real mandate confirms.
+    const keepDemo = this.isEffective(row) && !row.providerSubscriptionId;
     try {
       const plan = await this.provider.fetchPlan(planId);
       if (plan.amount !== AI_SUBSCRIPTION_FEE_PAISE || plan.currency !== 'INR' || plan.period !== 'monthly')
@@ -486,7 +558,8 @@ export class MembershipsService {
       // re-reads and returns the winner's live checkout link. Orphaned
       // Razorpay subscriptions never charge without customer authorization.
       const claimed = await this.db.aiSubscription.updateMany({where: {id: row.id, providerSubscriptionId: row.providerSubscriptionId},
-        data: {providerSubscriptionId: sub.id, status: MembershipStatus.PENDING, cancelAtPeriodEnd: false}});
+        data: keepDemo ? {providerSubscriptionId: sub.id}
+          : {providerSubscriptionId: sub.id, status: MembershipStatus.PENDING, cancelAtPeriodEnd: false}});
       if (!claimed.count) {
         const winner = await this.db.aiSubscription.findUniqueOrThrow({where: {id: row.id}});
         const remote = await this.provider.fetchSubscription(winner.providerSubscriptionId!);
@@ -505,14 +578,17 @@ export class MembershipsService {
   async aiConfirm(userId: string) {
     const row = await this.db.aiSubscription.findUnique({where: {userId}});
     if (!row?.providerSubscriptionId) throw new BadRequestException('Start the AI subscription checkout first');
-    const sub = await this.provider.fetchSubscription(row.providerSubscriptionId);
-    if (!['active', 'authenticated'].includes(sub.status)) throw new BadRequestException(`Payment is not complete (provider status: ${sub.status})`);
+    const sub = await this.fetchSubscriptionSettled(row.providerSubscriptionId);
+    if (['halted', 'cancelled'].includes(sub.status))
+      throw new BadRequestException('The payment failed or was cancelled at Razorpay. No money was taken — start a fresh checkout to try again.');
+    if (!['active', 'authenticated'].includes(sub.status))
+      throw new BadRequestException('Payment is still confirming at Razorpay. Wait a minute, then tap refresh — do not pay again.');
     const updated = await this.db.aiSubscription.update({where: {userId}, data: {status: 'ACTIVE', cancelAtPeriodEnd: false,
       currentPeriodStart: sub.current_start ? new Date(sub.current_start * 1000) : null,
       currentPeriodEnd: sub.current_end ? new Date(sub.current_end * 1000) : null, lastChargeAt: new Date()}});
     await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: row.id,
       action: 'AI_SUBSCRIPTION_CONFIRMED', metadata: {providerSubscriptionId: row.providerSubscriptionId}}});
-    return this.aiViewOf(updated);
+    return {...this.aiViewOf(updated), freeUsed: await this.aiFreeUsed(userId), freeQuota: AI_FREE_MESSAGES};
   }
 
   // Preview-only demo path so testers can use the full AI subscription
@@ -537,12 +613,46 @@ export class MembershipsService {
 
   async aiCancel(userId: string, dto: CancelMembershipDto) {
     const row = await this.db.aiSubscription.findUnique({where: {userId}});
-    if (!row || !this.isEffective(row)) throw new BadRequestException('No active AI subscription to cancel');
-    if (row.providerSubscriptionId) await this.provider.cancelSubscription(row.providerSubscriptionId);
+    if (!row || (!this.isEffective(row) && row.status !== MembershipStatus.PENDING))
+      throw new BadRequestException('No active AI subscription to cancel');
+    const quota = {freeUsed: await this.aiFreeUsed(userId), freeQuota: AI_FREE_MESSAGES};
+    if (!this.isEffective(row)) {
+      // A never-authorized checkout has no billing cycle, so Razorpay itself
+      // refuses to cancel it — drop the dead checkout best-effort and always
+      // free the row instead of stranding the user.
+      if (row.providerSubscriptionId)
+        await this.provider.cancelSubscription(row.providerSubscriptionId).catch(() => undefined);
+      const cleared = await this.db.aiSubscription.update({where: {userId}, data: {providerSubscriptionId: null,
+        status: MembershipStatus.NONE, cancelAtPeriodEnd: false, currentPeriodStart: null, currentPeriodEnd: null}});
+      await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: row.id,
+        action: 'AI_SUBSCRIPTION_CHECKOUT_CANCELLED', metadata: {reason: dto.reason ?? null}}});
+      return {...this.aiViewOf(cleared), ...quota};
+    }
+    if (row.providerSubscriptionId) {
+      try {
+        await this.provider.cancelSubscription(row.providerSubscriptionId);
+      } catch (error) {
+        // A mandate already ended at Razorpay (dashboard cancel, retried tap)
+        // fails the cancel call — sync the local row to the provider truth
+        // instead of failing the user.
+        const remote = await this.provider.fetchSubscription(row.providerSubscriptionId).catch(() => null);
+        if (remote && ['cancelled', 'completed', 'expired'].includes(remote.status)) {
+          const synced = await this.aiApplyRemote(row, remote);
+          await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: row.id,
+            action: 'AI_SUBSCRIPTION_CANCELLED', metadata: {reason: dto.reason ?? null, synced: true}}});
+          await this.tellAi(userId, 'AI subscription ended', 'Your access continues until the paid period ends.',
+            'AI_SUBSCRIPTION_ENDED', row.id);
+          return {...this.aiViewOf(synced), ...quota};
+        }
+        this.toProviderError(error);
+      }
+    }
     const updated = await this.db.aiSubscription.update({where: {userId}, data: {cancelAtPeriodEnd: true}});
     await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: row.id,
       action: 'AI_SUBSCRIPTION_CANCELLED', metadata: {reason: dto.reason ?? null}}});
-    return this.aiViewOf(updated);
+    await this.tellAi(userId, 'AI subscription will not renew', 'You keep unlimited AI until the paid period ends.',
+      'AI_SUBSCRIPTION_CANCELLED', row.id);
+    return {...this.aiViewOf(updated), ...quota};
   }
 
   async aiAdminSummary() {

@@ -42,6 +42,8 @@ import {useSessionStore} from '../stores/session';
 import {useProToast} from '../stores/proToast';
 import {ScrollMotionBar, useScrollMotion} from '../components/ScrollMotionBar';
 import {JobContextVisual} from '../components/JobContextVisual';
+import {ProIconChip} from '../components/ProIconChip';
+import type {IconChipTone} from '../components/ProIconChip';
 import {ProColors, ProRadius, ProType} from '../theme/professionalTheme';
 
 type Props = NativeStackScreenProps<RequestsStackParamList, 'RequestDetail'>;
@@ -513,10 +515,10 @@ function RequestContent({
       {serviceProvider && !request.journey ? (
         <ServiceProgress status={request.status} />
       ) : null}
-      <Section title="What the customer needs">
+      <Section title="What the customer needs" icon="clipboard-text" tone="blue">
         <Text style={styles.body}>{request.description}</Text>
       </Section>
-      <Section title="Where to go">
+      <Section title="Where to go" icon="map-marker" tone="amber">
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={`View ${request.location} on map`}
@@ -569,7 +571,10 @@ function RequestContent({
       ) : null}
       {codeEntry ? (
         <View style={styles.codeCard}>
-          <Text style={styles.codeTitle}>Enter the completion code</Text>
+          <View style={styles.sectionHeading}>
+            <ProIconChip name="key-variant" tone="amber" size={42} iconSize={23} />
+            <Text style={styles.codeTitle}>Enter the completion code</Text>
+          </View>
           <Text style={styles.codeHint}>
             Ask the customer for the 6-digit code shown in their request. The job completes only with their code.
           </Text>
@@ -630,7 +635,7 @@ function RequestContent({
             </Text>
           </View>
         ))}
-      <Section title="Job updates">
+      <Section title="Job updates" icon="timeline-text" tone="slate">
         <View style={styles.timeline}>
           {request.history.length ? (
             request.history.map((item, index) => (
@@ -769,10 +774,13 @@ function ServiceProgress({status}: {status: Status}) {
   );
 }
 
-function Section({title, children}: React.PropsWithChildren<{title: string}>) {
+function Section({title, icon, tone = 'navy', children}: React.PropsWithChildren<{title: string; icon: string; tone?: IconChipTone}>) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionHeading}>
+        <ProIconChip name={icon} tone={tone} size={38} iconSize={20} />
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
       {children}
     </View>
   );
@@ -884,9 +892,11 @@ const styles = StyleSheet.create({
     padding: 20,
     marginTop: Spacing.lg,
   },
+  sectionHeading: {flexDirection: 'row', alignItems: 'center', gap: Spacing.sm},
   sectionTitle: {
     ...Typography.h3,
     color: Colors.slate900,
+    flex: 1,
     marginBottom: Spacing.sm,
   },
   body: {...Typography.body, color: Colors.slate700},
@@ -929,7 +939,7 @@ const styles = StyleSheet.create({
   actions: {gap: Spacing.sm, marginTop: Spacing.lg},
   codeCard: {gap: Spacing.sm, marginTop: Spacing.lg, padding: Spacing.lg, borderRadius: BorderRadius.lg,
     borderWidth: 1, borderColor: ProColors.border, backgroundColor: Colors.white},
-  codeTitle: {...ProType.card, color: Colors.navyMid},
+  codeTitle: {...ProType.card, color: Colors.navyMid, flex: 1},
   codeHint: {...Typography.body, color: Colors.slate600},
   codeInput: {minHeight: 56, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: ProColors.border,
     paddingHorizontal: Spacing.md, textAlign: 'center', ...Typography.h2, letterSpacing: 6, color: Colors.navyMid},

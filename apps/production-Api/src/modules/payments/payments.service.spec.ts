@@ -200,6 +200,15 @@ describe('payments verification', () => {
     const {service} = setup({pay: payment(), req: request({journey: journey({stage: 'CANCELLED'})})});
     await expect(service.verify('client', dto)).rejects.toMatchObject({status: 409});
   });
+  it('notifies both the client and the professional when a payment lands', async () => {
+    const {db, service} = setup({pay: payment(),
+      provider: {fetchPayment: jest.fn().mockResolvedValue({status: 'captured', order_id: 'order_1', amount: 200000})}});
+    await service.verify('client', dto);
+    expect(db.notification.createMany).toHaveBeenCalledWith({data: expect.arrayContaining([
+      expect.objectContaining({userId: 'client', title: 'Payment received'}),
+      expect.objectContaining({userId: 'pro', title: 'Payment received'}),
+    ])});
+  });
 });
 
 describe('payments release and refund', () => {

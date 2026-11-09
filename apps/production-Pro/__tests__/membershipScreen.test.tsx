@@ -107,6 +107,61 @@ it('treats checkout cancellation as neutral', async () => {
   t.done();
 });
 
+it('cancels a stuck pending checkout', async () => {
+  const pending: MembershipView = {...none, status: 'PENDING'};
+  const hooks: MembershipHooks = {
+    load: jest.fn().mockResolvedValue(pending),
+    subscribe: jest.fn(), confirm: jest.fn(),
+    cancel: jest.fn().mockResolvedValue(none),
+    checkout: jest.fn(),
+  };
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(((...args: any[]) => {
+    const buttons = args[2] as {text: string; onPress?: () => void}[];
+    buttons.find(button => button.text === 'Cancel checkout')?.onPress?.();
+  }) as any);
+  try {
+    const t = setup(hooks);
+    await t.render();
+    expect(t.texts()).toContain('Complete authorization');
+    await t.press('Cancel this checkout');
+    expect(hooks.cancel).toHaveBeenCalledTimes(1);
+    t.done();
+  } finally {
+    alert.mockRestore();
+  }
+});
+
+it('skips checkout when the server replays an effective membership', async () => {
+  const hooks: MembershipHooks = {
+    load: jest.fn().mockResolvedValue(none),
+    subscribe: jest.fn().mockResolvedValue({...active, keyId: 'k', subscriptionId: 'sub', shortUrl: null}),
+    confirm: jest.fn().mockResolvedValue(active),
+    cancel: jest.fn(),
+    checkout: jest.fn(),
+  };
+  const t = setup(hooks);
+  await t.render();
+  await t.press('Subscribe to Pro membership');
+  expect(hooks.checkout).not.toHaveBeenCalled();
+  expect(hooks.confirm).toHaveBeenCalledTimes(1);
+  t.done();
+});
+
+it('explains a failed mandate instead of fake-activating', async () => {
+  const hooks: MembershipHooks = {
+    load: jest.fn().mockResolvedValue(none),
+    subscribe: jest.fn().mockResolvedValue({...none, status: 'PENDING', keyId: 'k', subscriptionId: 'sub', shortUrl: 'u'}),
+    confirm: jest.fn().mockResolvedValue({...none, status: 'PAST_DUE'}),
+    cancel: jest.fn(),
+    checkout: jest.fn().mockResolvedValue({razorpaySubscriptionId: 'sub'}),
+  };
+  const t = setup(hooks);
+  await t.render();
+  await t.press('Subscribe to Pro membership');
+  expect(t.texts()).toContain('No money was taken');
+  t.done();
+});
+
 it('explains plainly when billing is not enabled yet', async () => {
   const hooks: MembershipHooks = {
     load: jest.fn().mockResolvedValue(none),

@@ -1,7 +1,9 @@
 import React, {useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {ProIconChip} from '../components/ProIconChip';
 import {ScreenHeader} from '../components/ScreenHeader';
 import {ScreenLoading} from '../components/ScreenLoading';
 import {EmptyState} from '../components/EmptyState';
@@ -80,8 +82,18 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
     ) : (
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>Total due</Text>
-          <Text style={styles.total}>{rupees(view.duesPaisa)}</Text>
+          <View style={styles.heroRow}>
+            <ProIconChip name="cash-multiple" tone="amber" size={58} iconSize={30} />
+            <View style={styles.heroCopy}>
+              <Text style={styles.totalLabel}>Total due</Text>
+              <Text style={styles.total}>{rupees(view.duesPaisa)}</Text>
+            </View>
+          </View>
+          <View style={styles.meter} accessibilityRole="progressbar" accessibilityLabel={`${rupees(view.duesPaisa)} of ${rupees(view.blockThresholdPaisa)} dues limit`}>
+            <View style={[styles.meterFill, {width: `${Math.min(100, Math.round((view.duesPaisa / view.blockThresholdPaisa) * 100))}%`,
+              backgroundColor: view.blocked ? ProColors.error : view.duesPaisa / view.blockThresholdPaisa >= 0.75 ? ProColors.warning : ProColors.success}]} />
+          </View>
+          <Text style={styles.hint}>{rupees(view.duesPaisa)} of {rupees(view.blockThresholdPaisa)} limit{view.blocked ? ' — over the limit, new jobs paused' : ' — new jobs pause above the limit'}.</Text>
           <Text style={styles.hint}>10% of each pay-at-home job. Pro members pay 7%, get the first job each month free, and are blocked only above ₹2,000. You collected the full amount from the customer; this is NAHTREEK&apos;s share.</Text>
           {view.isMember && (view.memberSavingsPaisa ?? 0) > 0 ? (
             <View style={styles.savings}>
@@ -101,28 +113,37 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
         </View>
         {view.blocked ? (
           <View accessibilityRole="alert" style={styles.blocked}>
-            <Text style={styles.blockedTitle}>New jobs are paused</Text>
-            <Text style={styles.blockedBody}>Dues above {rupees(view.blockThresholdPaisa)} block new accepts. Settle below the limit to unlock Jobs, Time and Chat requests.</Text>
+            <ProIconChip name="pause-octagon" tone="red" size={46} iconSize={26} />
+            <View style={styles.blockedCopy}>
+              <Text style={styles.blockedTitle}>New jobs are paused</Text>
+              <Text style={styles.blockedBody}>Dues above {rupees(view.blockThresholdPaisa)} block new accepts. Settle below the limit to unlock Jobs, Time and Chat requests.</Text>
+            </View>
           </View>
         ) : null}
         {view.jobs.length === 0 && (view.penalties ?? []).length === 0 ? (
           <EmptyState title="No dues" message="Nothing to settle. Dues appear here after pay-at-home jobs." />
         ) : view.jobs.map(job => (
           <View key={job.id} style={styles.job}>
-            <View style={styles.jobRow}>
-              <Text style={styles.jobAmount}>{rupees(job.platformFeePaisa)}</Text>
-              <Text style={styles.jobDate}>{new Date(job.createdAt).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})}</Text>
+            <ProIconChip name={job.engineerRequestId ? 'hard-hat' : 'tools'} tone={job.engineerRequestId ? 'navy' : 'blue'} size={46} iconSize={24} />
+            <View style={styles.jobCopy}>
+              <View style={styles.jobRow}>
+                <Text style={styles.jobAmount}>{rupees(job.platformFeePaisa)}</Text>
+                <Text style={styles.jobDate}>{new Date(job.createdAt).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})}</Text>
+              </View>
+              <Text style={styles.hint}>Collected {rupees(job.amountPaisa)} at home · {job.engineerRequestId ? 'engineering' : 'service'} job {(job.serviceRequestId ?? job.engineerRequestId ?? job.id).slice(0, 8)}</Text>
             </View>
-            <Text style={styles.hint}>Collected {rupees(job.amountPaisa)} at home · {job.engineerRequestId ? 'engineering' : 'service'} job {(job.serviceRequestId ?? job.engineerRequestId ?? job.id).slice(0, 8)}</Text>
           </View>
         ))}
         {(view.penalties ?? []).map(penalty => (
           <View key={penalty.id} style={styles.penalty}>
-            <View style={styles.jobRow}>
-              <Text style={styles.penaltyAmount}>{rupees(penalty.amountPaisa)} penalty</Text>
-              <Text style={styles.jobDate}>{new Date(penalty.createdAt).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})}</Text>
+            <ProIconChip name="alert-circle" tone="red" size={46} iconSize={26} />
+            <View style={styles.jobCopy}>
+              <View style={styles.jobRow}>
+                <Text style={styles.penaltyAmount}>{rupees(penalty.amountPaisa)} penalty</Text>
+                <Text style={styles.jobDate}>{new Date(penalty.createdAt).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})}</Text>
+              </View>
+              <Text style={styles.hint}>{penaltyLabel(penalty.reason)} · job {penalty.serviceRequestId.slice(0, 8)}</Text>
             </View>
-            <Text style={styles.hint}>{penaltyLabel(penalty.reason)} · job {penalty.serviceRequestId.slice(0, 8)}</Text>
           </View>
         ))}
         {failed ? <Text accessibilityRole="alert" style={styles.error}>{failed}</Text> : null}
@@ -130,6 +151,7 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
         {view.duesPaisa > 0 ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Settle dues" disabled={pay.isPending} onPress={() => startPay(view.duesPaisa)}
             style={[styles.pay, pay.isPending && {opacity: 0.6}]}>
+            <MaterialCommunityIcons name="lock-check" size={20} color={ProColors.onAccent} />
             <Text style={styles.payText}>{pay.isPending ? 'Opening secure checkout…' : `Settle ${rupees(view.duesPaisa)}`}</Text>
           </Pressable>
         ) : null}
@@ -141,7 +163,11 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: ProColors.background},
   body: {padding: ProSpacing.md, gap: ProSpacing.md},
-  totalCard: {backgroundColor: ProColors.surface, borderRadius: ProRadius.card, padding: ProSpacing.md, gap: 4},
+  totalCard: {backgroundColor: ProColors.surface, borderRadius: ProRadius.card, padding: ProSpacing.md, gap: 8},
+  heroRow: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md},
+  heroCopy: {flex: 1, gap: 0},
+  meter: {height: 10, borderRadius: 5, backgroundColor: ProColors.border, overflow: 'hidden'},
+  meterFill: {height: 10, borderRadius: 5},
   totalLabel: {...ProType.meta, color: ProColors.muted},
   total: {fontSize: 32, fontWeight: '800', color: ProColors.text},
   hint: {...ProType.meta, color: ProColors.muted},
@@ -150,16 +176,18 @@ const styles = StyleSheet.create({
   savingsBody: {...ProType.body, color: ProColors.success},
   savingsLink: {marginTop: 4, alignSelf: 'flex-start'},
   savingsLinkText: {fontSize: 15, fontWeight: '800', color: ProColors.success, textDecorationLine: 'underline'},
-  blocked: {backgroundColor: '#FEF3C7', borderRadius: ProRadius.input, padding: ProSpacing.md, gap: 4},
+  blocked: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md, backgroundColor: '#FEF3C7', borderRadius: ProRadius.input, padding: ProSpacing.md},
+  blockedCopy: {flex: 1, gap: 4},
   blockedTitle: {fontSize: 15, fontWeight: '800', color: '#92400E'},
   blockedBody: {...ProType.body, color: '#92400E'},
-  job: {backgroundColor: ProColors.surface, borderRadius: ProRadius.input, padding: ProSpacing.md, gap: 4},
-  penalty: {backgroundColor: ProColors.warningSoft, borderRadius: ProRadius.input, padding: ProSpacing.md, gap: 4},
+  job: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md, backgroundColor: ProColors.surface, borderRadius: ProRadius.input, padding: ProSpacing.md},
+  jobCopy: {flex: 1, gap: 4},
+  penalty: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md, backgroundColor: ProColors.warningSoft, borderRadius: ProRadius.input, padding: ProSpacing.md},
   penaltyAmount: {fontSize: 18, fontWeight: '800', color: ProColors.warning},
   jobRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   jobAmount: {fontSize: 18, fontWeight: '800', color: ProColors.text},
   jobDate: {...ProType.meta, color: ProColors.muted},
   error: {color: ProColors.error},
-  pay: {backgroundColor: ProColors.accent, borderRadius: ProRadius.input, minHeight: 52, alignItems: 'center', justifyContent: 'center'},
+  pay: {flexDirection: 'row', gap: 8, backgroundColor: ProColors.accent, borderRadius: ProRadius.input, minHeight: 52, alignItems: 'center', justifyContent: 'center'},
   payText: {fontSize: 16, fontWeight: '800', color: ProColors.onAccent},
 });

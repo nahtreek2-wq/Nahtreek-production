@@ -366,3 +366,111 @@ describe('home AI subscription', () => {
     await expect(service.aiAdminSummary()).resolves.toMatchObject({active: 3, mrrPaisa: 38700, feePaisa: 12900});
   });
 });
+
+describe('subscription cancel and confirm hardening', () => {
+  const aiRow = (over: Record<string, unknown> = {}) => ({id: 'ai', userId: 'u', providerSubscriptionId: null,
+    status: 'NONE', currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, lastChargeAt: null, ...over});
+  const aiProvider = () => ({fetchPlan: jest.fn().mockResolvedValue({id: AI_PLAN_ID, amount: 12900, currency: 'INR', period: 'monthly'})});
+
+  it('frees a pending Pro checkout even when Razorpay refuses the cancel', async () => {
+    const restore = withEnv();
+    try {
+      const {db, provider, service} = setup({membership: {status: 'PENDING', providerSubscriptionId: 'sub_1'}});
+      provider.cancelSubscription.mockRejectedValue(new Error('Subscription cannot be cancelled since no billing cycle is going on'));
+      const result = await service.cancel('pro', {});
+      expect(result).toMatchObject({status: 'NONE', effective: false});
+      expect(db.membership.update).toHaveBeenCalledWith(expect.objectContaining(
+        {data: expect.objectContaining({providerSubscriptionId: null, status: 'NONE'})}));
+    } finally { restore(); }
+  });
+
+  it('syncs a Pro row when the mandate already ended at Razorpay', async () => {
+    const restore = withEnv();
+    try {
+      const {provider, service} = setup({membership: {status: 'ACTIVE', providerSubscriptionId: 'sub_1', currentPeriodEnd: future()}});
+      provider.cancelSubscription.mockRejectedValue(new Error('already cancelled'));
+      provider.fetchSubscription.mockResolvedValue({...remote(), id: 'sub_1', status: 'cancelled'});
+      const result = await service.cancel('pro', {});
+      expect(result).toMatchObject({status: 'CANCELLED', cancelAtPeriodEnd: true});
+    } finally { restore(); }
+  });
+
+  it('waits out the first-charge lag before confirming a Pro membership', async () => {
+    const restore = withEnv();
+    try {
+      const {provider, service} = setup({membership: {status: 'PENDING', providerSubscriptionId: 'sub_1'}});
+      provider.fetchSubscription
+        .mockResolvedValueOnce({...remote(), id: 'sub_1', status: 'created', current_start: undefined, current_end: undefined})
+        .mockResolvedValueOnce({...remote(), id: 'sub_1', status: 'active'});
+      const result = await service.confirm('pro');
+      expect(result).toMatchObject({status: 'ACTIVE', effective: true});
+      expect(provider.fetchSubscription).toHaveBeenCalledTimes(2);
+    } finally { restore(); }
+  }, 15000);
+
+  it('tells the pro to wait when the charge still has not landed', async () => {
+    const restore = withEnv();
+    try {
+      const {provider, service} = setup({membership: {status: 'PENDING', providerSubscriptionId: 'sub_1'}});
+      provider.fetchSubscription.mockResolvedValue({...remote(), id: 'sub_1', status: 'created', current_start: undefined, current_end: undefined});
+      await expect(service.confirm('pro')).rejects.toThrow('still confirming');
+    } finally { restore(); }
+  }, 15000);
+
+  it('starts a real AI checkout without killing the demo', async () => {
+    const restore = withEnv();
+    try {
+      const {db, provider, service} = setup({provider: aiProvider()});
+      db.aiSubscription.findUnique.mockResolvedValue(aiRow({status: 'ACTIVE', currentPeriodEnd: future()}));
+      db.aiSubscription.updateMany.mockResolvedValue({count: 1});
+      db.aiSubscription.findUniqueOrThrow.mockResolvedValue(aiRow({status: 'ACTIVE', currentPeriodEnd: future(), providerSubscriptionId: 'sub_1'}));
+      const started = await service.aiSubscribe('u');
+      expect(provider.createSubscription).toHaveBeenCalledTimes(1);
+      expect(db.aiSubscription.updateMany).toHaveBeenCalledWith(expect.objectContaining(
+        {data: {providerSubscriptionId: 'sub_1'}}));
+      expect(started).toMatchObject({status: 'ACTIVE', effective: true, subscriptionId: 'sub_1'});
+    } finally { restore(); }
+  });
+
+  it('resumes a live AI checkout instead of minting a duplicate', async () => {
+    const restore = withEnv();
+    try {
+      const {db, provider, service} = setup({provider: aiProvider()});
+      db.aiSubscription.findUnique.mockResolvedValue(aiRow({status: 'PENDING', providerSubscriptionId: 'sub_1'}));
+      provider.fetchSubscription.mockResolvedValue({...remote(), id: 'sub_1', status: 'created', short_url: 'https://rzp.io/i/live'});
+      db.aiSubscription.update.mockImplementation(async ({data}: any) => aiRow({providerSubscriptionId: 'sub_1', ...data}));
+      const resumed = await service.aiSubscribe('u');
+      expect(provider.createSubscription).not.toHaveBeenCalled();
+      expect(resumed).toMatchObject({subscriptionId: 'sub_1', shortUrl: 'https://rzp.io/i/live'});
+    } finally { restore(); }
+  });
+
+  it('frees a pending AI checkout even when Razorpay refuses the cancel', async () => {
+    const {db, provider, service} = setup();
+    db.aiSubscription.findUnique.mockResolvedValue(aiRow({status: 'PENDING', providerSubscriptionId: 'sub_1'}));
+    provider.cancelSubscription.mockRejectedValue(new Error('no billing cycle is going on'));
+    db.aiSubscription.update.mockImplementation(async ({data}: any) => aiRow({...data}));
+    const result = await service.aiCancel('u', {});
+    expect(result).toMatchObject({status: 'NONE', effective: false, freeQuota: 5});
+    expect(db.aiSubscription.update).toHaveBeenCalledWith(expect.objectContaining(
+      {data: expect.objectContaining({providerSubscriptionId: null, status: 'NONE'})}));
+  });
+
+  it('rejects a failed AI mandate with a no-money-taken message', async () => {
+    const {db, provider, service} = setup();
+    db.aiSubscription.findUnique.mockResolvedValue(aiRow({status: 'PENDING', providerSubscriptionId: 'sub_1'}));
+    provider.fetchSubscription.mockResolvedValue({...remote(), id: 'sub_1', status: 'halted'});
+    await expect(service.aiConfirm('u')).rejects.toThrow('No money was taken');
+  });
+
+  it('syncs an AI row when the mandate already ended at Razorpay', async () => {
+    const {db, provider, service} = setup();
+    db.aiSubscription.findUnique.mockResolvedValue(aiRow({status: 'ACTIVE', providerSubscriptionId: 'sub_1', currentPeriodEnd: future()}));
+    provider.cancelSubscription.mockRejectedValue(new Error('already cancelled'));
+    provider.fetchSubscription.mockResolvedValue({...remote(), id: 'sub_1', status: 'cancelled'});
+    db.aiSubscription.update.mockImplementation(async ({data}: any) =>
+      aiRow({providerSubscriptionId: 'sub_1', currentPeriodEnd: future(), ...data}));
+    const result = await service.aiCancel('u', {});
+    expect(result).toMatchObject({status: 'CANCELLED', cancelAtPeriodEnd: true, freeQuota: 5});
+  });
+});

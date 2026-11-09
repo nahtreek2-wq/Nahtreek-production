@@ -32,7 +32,9 @@ import {api} from '../services/apiClient';
 import {
   activateDemoAi,
   cancelAiSubscription,
+  confirmAiSubscription,
   fetchAiSubscription,
+  isConfirmingError,
   isPaywallError,
   quotaLabel,
   subscribeAi,
@@ -243,6 +245,7 @@ export function AiPlannerScreen() {
   const [billing, setBilling] = useState<AiSubscriptionView | null>(null);
   const [paywalled, setPaywalled] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const keyboardScroll = useFormKeyboardScroll(28);
   const scroll = keyboardScroll.scrollRef;
@@ -335,14 +338,65 @@ export function AiPlannerScreen() {
     setError(cause instanceof Error ? cause.message : fallback);
   };
 
+  // Billing views merge over the previous one so a view without quota fields
+  // can never blank the free-chat pill.
+  const applyBilling = (view: AiSubscriptionView) =>
+    setBilling(previous => (previous ? {...previous, ...view} : view));
+
+  // After a successful GPay payment the first charge still needs seconds to
+  // land at Razorpay. Poll confirm (then the plain status as a webhook may
+  // have flipped it) instead of stranding the user on an error.
+  const pollActivation = async () => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      try {
+        const view = await confirmAiSubscription();
+        applyBilling(view);
+        setActivating(false);
+        setPaywalled(false);
+        return;
+      } catch (cause) {
+        if (!isConfirmingError(cause)) {
+          setActivating(false);
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : 'Could not confirm the payment.',
+          );
+          return;
+        }
+      }
+    }
+    try {
+      const view = await fetchAiSubscription();
+      applyBilling(view);
+      if (view.effective) {
+        setActivating(false);
+        setPaywalled(false);
+        return;
+      }
+    } catch {
+      // Fall through to the wait-and-reopen message below.
+    }
+    setActivating(false);
+    setError(
+      'Payment is still confirming at Razorpay. Wait a minute, then reopen this screen — do not pay again.',
+    );
+  };
+
   const subscribe = async () => {
     setSubscribing(true);
     setError('');
     try {
       const view = await subscribeAi();
-      setBilling(view);
+      applyBilling(view);
       setPaywalled(false);
     } catch (cause) {
+      if (isConfirmingError(cause)) {
+        setActivating(true);
+        void pollActivation();
+        return;
+      }
       setError(
         cause instanceof Error ? cause.message : 'Could not start the subscription.',
       );
@@ -356,7 +410,7 @@ export function AiPlannerScreen() {
     setError('');
     try {
       const view = await activateDemoAi();
-      setBilling(view);
+      applyBilling(view);
       setPaywalled(false);
     } catch (cause) {
       setError(
@@ -375,7 +429,7 @@ export function AiPlannerScreen() {
         style: 'destructive',
         onPress: () =>
           cancelAiSubscription()
-            .then(view => setBilling(view))
+            .then(view => applyBilling(view))
             .catch(cause =>
               setError(cause instanceof Error ? cause.message : 'Could not cancel the subscription.'),
             ),
@@ -593,6 +647,9 @@ export function AiPlannerScreen() {
   };
 
   const quota = isApiConfigured ? quotaLabel(billing) : null;
+  const plusEndDate = billing?.currentPeriodEnd
+    ? new Date(billing.currentPeriodEnd).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})
+    : null;
   const lastMessage = messages[messages.length - 1];
   const awaitingReply = busy && lastMessage?.type === 'USER_TEXT';
 
@@ -663,11 +720,16 @@ export function AiPlannerScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={keyboardScroll.keyboardDismissMode}
         automaticallyAdjustKeyboardInsets>
-        {billing?.effective ? (
+        {activating ? (
+          <View style={styles.billingRow}>
+            <ActivityIndicator size="small" color={Colors.navyMid} />
+            <Text style={styles.billingQuota}>Payment received — activating Plus…</Text>
+          </View>
+        ) : billing?.effective ? (
           <View style={styles.billingRow}>
             <Text style={styles.billingActive}>NAHTREEK Plus active</Text>
             {billing.cancelAtPeriodEnd ? (
-              <Text style={styles.billingQuota}>Cancels at period end</Text>
+              <Text style={styles.billingQuota}>Plus ends{plusEndDate ? ` ${plusEndDate}` : ''} — resubscribe anytime after</Text>
             ) : (
               <Pressable accessibilityRole="button" accessibilityLabel="Cancel AI subscription" onPress={cancel} hitSlop={8}>
                 <Text style={styles.billingCancel}>Cancel</Text>
@@ -701,8 +763,8 @@ export function AiPlannerScreen() {
               label="Subscribe · ₹129/month"
               loadingLabel="Opening checkout…"
               onPress={() => void subscribe()}
-              loading={subscribing}
-              disabled={subscribing}
+              loading={subscribing || activating}
+              disabled={subscribing || activating}
             />
             {runtimeConfig.environment !== 'production' ? (
               <Button
@@ -742,8 +804,8 @@ export function AiPlannerScreen() {
                   label="Subscribe"
                   loadingLabel="Opening checkout…"
                   onPress={() => void subscribe()}
-                  loading={subscribing}
-                  disabled={subscribing}
+                  loading={subscribing || activating}
+                  disabled={subscribing || activating}
                 />
                 {runtimeConfig.environment !== 'production' ? (
                   <Button

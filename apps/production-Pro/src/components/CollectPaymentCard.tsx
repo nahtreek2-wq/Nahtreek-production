@@ -7,7 +7,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {ProIconChip} from './ProIconChip';
 import {api} from '../services/apiClient';
 import {useProToast} from '../stores/proToast';
 import {PrimaryButton} from '../components/PrimaryButton';
@@ -114,7 +116,13 @@ export function CollectPaymentCard({
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>Payment for this job</Text>
+      <View style={styles.headerRow}>
+        <ProIconChip name="hand-coin" tone="amber" size={50} iconSize={27} />
+        <View style={styles.headerCopy}>
+          <Text style={styles.title}>Payment for this job</Text>
+          <Text style={styles.hint}>Cash or UPI collected at the customer&apos;s home</Text>
+        </View>
+      </View>
       {status.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator size="small" color={ProColors.primary} />
@@ -169,6 +177,11 @@ export function CollectPaymentCard({
                       styles.method,
                       method === option && styles.methodActive,
                     ]}>
+                    <MaterialCommunityIcons
+                      name={option === 'CASH' ? 'cash' : 'cellphone'}
+                      size={22}
+                      color={method === option ? ProColors.surface : ProColors.text}
+                    />
                     <Text
                       style={[
                         styles.methodText,
@@ -217,48 +230,60 @@ function RecordedState({
   if (view.collectionMode === 'AT_HOME') {
     const settled = view.status === 'SETTLED';
     return (
-      <View style={styles.gap}>
-        <Text style={styles.body}>
-          {settled
-            ? `You declared ${rupees(view.amountPaisa)} collected directly. Commission settled — nothing is due.`
-            : `You declared ${rupees(view.amountPaisa)} collected directly. ${rupees(
-                view.platformFeePaisa,
-              )} commission is waiting in your dues.`}
-        </Text>
-        {!settled ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="View commission dues"
-            onPress={onViewDues}
-            style={styles.link}>
-            <Text style={styles.linkText}>View commission dues</Text>
-          </Pressable>
-        ) : null}
+      <View style={styles.stateRow}>
+        <ProIconChip name={settled ? 'check-circle' : 'hand-coin'} tone={settled ? 'green' : 'amber'} size={46} iconSize={25} />
+        <View style={styles.gapFlex}>
+          <Text style={styles.body}>
+            {settled
+              ? `You declared ${rupees(view.amountPaisa)} collected directly. Commission settled — nothing is due.`
+              : `You declared ${rupees(view.amountPaisa)} collected directly. ${rupees(
+                  view.platformFeePaisa,
+                )} commission is waiting in your dues.`}
+          </Text>
+          {!settled ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View commission dues"
+              onPress={onViewDues}
+              style={styles.link}>
+              <Text style={styles.linkText}>View commission dues</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     );
   }
   if (view.status === 'RELEASED') {
     return (
-      <Text style={styles.body}>
-        Paid online {rupees(view.amountPaisa)} — your{' '}
-        {rupees(view.professionalAmountPaisa)} share was released to your
-        account.
-      </Text>
+      <View style={styles.stateRow}>
+        <ProIconChip name="bank-check" tone="green" size={46} iconSize={25} />
+        <Text style={[styles.body, styles.gapFlex]}>
+          Paid online {rupees(view.amountPaisa)} — your{' '}
+          {rupees(view.professionalAmountPaisa)} share was released to your
+          account.
+        </Text>
+      </View>
     );
   }
   if (view.status === 'DISPUTED') {
     return (
-      <Text style={styles.body}>
-        Paid online {rupees(view.amountPaisa)} — under review. The amount stays
-        frozen until support resolves the customer&apos;s report.
-      </Text>
+      <View style={styles.stateRow}>
+        <ProIconChip name="magnify" tone="red" size={46} iconSize={25} />
+        <Text style={[styles.body, styles.gapFlex]}>
+          Paid online {rupees(view.amountPaisa)} — under review. The amount stays
+          frozen until support resolves the customer&apos;s report.
+        </Text>
+      </View>
     );
   }
   return (
-    <Text style={styles.body}>
-      Paid online {rupees(view.amountPaisa)} — your{' '}
-      {rupees(view.professionalAmountPaisa)} share releases after review.
-    </Text>
+    <View style={styles.stateRow}>
+      <ProIconChip name="credit-card-check" tone="blue" size={46} iconSize={25} />
+      <Text style={[styles.body, styles.gapFlex]}>
+        Paid online {rupees(view.amountPaisa)} — your{' '}
+        {rupees(view.professionalAmountPaisa)} share releases after review.
+      </Text>
+    </View>
   );
 }
 
@@ -270,6 +295,10 @@ const styles = StyleSheet.create({
     gap: ProSpacing.sm,
   },
   gap: {gap: ProSpacing.sm},
+  gapFlex: {flex: 1, gap: ProSpacing.sm},
+  headerRow: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md},
+  headerCopy: {flex: 1, gap: 2},
+  stateRow: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md},
   title: {fontSize: 16, fontWeight: '800', color: ProColors.text},
   body: {...ProType.body, color: ProColors.text},
   hint: {...ProType.meta, color: ProColors.muted},
@@ -287,9 +316,12 @@ const styles = StyleSheet.create({
   methodRow: {flexDirection: 'row', gap: ProSpacing.sm},
   method: {
     flex: 1,
+    flexDirection: 'row',
+    gap: ProSpacing.sm,
     borderRadius: ProRadius.input,
     paddingVertical: ProSpacing.sm,
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: ProColors.background,
   },
   methodActive: {backgroundColor: ProColors.primary},

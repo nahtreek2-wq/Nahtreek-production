@@ -1,5 +1,5 @@
 import {ApiError} from '../src/services/apiClient';
-import {activateDemoAi, cancelAiSubscription, fetchAiSubscription, isPaywallError, quotaLabel, subscribeAi} from '../src/services/aiBilling';
+import {activateDemoAi, cancelAiSubscription, confirmAiSubscription, fetchAiSubscription, isConfirmingError, isPaywallError, quotaLabel, subscribeAi} from '../src/services/aiBilling';
 import {api} from '../src/services/apiClient';
 import RazorpayCheckout from 'react-native-razorpay';
 
@@ -69,4 +69,37 @@ it('activates preview access without opening checkout', async () => {
   await expect(activateDemoAi()).resolves.toEqual({effective: true});
   expect(mockedApi.post).toHaveBeenCalledWith('/ai-billing/demo-activate', {});
   expect(mockedCheckout.open).not.toHaveBeenCalled();
+});
+
+it('skips checkout when the server replays an effective subscription', async () => {
+  mockedApi.post.mockResolvedValueOnce({effective: true, subscriptionId: 'sub_ai', shortUrl: null});
+  mockedApi.get.mockResolvedValue({effective: true, status: 'ACTIVE'});
+  await expect(subscribeAi()).resolves.toEqual({effective: true, status: 'ACTIVE'});
+  expect(mockedCheckout.open).not.toHaveBeenCalled();
+  expect(mockedApi.get).toHaveBeenCalledWith('/ai-billing/me');
+});
+
+it('refreshes status instead of crashing on a missing subscription id', async () => {
+  mockedApi.post.mockResolvedValueOnce({effective: false, subscriptionId: null, shortUrl: null});
+  mockedApi.get.mockResolvedValue({effective: false, status: 'NONE'});
+  await expect(subscribeAi()).resolves.toEqual({effective: false, status: 'NONE'});
+  expect(mockedCheckout.open).not.toHaveBeenCalled();
+});
+
+it('still runs checkout when a demo row starts a real subscription', async () => {
+  mockedApi.post
+    .mockResolvedValueOnce({effective: true, keyId: 'rzp_test', subscriptionId: 'sub_new', shortUrl: 'https://rzp.io/i/n'})
+    .mockResolvedValueOnce({effective: true});
+  mockedCheckout.open.mockResolvedValue({razorpay_subscription_id: 'sub_new'});
+  await expect(subscribeAi()).resolves.toEqual({effective: true});
+  expect(mockedCheckout.open).toHaveBeenCalledWith(expect.objectContaining({subscription_id: 'sub_new'}));
+});
+
+it('confirms through the confirm endpoint and detects confirming errors', async () => {
+  mockedApi.post.mockResolvedValue({effective: true});
+  await expect(confirmAiSubscription()).resolves.toEqual({effective: true});
+  expect(mockedApi.post).toHaveBeenCalledWith('/ai-billing/confirm', {});
+  expect(isConfirmingError(new Error('Payment is still confirming at Razorpay.'))).toBe(true);
+  expect(isConfirmingError(new Error('No money was taken'))).toBe(false);
+  expect(isConfirmingError(new ApiError(400, 'still confirming, wait'))).toBe(true);
 });

@@ -7,7 +7,7 @@ import {ReceiptEmailService} from '../notifications/receipt-email.service';
 import {ChatGateway} from '../chat/chat.gateway';
 import {RazorpayError, RazorpayProvider} from './razorpay.provider';
 import {MembershipsService} from '../memberships/memberships.service';
-import {DUES_BLOCK_Paisa, MEMBER_DUES_BLOCK_Paisa, duesLimitPaisa, plusDiscountPaisa} from './commission';
+import {DUES_BLOCK_Paisa, MEMBER_DUES_BLOCK_Paisa, MEMBER_FEE_BPS, MEMBER_FREE_JOBS_PER_MONTH, PLATFORM_FEE_BPS, duesLimitPaisa, plusDiscountPaisa} from './commission';
 import {isPlusClient} from '../memberships/membership-reads';
 import {RefundPaymentDto, RegisterPayoutAccountDto, ResolveDisputeDto, VerifyPaymentDto, VerifySettlementDto} from './payments.dto';
 
@@ -20,8 +20,6 @@ import {RefundPaymentDto, RegisterPayoutAccountDto, ResolveDisputeDto, VerifyPay
 // advice is delivered. Webhooks are the source of truth for asynchronous
 // outcomes; every handler is idempotent and every money mutation is guarded
 // by the payment status.
-const PLATFORM_FEE_BPS = 1000; // 10%
-const MEMBER_FEE_BPS = 700; // 7% for active Pro members
 const PAYABLE_STAGES = ['ARRIVED', 'IN_PROGRESS', 'AWAITING_CONFIRMATION'];
 // Consultation fees open once the engineer accepts and stay open through
 // completion. PENDING has no rendered consultation yet; DECLINED and
@@ -81,7 +79,7 @@ export class PaymentsService {
     const now = new Date();
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const count = await this.db.payment.count({where: {professionalProfileId, createdAt: {gte: start}}});
-    return count > 0;
+    return count >= MEMBER_FREE_JOBS_PER_MONTH;
   }
 
   private checkExactlyOne(ref: BookingRef) {
@@ -166,6 +164,27 @@ export class PaymentsService {
       'Questions? Message your professional in the app chat or contact NAHTREEK support.',
     ];
     return {subject, lines};
+  }
+
+  // Refund receipt email, sent when a refund completes (webhook or sweeper).
+  // Best-effort like payment receipts: never throws into money flows.
+  private async refundReceipt(paymentId: string) {
+    try {
+      const row = await this.db.payment.findUnique({where: {id: paymentId}});
+      if (!row) return;
+      const parties = await this.partyOfPayment(row);
+      if (!parties.clientUserId) return;
+      const amount = `₹${(row.amountPaisa / 100).toLocaleString('en-IN')}`;
+      await this.receipt(parties.clientUserId, `Refund completed · ${amount} · NAHTREEK booking`, [
+        `Booking ref: #${parties.requestId.slice(0, 8)}`,
+        `Refunded: ${amount} in full to your original payment method.`,
+        `Date: ${new Date().toLocaleString('en-IN', {timeZone: 'Asia/Kolkata'})}`,
+        'It should reflect in your account within 5-7 working days.',
+        'Questions? Message your professional in the app chat or contact NAHTREEK support.',
+      ]);
+    } catch {
+      // Receipts acknowledge money; they must never block or break it.
+    }
   }
 
   private toProviderError(error: unknown): never {
@@ -572,8 +591,14 @@ export class PaymentsService {
       ? {engineerRequestId: dto.engineerRequestId}
       : {serviceRequestId: dto.serviceRequestId}});
     if (!payment?.providerPaymentId) throw new NotFoundException('No captured payment to refund');
-    if (payment.status === PaymentStatus.REFUND_PENDING || payment.status === PaymentStatus.REFUNDED)
-      return this.viewOf(payment);
+    if (payment.status === PaymentStatus.REFUNDED) return this.viewOf(payment);
+    // A repeat call while REFUND_PENDING is a retry, not a no-op: reconcile
+    // with Razorpay (adopt processed refunds, recreate missing ones) so a
+    // stuck "refund on the way" can actually finish.
+    if (payment.status === PaymentStatus.REFUND_PENDING) {
+      await this.reconcileRefund(payment).catch(() => undefined);
+      return this.viewOf(await this.db.payment.findUniqueOrThrow({where: {id: payment.id}}));
+    }
     if (!['PAID', 'HELD', 'RELEASE_PENDING'].includes(payment.status))
       throw new ConflictException(payment.status === PaymentStatus.RELEASED
         ? 'Released payments need support review before a refund' : 'This payment cannot be refunded in its current state');
@@ -587,10 +612,52 @@ export class PaymentsService {
     try {
       await this.provider.createRefund(payment.providerPaymentId, payment.amountPaisa);
     } catch {
-      // Stays REFUND_PENDING for webhook or admin retry; the booking flow continues.
+      // Stays REFUND_PENDING for the retry sweeper; the booking flow continues.
     }
     const updated = await this.db.payment.findUniqueOrThrow({where: {id: payment.id}});
     return this.viewOf(updated);
+  }
+
+  // Single-payment refund truth check against Razorpay. Processed remote
+  // refunds are adopted locally; a missing/failed remote refund is recreated.
+  // Never double-creates: any live remote refund (pending or processed) wins.
+  private async reconcileRefund(payment: {id: string; providerPaymentId: string | null;
+    amountPaisa: number; status: string}) {
+    if (!payment.providerPaymentId) return;
+    const remote = await this.provider.fetchRefunds(payment.providerPaymentId);
+    const live = remote.filter(item => item.status === 'processed' || item.status === 'pending');
+    if (live.some(item => item.status === 'processed')) {
+      await this.db.payment.update({where: {id: payment.id},
+        data: {status: PaymentStatus.REFUNDED, refundedAt: new Date()}});
+      await this.refundReceipt(payment.id);
+      return;
+    }
+    if (live.length) return; // Razorpay is still working; its webhook finishes us.
+    await this.provider.createRefund(payment.providerPaymentId, payment.amountPaisa);
+    await this.db.auditLog.create({data: {userId: 'system', entity: 'Payment', entityId: payment.id,
+      action: 'PAYMENT_REFUND_RETRIED', metadata: {}}}).catch(() => undefined);
+  }
+
+  // Cron sweeper for refunds stuck in REFUND_PENDING: the create call failed,
+  // Razorpay failed the refund, or the completion webhook never arrived. Only
+  // touches rows older than the grace window so fresh refunds settle first.
+  async retryPendingRefunds(graceMinutes = 10) {
+    this.requireEnabled();
+    const cutoff = new Date(Date.now() - graceMinutes * 60000);
+    const stuck = await this.db.payment.findMany({where: {status: PaymentStatus.REFUND_PENDING,
+      updatedAt: {lt: cutoff}, providerPaymentId: {not: null}},
+      select: {id: true, providerPaymentId: true, amountPaisa: true, status: true}});
+    let retried = 0;
+    for (const row of stuck) {
+      try {
+        await this.reconcileRefund(row as {id: string; providerPaymentId: string | null;
+          amountPaisa: number; status: string});
+        retried += 1;
+      } catch {
+        // Next sweep tries again; one poisoned row never blocks the rest.
+      }
+    }
+    return {checked: stuck.length, retried};
   }
 
   async resolveDispute(adminUserId: string, dto: ResolveDisputeDto) {
@@ -733,8 +800,11 @@ export class PaymentsService {
     const atStandardRate = rows.reduce((sum, row) => sum + Math.floor((row.amountPaisa * PLATFORM_FEE_BPS) / 10000), 0);
     const member = (await this.memberships?.isEffectiveByProfile(profile.id).catch(() => false)) ?? false;
     const blockThresholdPaisa = await duesLimitPaisa(this.db, profile.id);
+    const terms = {memberFeeBps: MEMBER_FEE_BPS, standardFeeBps: PLATFORM_FEE_BPS,
+      memberDuesBlockPaisa: MEMBER_DUES_BLOCK_Paisa, standardDuesBlockPaisa: DUES_BLOCK_Paisa,
+      freeJobsPerMonth: MEMBER_FREE_JOBS_PER_MONTH};
     return {duesPaisa, blocked: duesPaisa >= blockThresholdPaisa, blockThresholdPaisa, jobs: rows, penalties,
-      isMember: member, memberSavingsPaisa: Math.max(0, atStandardRate - rows.reduce((sum, row) => sum + row.platformFeePaisa, 0))};
+      isMember: member, memberSavingsPaisa: Math.max(0, atStandardRate - rows.reduce((sum, row) => sum + row.platformFeePaisa, 0)), terms};
   }
 
   async createSettlementOrder(userId: string) {
@@ -1041,6 +1111,7 @@ export class PaymentsService {
       case 'refund.processed': {
         if (payment.status !== PaymentStatus.REFUND_PENDING) break;
         await this.db.payment.update({where: {id: payment.id}, data: {status: PaymentStatus.REFUNDED, refundedAt: new Date()}});
+        await this.refundReceipt(payment.id);
         const parties = await this.partyOfPayment(payment);
         await this.tell(parties.clientUserId ? [parties.clientUserId] : [],
           parties.kind === 'engineer'
@@ -1052,8 +1123,10 @@ export class PaymentsService {
         break;
       }
       case 'refund.failed': {
+        // Stays REFUND_PENDING: reverting to PAID would strand the money with
+        // no retry path. The retry sweeper picks it up after the grace window,
+        // which is what the "will be retried" message below promises.
         if (payment.status !== PaymentStatus.REFUND_PENDING) break;
-        await this.db.payment.update({where: {id: payment.id}, data: {status: PaymentStatus.PAID}});
         const parties = await this.partyOfPayment(payment);
         await this.tell(parties.clientUserId ? [parties.clientUserId] : [],
           parties.kind === 'engineer'

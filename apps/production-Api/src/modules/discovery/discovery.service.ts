@@ -99,8 +99,11 @@ export class DiscoveryService {
   }
 
   async getEngineer(id: string) {
+    // Saved hearts and QR links carry the professional profile id, discovery
+    // cards the engineer id — accept both so either entry opens the profile.
     const engineer = await this.prisma.engineerProfile.findFirst({
-      where: { id, profile: { verificationStatus: 'VERIFIED', user: { status: 'ACTIVE', deletedAt: null } } },
+      where: { OR: [{ id }, { professionalProfileId: id }],
+        profile: { verificationStatus: 'VERIFIED', user: { status: 'ACTIVE', deletedAt: null } } },
       include: engineerInclude(),
     });
     if (!engineer) throw new NotFoundException('Engineer not found');

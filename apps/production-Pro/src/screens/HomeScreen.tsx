@@ -30,7 +30,7 @@ import {MotionReveal} from '../components/MotionReveal';
 import {QuickActions} from '../components/QuickActions';
 import type {MainTabParamList} from '../navigation/types';
 import {ProColors, ProSpacing, ProType} from '../theme/professionalTheme';
-import {WorkVisual} from '../components/WorkVisual';
+import {JobContextVisual} from '../components/JobContextVisual';
 
 type ProfileState = {
   profile: null | {
@@ -169,12 +169,17 @@ export function HomeScreen() {
       requests.refetch(),
       availability.refetch(),
       conversations.refetch(),
+      dues.refetch(),
     ]);
+  // The inbox preview loads 50 jobs; when the server holds more, say so
+  // instead of claiming "all caught up" while older requests wait.
+  const inboxOverflow = (requests.data?.meta.total ?? 0) > (requests.data?.data.length ?? 0);
   const attention: AttentionItem[] = [];
   if (statusUnknown) {attention.push({key: 'profile-error', title: 'Work status unavailable', detail: 'Refresh to check whether your profile can receive jobs.', action: 'Refresh', icon: 'refresh', tone: 'error', onPress: refresh});}
   if (statusChecking) {attention.push({key: 'profile-checking', title: 'Checking your approval status', detail: 'Nearby-work controls stay off until your current status is confirmed.', action: 'Checking', icon: 'progress-clock', tone: 'info', onPress: () => undefined});}
   if (!statusUnknown && !statusChecking && !verified) {attention.push({key: 'verification', title: verificationStatus === 'UNDER_REVIEW' || verificationStatus === 'PENDING' ? 'Verification under review' : verificationStatus === 'REJECTED' ? 'Verification needs changes' : 'Finish verification', detail: verificationStatus === 'UNDER_REVIEW' || verificationStatus === 'PENDING' ? 'We will notify you when your profile is reviewed.' : 'Your profile needs approval before it can receive eligible work.', action: verificationStatus === 'UNDER_REVIEW' || verificationStatus === 'PENDING' ? 'View submission' : 'Continue verification', icon: 'file-certificate-outline', tone: verificationStatus === 'REJECTED' ? 'error' : 'warning', onPress: () => navigation.navigate('Profile', {screen: verificationStatus === 'UNDER_REVIEW' || verificationStatus === 'PENDING' || verificationStatus === 'REJECTED' ? 'VerificationDocuments' : 'ProfessionalSetup'})});}
-  if (pending > 0) {attention.push({key: 'requests', title: `${pending} ${pending === 1 ? 'request needs' : 'requests need'} a reply`, detail: 'Review the customer’s work and respond from Jobs.', action: 'Open jobs', icon: 'briefcase-clock-outline', tone: 'warning', onPress: () => navigation.navigate('Requests', {screen: 'RequestInbox'})});}
+  if (pending > 0) {attention.push({key: 'requests', title: `${pending}${inboxOverflow ? '+' : ''} ${pending === 1 && !inboxOverflow ? 'request needs' : 'requests need'} a reply`, detail: 'Review the customer’s work and respond from Jobs.', action: 'Open jobs', icon: 'briefcase-clock-outline', tone: 'warning', onPress: () => navigation.navigate('Requests', {screen: 'RequestInbox'})});}
+  if (pending === 0 && inboxOverflow) {attention.push({key: 'inbox-overflow', title: 'More jobs in your inbox', detail: 'Your latest jobs are clear — older ones still wait in Jobs.', action: 'Open jobs', icon: 'briefcase-outline', tone: 'info', onPress: () => navigation.navigate('Requests', {screen: 'RequestInbox'})});}
   if (dues.data && dues.data.duesPaisa > 0) {attention.push({key: 'dues', title: `${(dues.data.duesPaisa / 100).toLocaleString('en-IN', {style: 'currency', currency: 'INR', maximumFractionDigits: 0})} commission dues`, detail: dues.data.blocked ? 'New jobs are paused until dues drop below the limit.' : 'Settle your pay-at-home platform share.', action: 'Settle dues', icon: 'cash-multiple', tone: dues.data.blocked ? 'error' : 'warning', onPress: () => navigation.navigate('Profile', {screen: 'Dues'})});}
   if (verified && availability.data && !availability.data.isAvailable) {attention.push({key: 'paused', title: 'New work is paused', detail: 'Resume availability when you are ready for new requests.', action: 'Change availability', icon: 'pause-circle-outline', tone: 'warning', onPress: () => navigation.navigate('Schedule')});}
   if (unread && unread > 0) {attention.push({key: 'messages', title: `${unread} unread client ${unread === 1 ? 'message' : 'messages'}`, detail: 'A client may be waiting for your answer.', action: 'Open chat', icon: 'message-text-outline', tone: 'info', onPress: () => navigation.navigate('Messages', {screen: 'Conversations'})});}
@@ -322,10 +327,7 @@ export function HomeScreen() {
           {showQuickActions ? (
             <>
               <View style={styles.todayHeader}>
-                <View>
-                  <Text style={styles.todayEyebrow}>WORKSPACE</Text>
-                  <Text style={styles.todayTitle}>Today</Text>
-                </View>
+                <Text style={styles.todayTitle}>Today</Text>
                 <Text style={styles.todayDate}>{new Date().toLocaleDateString('en-IN', {weekday: 'short', day: 'numeric', month: 'short'})}</Text>
               </View>
               <View style={styles.todayStrip}>
@@ -347,7 +349,11 @@ export function HomeScreen() {
           {priorityJobs.length ? (
             <>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Priority jobs</Text>
+              <Text style={styles.sectionTitleFlush}>Priority jobs</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="View all jobs" onPress={() => navigation.navigate('Requests', {screen: 'RequestInbox'})} style={styles.viewAll}>
+                <Text style={styles.viewAllText}>View all</Text>
+                <MaterialCommunityIcons name="arrow-right" size={16} color={ProColors.primary} />
+              </Pressable>
             </View>
               <View style={styles.actions}>
                 {priorityJobs.map(job => (
@@ -367,7 +373,7 @@ export function HomeScreen() {
                       styles.jobCard,
                       pressed && styles.pressed,
                     ]}>
-                    <WorkVisual kind={job.kind === 'engineering' ? 'engineering' : 'service'} service={job.title} />
+                    <JobContextVisual kind={job.kind === 'engineering' ? 'engineering' : 'service'} title={job.title} seed={job.id} size={56} />
                     <View style={styles.flex}>
                       <Text style={styles.eyebrow}>
                         {job.status === 'PENDING'
@@ -495,11 +501,10 @@ const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: Colors.offWhite},
   content: {padding: ProSpacing.xl, paddingBottom: Spacing.xxl},
   flex: {flex: 1, minWidth: 0},
-  todayHeader: {flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 4, marginBottom: 12},
-  todayEyebrow: {...ProType.eyebrow, color: ProColors.secondary, marginBottom: 4},
+  todayHeader: {flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 12},
   todayTitle: {...ProType.screen, color: ProColors.text},
   todayDate: {...ProType.meta, color: ProColors.secondary},
-  todayStrip: {flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 6, backgroundColor: ProColors.surface, borderWidth: 1, borderColor: ProColors.border, borderRadius: 16, marginBottom: 4},
+  todayStrip: {flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 6, backgroundColor: ProColors.surface, borderWidth: 1, borderColor: ProColors.border, borderRadius: 16},
   todayCell: {flex: 1, minWidth: 0, alignItems: 'center', gap: 2, paddingHorizontal: 4},
   todayIcon: {width: 30, height: 30, alignItems: 'center', justifyContent: 'center'},
   todayValue: {fontSize: 24, lineHeight: 30, fontWeight: '700', color: ProColors.text},
@@ -512,7 +517,7 @@ const styles = StyleSheet.create({
   attentionAction: {...ProType.action, color: ProColors.primary, marginTop: 8},
   caughtUp: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 16, backgroundColor: ProColors.surface, borderWidth: 1, borderColor: ProColors.border, borderRadius: 12, marginBottom: 8},
   caughtUpText: {...ProType.meta, color: ProColors.text, flex: 1},
-  introCard: {borderRadius: BorderRadius.lg, backgroundColor: Colors.navyDeep, marginBottom: 16, marginTop: 0, overflow: 'hidden', minHeight: 220, justifyContent: 'flex-end'},
+  introCard: {borderRadius: BorderRadius.lg, backgroundColor: Colors.navyDeep, marginBottom: 20, marginTop: 0, overflow: 'hidden', minHeight: 220, justifyContent: 'flex-end'},
   introImage: {position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, width: '100%', height: '100%'},
   introShade: {position: 'absolute', left: 0, right: 0, top: 0, bottom: 0},
   introCopy: {padding: 16, paddingTop: 20},
@@ -521,7 +526,7 @@ const styles = StyleSheet.create({
   introBody: {...Typography.caption, color: Colors.slate200, lineHeight: 20},
   introButton: {alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: ProColors.accent, borderRadius: 14, paddingHorizontal: 14, minHeight: 52, marginTop: 14},
   introButtonText: {...Typography.button, color: ProColors.onAccent},
-  journeyCard: {paddingHorizontal: 16, paddingVertical: 14, borderRadius: BorderRadius.lg, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.slate200, marginBottom: 18},
+  journeyCard: {paddingHorizontal: 16, paddingVertical: 14, borderRadius: BorderRadius.lg, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.slate200, marginTop: 20},
   journeyTitle: {...Typography.h3, color: Colors.slate900, marginBottom: 4},
   journeySteps: {marginTop: 12},
   journeyConnector: {marginLeft: 15, marginVertical: 2},
@@ -562,6 +567,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
+  sectionTitleFlush: {...Typography.h2, color: Colors.slate900},
+  viewAll: {flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40, paddingLeft: 8},
+  viewAllText: {...ProType.action, color: ProColors.primary},
   sectionTitleTop: {marginTop: 0},
   actions: {gap: Spacing.sm},
   action: {
@@ -584,10 +592,12 @@ const styles = StyleSheet.create({
   nextText: {...Typography.caption, color: Colors.slate600, marginTop: 3},
   sectionRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexWrap: 'wrap',
     columnGap: 12,
     justifyContent: 'space-between',
+    marginTop: 20,
+    marginBottom: 12,
   },
   locationText: {
     ...Typography.caption,

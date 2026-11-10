@@ -5,9 +5,13 @@ import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { json } from 'express';
 import { resolve } from 'path';
+import { RazorpayProvider } from './modules/payments/razorpay.provider';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  // Fail fast on key-mode mismatch (test keys in production, live keys in
+  // preview) before serving a single payment-capable request.
+  app.get(RazorpayProvider).assertKeyMode();
   app.getHttpAdapter().getInstance().disable('x-powered-by');
   // TLS terminates at the hosting edge, which appends the real client IP to
   // X-Forwarded-For. Trust exactly one hop so req.ip (rate limiting) is

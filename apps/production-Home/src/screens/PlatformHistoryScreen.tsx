@@ -15,9 +15,9 @@ export const platformStyles = StyleSheet.create({
   body: {padding: 20, paddingBottom: 36},
   card: {
     backgroundColor: '#FFFFFF',
-    padding: 18,
-    borderRadius: 20,
-    marginBottom: 14,
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 12,
     gap: 12,
   },
   row: {flexDirection: 'row', alignItems: 'center', gap: 12},

@@ -59,6 +59,7 @@ export function NotificationsScreen() {
       serviceRequestId?: string;
       conversationId?: string;
       status?: string;
+      destination?: string;
     };
   })[];
 
@@ -147,7 +148,9 @@ export function NotificationsScreen() {
                       onError: () =>
                         toast('Could not mark this update as read.', 'error'),
                     });
-                  if (item.data?.conversationId)
+                  if (item.data?.destination === 'support')
+                    navigation.navigate('Help');
+                  else if (item.data?.conversationId)
                     navigation.navigate('Chat', {
                       conversationId: item.data.conversationId,
                       title: 'Conversation',

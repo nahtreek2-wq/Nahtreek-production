@@ -2,6 +2,8 @@ import React, {useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
+import {useBottomTabBarHeight, type BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
+import type {MainTabParamList} from '../navigation/types';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {ProIconChip} from '../components/ProIconChip';
 import {ScreenHeader} from '../components/ScreenHeader';
@@ -15,7 +17,9 @@ import type {CheckoutInput, CheckoutResult} from '../../../../packages/mobile-bo
 
 export type DuesJob = {id: string; serviceRequestId: string | null; engineerRequestId?: string | null; amountPaisa: number; platformFeePaisa: number; createdAt: string};
 export type DuesPenalty = {id: string; serviceRequestId: string; amountPaisa: number; reason: string; createdAt: string};
-export type DuesView = {duesPaisa: number; blocked: boolean; blockThresholdPaisa: number; jobs: DuesJob[]; penalties?: DuesPenalty[]; isMember?: boolean; memberSavingsPaisa?: number};
+export type DuesTerms = {memberFeeBps: number; standardFeeBps: number; memberDuesBlockPaisa: number;
+  standardDuesBlockPaisa: number; freeJobsPerMonth: number};
+export type DuesView = {duesPaisa: number; blocked: boolean; blockThresholdPaisa: number; jobs: DuesJob[]; penalties?: DuesPenalty[]; isMember?: boolean; memberSavingsPaisa?: number; terms: DuesTerms};
 
 const penaltyLabel = (reason: string) => reason === 'LATE_ACCEPT'
   ? 'Slow acceptance of a Plus request while online'
@@ -46,14 +50,63 @@ const rupees = (paisa: number) => `₹${(paisa / 100).toLocaleString('en-IN')}`;
 
 export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
   const navigation = useNavigation();
+  const tabBarHeight = useBottomTabBarHeight();
   const cache = useQueryClient();
   const toast = useProToast();
   const [failed, setFailed] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const query = useQuery({queryKey: ['pro-dues'], queryFn: hooks.load, retry: 1});
   const refresh = () => {
     void cache.invalidateQueries({queryKey: ['pro-dues']});
     void cache.invalidateQueries({queryKey: ['professional-profile']});
+    // Membership savings and per-job collect cards read the same payment —
+    // without this they keep showing the pre-payment state after dues clear.
+    void cache.invalidateQueries({queryKey: ['membership']});
+    void cache.invalidateQueries({queryKey: ['pro-collect-status']});
+  };
+  const settlePaid = () => {
+    setFailed(null); setCancelled(false); setConfirming(false); refresh();
+    toast('Commission dues cleared. New jobs are unlocked.', 'success');
+    if (navigation.canGoBack()) navigation.goBack();
+  };
+
+  // Razorpay capture can lag the checkout success by seconds. Only a 409
+  // saying "not captured yet" means money left the account with capture
+  // pending — poll verify (then the plain dues total) instead of stranding
+  // the user on a pay button. Any other 409 (mismatch, already processed)
+  // needs a fresh order, not a 40s futile poll.
+  const notCaptured = (error: unknown) =>
+    (error as {status?: number})?.status === 409 && error instanceof Error && /not captured yet/i.test(error.message);
+  const pollSettlement = async (payload: {settlementId: string} & CheckoutResult) => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      try {
+        await hooks.verify(payload);
+        settlePaid();
+        return;
+      } catch (error) {
+        if (!notCaptured(error)) {
+          setConfirming(false);
+          setCancelled(false);
+          setFailed(messageFor(error));
+          refresh();
+          return;
+        }
+      }
+    }
+    try {
+      const view = await hooks.load();
+      if (view.duesPaisa === 0) {
+        settlePaid();
+        return;
+      }
+    } catch {
+      // Fall through to the wait-and-reopen message below.
+    }
+    setConfirming(false);
+    setFailed('Payment is still confirming at Razorpay. Wait a minute, then reopen this screen — do not pay again.');
+    refresh();
   };
 
   const pay = useMutation({mutationFn: async () => {
@@ -61,12 +114,24 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
     const result = await (hooks.checkout ?? openCheckout)({keyId: order.keyId, orderId: order.orderId,
       amountPaisa: order.amountPaisa, currency: order.currency,
       name: 'NAHTREEK commission dues', description: 'Platform commission for pay-at-home jobs'});
-    return hooks.verify({settlementId: order.settlementId, ...result});
-  }, onSuccess: () => { setFailed(null); setCancelled(false); refresh(); toast('Commission dues cleared. New jobs are unlocked.', 'success'); },
+    return {settlementId: order.settlementId, ...result};
+  }, onSuccess: payload => {
+    // Verify inline so a capture-lag 409 can start polling instead of
+    // surfacing as a payment failure with the pay button still showing.
+    hooks.verify(payload).then(settlePaid, error => {
+      if (notCaptured(error)) {
+        setFailed(null); setCancelled(false); setConfirming(true); refresh();
+        void pollSettlement(payload);
+        return;
+      }
+      setCancelled(false); setFailed(messageFor(error)); refresh();
+    });
+  },
   onError: error => {
     if (error instanceof CheckoutCancelledError) { setCancelled(true); setFailed(null); refresh(); return; }
     setCancelled(false);
     setFailed(messageFor(error));
+    refresh();
   }});
 
   const startPay = (total: number) => Alert.alert('Settle commission dues?',
@@ -74,16 +139,18 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
     [{text: 'Not now', style: 'cancel'}, {text: `Pay ${rupees(total)}`, onPress: () => pay.mutate()}]);
 
   const view = query.data;
+  const goToJobs = () => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('Requests', {screen: 'RequestInbox'});
 
   return <View style={styles.root}>
     <ScreenHeader title="Commission dues" subtitle="Pay-at-home platform share" onBack={() => navigation.goBack()} />
     {query.isPending ? <ScreenLoading label="Loading your dues…" /> : query.isError || !view ? (
       <EmptyState title="Could not load dues" message="Check your connection and try again." actionLabel={query.isFetching ? 'Checking…' : 'Try again'} onAction={() => void query.refetch()} />
     ) : (
+      <>
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.totalCard}>
           <View style={styles.heroRow}>
-            <ProIconChip name="cash-multiple" tone="amber" size={58} iconSize={30} />
+            <ProIconChip name="cash-multiple" size={58} iconSize={30} />
             <View style={styles.heroCopy}>
               <Text style={styles.totalLabel}>Total due</Text>
               <Text style={styles.total}>{rupees(view.duesPaisa)}</Text>
@@ -91,14 +158,14 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
           </View>
           <View style={styles.meter} accessibilityRole="progressbar" accessibilityLabel={`${rupees(view.duesPaisa)} of ${rupees(view.blockThresholdPaisa)} dues limit`}>
             <View style={[styles.meterFill, {width: `${Math.min(100, Math.round((view.duesPaisa / view.blockThresholdPaisa) * 100))}%`,
-              backgroundColor: view.blocked ? ProColors.error : view.duesPaisa / view.blockThresholdPaisa >= 0.75 ? ProColors.warning : ProColors.success}]} />
+              backgroundColor: view.blocked ? ProColors.error : ProColors.primary}]} />
           </View>
           <Text style={styles.hint}>{rupees(view.duesPaisa)} of {rupees(view.blockThresholdPaisa)} limit{view.blocked ? ' — over the limit, new jobs paused' : ' — new jobs pause above the limit'}.</Text>
-          <Text style={styles.hint}>10% of each pay-at-home job. Pro members pay 7%, get the first job each month free, and are blocked only above ₹2,000. You collected the full amount from the customer; this is NAHTREEK&apos;s share.</Text>
+          <Text style={styles.hint}>{view.terms.standardFeeBps / 100}% of each pay-at-home job. Pro members pay {view.terms.memberFeeBps / 100}%, get the first job each month free, and are blocked only above {rupees(view.terms.memberDuesBlockPaisa)}. You collected the full amount from the customer; this is NAHTREEK&apos;s share.</Text>
           {view.isMember && (view.memberSavingsPaisa ?? 0) > 0 ? (
             <View style={styles.savings}>
               <Text style={styles.savingsTitle}>Membership saved you {rupees(view.memberSavingsPaisa ?? 0)}</Text>
-              <Text style={styles.savingsBody}>These jobs were billed below the 10% standard rate.</Text>
+              <Text style={styles.savingsBody}>These jobs were billed below the {view.terms.standardFeeBps / 100}% standard rate.</Text>
             </View>
           ) : null}
           {!view.isMember && view.jobs.length > 0 ? (
@@ -121,10 +188,10 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
           </View>
         ) : null}
         {view.jobs.length === 0 && (view.penalties ?? []).length === 0 ? (
-          <EmptyState title="No dues" message="Nothing to settle. Dues appear here after pay-at-home jobs." />
+          <EmptyState title="No dues" message="Nothing to settle. Dues appear here after pay-at-home jobs." actionLabel="Browse jobs" onAction={goToJobs} />
         ) : view.jobs.map(job => (
           <View key={job.id} style={styles.job}>
-            <ProIconChip name={job.engineerRequestId ? 'hard-hat' : 'tools'} tone={job.engineerRequestId ? 'navy' : 'blue'} size={46} iconSize={24} />
+            <ProIconChip name={job.engineerRequestId ? 'hard-hat' : 'tools'} size={46} iconSize={24} />
             <View style={styles.jobCopy}>
               <View style={styles.jobRow}>
                 <Text style={styles.jobAmount}>{rupees(job.platformFeePaisa)}</Text>
@@ -148,14 +215,18 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
         ))}
         {failed ? <Text accessibilityRole="alert" style={styles.error}>{failed}</Text> : null}
         {cancelled ? <Text style={styles.hint}>Checkout cancelled. Nothing was charged — settle whenever you are ready.</Text> : null}
-        {view.duesPaisa > 0 ? (
+        {confirming ? <Text style={styles.confirming}>Payment received — confirming with Razorpay. Keep this screen open; do not pay again.</Text> : null}
+      </ScrollView>
+      {view.duesPaisa > 0 && !confirming ? (
+        <View style={[styles.stickyBar, {paddingBottom: tabBarHeight + ProSpacing.md}]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Settle dues" disabled={pay.isPending} onPress={() => startPay(view.duesPaisa)}
             style={[styles.pay, pay.isPending && {opacity: 0.6}]}>
             <MaterialCommunityIcons name="lock-check" size={20} color={ProColors.onAccent} />
             <Text style={styles.payText}>{pay.isPending ? 'Opening secure checkout…' : `Settle ${rupees(view.duesPaisa)}`}</Text>
           </Pressable>
-        ) : null}
-      </ScrollView>
+        </View>
+      ) : null}
+      </>
     )}
   </View>;
 }
@@ -176,10 +247,10 @@ const styles = StyleSheet.create({
   savingsBody: {...ProType.body, color: ProColors.success},
   savingsLink: {marginTop: 4, alignSelf: 'flex-start'},
   savingsLinkText: {fontSize: 15, fontWeight: '800', color: ProColors.success, textDecorationLine: 'underline'},
-  blocked: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md, backgroundColor: '#FEF3C7', borderRadius: ProRadius.input, padding: ProSpacing.md},
+  blocked: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md, backgroundColor: ProColors.errorSoft, borderRadius: ProRadius.input, padding: ProSpacing.md},
   blockedCopy: {flex: 1, gap: 4},
-  blockedTitle: {fontSize: 15, fontWeight: '800', color: '#92400E'},
-  blockedBody: {...ProType.body, color: '#92400E'},
+  blockedTitle: {fontSize: 15, fontWeight: '800', color: ProColors.error},
+  blockedBody: {...ProType.body, color: ProColors.error},
   job: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md, backgroundColor: ProColors.surface, borderRadius: ProRadius.input, padding: ProSpacing.md},
   jobCopy: {flex: 1, gap: 4},
   penalty: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md, backgroundColor: ProColors.warningSoft, borderRadius: ProRadius.input, padding: ProSpacing.md},
@@ -188,6 +259,8 @@ const styles = StyleSheet.create({
   jobAmount: {fontSize: 18, fontWeight: '800', color: ProColors.text},
   jobDate: {...ProType.meta, color: ProColors.muted},
   error: {color: ProColors.error},
+  confirming: {color: ProColors.primary, fontWeight: '700'},
+  stickyBar: {backgroundColor: ProColors.surface, borderTopWidth: 1, borderTopColor: ProColors.border, padding: ProSpacing.md},
   pay: {flexDirection: 'row', gap: 8, backgroundColor: ProColors.accent, borderRadius: ProRadius.input, minHeight: 52, alignItems: 'center', justifyContent: 'center'},
   payText: {fontSize: 16, fontWeight: '800', color: ProColors.onAccent},
 });

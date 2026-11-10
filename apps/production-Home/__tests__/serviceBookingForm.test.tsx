@@ -5,7 +5,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ServiceBookingForm} from '../src/components/ServiceBookingForm';
 import {api} from '../src/services/apiClient';
 
-jest.mock('../src/services/apiClient', () => ({api: {post: jest.fn()}}));
+jest.mock('../src/services/apiClient', () => ({api: {post: jest.fn(), get: jest.fn().mockRejectedValue(new Error('offline'))}}));
 jest.mock('../src/components/LocationPicker', () => {
   const {Pressable: MockPressable, Text: MockText} = require('react-native');
   return {LocationPicker: ({onSelect, onSearching}: any) => (

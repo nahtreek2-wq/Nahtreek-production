@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import {Colors, Spacing, Typography, BorderRadius} from '@nahtreek/design-system';
 import {ApiError} from '../../services/apiClient';
@@ -22,10 +23,12 @@ interface OfflineBannerProps {
   message?: string;
   error?: unknown;
   hasContent?: boolean;
+  topEdge?: boolean;
 }
 
-export function OfflineBanner({force = false, onRetry, retrying = false, title, message, error, hasContent = false}: OfflineBannerProps) {
+export function OfflineBanner({force = false, onRetry, retrying = false, title, message, error, hasContent = false, topEdge = false}: OfflineBannerProps) {
   const online = useOnline();
+  const insets = useSafeAreaInsets();
   if (online && !force) return null;
   const connectionIssue = error instanceof ApiError && (error.status === 0 || error.status >= 500);
   const defaultTitle = !online ? 'No internet connection' : connectionIssue ? 'Service is unavailable' : 'Could not update';
@@ -35,8 +38,11 @@ export function OfflineBanner({force = false, onRetry, retrying = false, title, 
     ? 'We cannot reach Nahtreek right now. Please try again shortly.'
     : 'Your latest information could not be loaded.';
 
-  return (
-    <View accessibilityRole="alert" style={styles.container}>
+  // The global banner mounts above the navigator, so it must clear the
+  // notch/status bar itself instead of overlapping it. Mid-screen banners
+  // already sit below their header and must not gain the inset.
+  const body = (
+      <View style={styles.container}>
       <View style={styles.copy}>
         <Text style={styles.title}>{title ?? defaultTitle}</Text>
         <Text style={styles.message}>
@@ -53,11 +59,18 @@ export function OfflineBanner({force = false, onRetry, retrying = false, title, 
           <Text style={styles.retryLabel}>{retrying ? 'Checking…' : 'Try again'}</Text>
         </TouchableOpacity>
       ) : null}
+      </View>
+  );
+  if (!topEdge) return <View accessibilityRole="alert">{body}</View>;
+  return (
+    <View accessibilityRole="alert" style={[styles.safeTop, {paddingTop: insets.top}]}>
+      {body}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  safeTop: {backgroundColor: Colors.navyDeep},
   container: {
     flexDirection: 'row',
     alignItems: 'center',

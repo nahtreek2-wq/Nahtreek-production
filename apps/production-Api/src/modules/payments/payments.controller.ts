@@ -1,4 +1,5 @@
-import {Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards} from '@nestjs/common';
+import {Body, Controller, Get, Headers, Param, Post, Query, Req, UnauthorizedException, UseGuards} from '@nestjs/common';
+import {timingSafeEqual} from 'crypto';
 import {Role} from '@prisma/client';
 import {CurrentUser} from '../../common/decorators/current-user.decorator';
 import {Roles} from '../../common/decorators/roles.decorator';
@@ -107,5 +108,21 @@ export class PaymentsWebhookController {
   webhook(@Req() req: any, @Headers('x-razorpay-signature') signature?: string) {
     const raw = (req.rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}))) as Buffer;
     return this.service.handleWebhook(raw, signature ?? '');
+  }
+}
+
+// Cron-kept: retries refunds stuck in REFUND_PENDING (same CRON_SECRET guard
+// as the journey expiry sweep). Schedule every 15 minutes.
+@Controller('internal/payments')
+export class PaymentsMaintenanceController {
+  constructor(private readonly service: PaymentsService) {}
+
+  @Post('retry-refunds')
+  async retryRefunds(@Headers('authorization') authorization?: string) {
+    const secret = process.env.CRON_SECRET;
+    const expected = Buffer.from(`Bearer ${secret ?? ''}`);
+    const actual = Buffer.from(authorization ?? '');
+    if (!secret || secret.length < 32 || actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new UnauthorizedException();
+    return this.service.retryPendingRefunds();
   }
 }

@@ -54,11 +54,11 @@ export function AppProviders() {
         return;
       }
       const keys: Record<string, string[][]> = {
-        requests: [['requests'], ['request-detail'], ['history/me']],
-        'service-requests': [['service-requests'], ['service-request'], ['history/me']],
+        requests: [['requests'], ['request-detail'], ['history/me'], ['payment']],
+        'service-requests': [['service-requests'], ['service-request'], ['history/me'], ['payment'], ['service-journey']],
         conversations: [['conversations'], ['messages']],
         notifications: [['notifications']],
-        profile: [['client-profile']],
+        profile: [['client-profile'], ['ai-billing']],
       };
       (keys[resource] ?? []).forEach(queryKey => {
         void queryClient.invalidateQueries({queryKey});
@@ -107,7 +107,7 @@ export function AppProviders() {
           backgroundColor={Colors.navyDeep}
         />
         <AppErrorBoundary>
-          <OfflineBanner message="Your details stay on this screen. Reconnect before submitting or refreshing." />
+          <OfflineBanner topEdge message="Your details stay on this screen. Reconnect before submitting or refreshing." />
           <AppNavigator />
         </AppErrorBoundary>
         <Toast />

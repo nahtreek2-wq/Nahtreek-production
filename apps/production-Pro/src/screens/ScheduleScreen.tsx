@@ -8,7 +8,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -24,6 +23,7 @@ import {
 import {ScreenHeader} from '../components/ScreenHeader';
 import {EmptyState} from '../components/EmptyState';
 import {KeyboardAwareView} from '../../../../packages/mobile-ui/KeyboardAwareView';
+import {DateTimeField} from '../../../../packages/mobile-ui/DateTimeField';
 import {VerificationGate} from '../components/VerificationGate';
 import type {MainTabParamList} from '../navigation/types';
 import {api, ApiError} from '../services/apiClient';
@@ -51,19 +51,16 @@ function futureSlot(days: number, startHour: number, endHour: number) {
   return {startsAt: start.toISOString(), endsAt: end.toISOString()};
 }
 
-function customSlot(dayText: string, startText: string, endText: string) {
-  const dateParts = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dayText.trim());
-  const startParts = /^(\d{1,2}):(\d{2})$/.exec(startText.trim());
-  const endParts = /^(\d{1,2}):(\d{2})$/.exec(endText.trim());
-  if (!dateParts || !startParts || !endParts) {return null;}
-  const day = Number(dateParts[1]); const month = Number(dateParts[2]); const year = Number(dateParts[3]);
-  const startHour = Number(startParts[1]); const startMinute = Number(startParts[2]);
-  const endHour = Number(endParts[1]); const endMinute = Number(endParts[2]);
-  if (startHour > 23 || endHour > 23 || startMinute > 59 || endMinute > 59) {return null;}
-  const start = new Date(year, month - 1, day, startHour, startMinute);
-  const end = new Date(year, month - 1, day, endHour, endMinute);
-  if (start.getFullYear() !== year || start.getMonth() !== month - 1 || start.getDate() !== day || start <= new Date() || end <= start) {return null;}
-  return {startsAt: start.toISOString(), endsAt: end.toISOString()};
+function customSlot(day: Date | null, start: Date | null, end: Date | null) {
+  // Native pickers return real Dates: combine the picked day with the picked
+  // start/end times, then only the future/range checks remain.
+  if (!day || !start || !end) {return null;}
+  const startsAt = new Date(day);
+  startsAt.setHours(start.getHours(), start.getMinutes(), 0, 0);
+  const endsAt = new Date(day);
+  endsAt.setHours(end.getHours(), end.getMinutes(), 0, 0);
+  if (startsAt <= new Date() || endsAt <= startsAt) {return null;}
+  return {startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString()};
 }
 
 export function ScheduleScreen() {
@@ -73,9 +70,9 @@ export function ScheduleScreen() {
   const queryClient = useQueryClient();
   const toast = useProToast();
   const [customOpen, setCustomOpen] = useState(false);
-  const [customDate, setCustomDate] = useState('');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  const [customDate, setCustomDate] = useState<Date | null>(null);
+  const [customStart, setCustomStart] = useState<Date | null>(null);
+  const [customEnd, setCustomEnd] = useState<Date | null>(null);
   const [customError, setCustomError] = useState('');
   const serviceProvider = useSessionStore(state =>
     state.user?.roles.includes('SERVICE_PROVIDER'),
@@ -150,7 +147,7 @@ export function ScheduleScreen() {
   const todaySlots = availability.data?.slots.filter(slot => slot.isAvailable && new Date(slot.startsAt).toDateString() === today && new Date(slot.endsAt) > new Date()) ?? [];
   const addCustom = () => {
     const slot = customSlot(customDate, customStart, customEnd);
-    if (!slot) {setCustomError('Enter a future date (DD/MM/YYYY) and a valid time range (HH:MM).'); return;}
+    if (!slot) {setCustomError('Pick a future date with an end time after the start time.'); return;}
     setCustomError('');
     create.mutate(slot);
   };
@@ -292,9 +289,12 @@ export function ScheduleScreen() {
             <MaterialCommunityIcons name="calendar-edit" size={22} color={ProColors.primary} /><Text style={styles.customToggleText}>Choose another date and time</Text><MaterialCommunityIcons name={customOpen ? 'chevron-up' : 'chevron-down'} size={20} color={ProColors.primary} />
           </Pressable>
           {customOpen ? <View style={styles.customForm}>
-            <Text style={styles.customHelp}>Use your device’s local time. Example: 14/10/2026, 09:00 to 12:00.</Text>
-            <TextInput accessibilityLabel="Available date, day month year" placeholder="DD/MM/YYYY" placeholderTextColor={ProColors.muted} keyboardType="numbers-and-punctuation" value={customDate} onChangeText={setCustomDate} style={styles.customInput} />
-            <View style={styles.customTimes}><TextInput accessibilityLabel="Start time" placeholder="Start HH:MM" placeholderTextColor={ProColors.muted} keyboardType="numbers-and-punctuation" value={customStart} onChangeText={setCustomStart} style={[styles.customInput, styles.customTime]} /><TextInput accessibilityLabel="End time" placeholder="End HH:MM" placeholderTextColor={ProColors.muted} keyboardType="numbers-and-punctuation" value={customEnd} onChangeText={setCustomEnd} style={[styles.customInput, styles.customTime]} /></View>
+            <Text style={styles.customHelp}>Use your device’s local time.</Text>
+            <DateTimeField label="Available date" accessibilityLabel="Available date, day month year" mode="date" value={customDate} onChange={setCustomDate} minimumDate={new Date()} />
+            <View style={styles.customTimes}>
+              <View style={styles.customTimeWrap}><DateTimeField label="Starts at" accessibilityLabel="Start time" mode="time" value={customStart} onChange={setCustomStart} /></View>
+              <View style={styles.customTimeWrap}><DateTimeField label="Ends at" accessibilityLabel="End time" mode="time" value={customEnd} onChange={setCustomEnd} /></View>
+            </View>
             {customError ? <Text accessibilityRole="alert" style={styles.error}>{customError}</Text> : null}
             <Pressable accessibilityRole="button" disabled={create.isPending} onPress={addCustom} style={styles.customSave}><Text style={styles.customSaveText}>{create.isPending ? 'Saving…' : 'Add available time'}</Text></Pressable>
           </View> : null}
@@ -307,7 +307,43 @@ export function ScheduleScreen() {
                 : 'Could not update your schedule.'}
             </Text>
           ) : null}
-          <Text style={styles.sectionTitle}>Your available times</Text>
+          <View style={styles.slotHeader}>
+            <Text style={styles.sectionTitleTight}>Your available times</Text>
+            {availability.data.slots.length > 1 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Remove all available times"
+                disabled={remove.isPending}
+                onPress={() =>
+                  Alert.alert(
+                    'Remove all available times?',
+                    'Every upcoming slot will be removed. Existing bookings stay untouched.',
+                    [
+                      {text: 'Keep them', style: 'cancel'},
+                      {
+                        text: 'Remove all',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            for (const slot of availability.data?.slots ?? []) {
+                              await api.delete(`/professionals/me/availability/${slot.id}`);
+                            }
+                            toast('All available times removed.', 'success');
+                          } catch {
+                            toast('Some slots could not be removed.', 'error');
+                          } finally {
+                            refresh();
+                          }
+                        },
+                      },
+                    ],
+                  )
+                }
+                style={styles.clearAll}>
+                <Text style={styles.clearAllText}>{remove.isPending ? 'Removing…' : 'Clear all'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
           {availability.data.slots.length ? (
             <View style={styles.slotList}>
               {availability.data.slots.map(slot => (
@@ -410,9 +446,9 @@ const styles = StyleSheet.create({
   customToggleText: {...ProType.action, color: ProColors.primary, flex: 1},
   customForm: {gap: 10, backgroundColor: ProColors.surface, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: ProColors.border, marginTop: 8},
   customHelp: {...ProType.meta, color: ProColors.secondary},
-  customInput: {...ProType.body, color: ProColors.text, height: 50, borderWidth: 1, borderColor: ProColors.border, borderRadius: 12, paddingHorizontal: 12},
   customTimes: {flexDirection: 'row', gap: 10},
   customTime: {flex: 1},
+  customTimeWrap: {flex: 1},
   customSave: {minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: ProColors.primary, borderRadius: 12},
   customSaveText: {...ProType.action, color: ProColors.surface},
   retry: {alignSelf: 'center', padding: 20},
@@ -450,6 +486,10 @@ const styles = StyleSheet.create({
     color: Colors.slate900,
     marginTop: Spacing.lg,
   },
+  slotHeader: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: Spacing.lg},
+  sectionTitleTight: {...Typography.h2, color: Colors.slate900, flex: 1},
+  clearAll: {paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.slate200},
+  clearAllText: {...Typography.badge, lineHeight: 16, fontWeight: '700', color: Colors.error},
   sectionHelp: {
     ...Typography.body,
     color: Colors.slate600,

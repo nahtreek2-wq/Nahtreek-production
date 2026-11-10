@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {useWindowDimensions} from 'react-native';
+import {StyleSheet, useWindowDimensions, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
@@ -35,6 +35,7 @@ import {ReviewsScreen} from '../screens/ReviewsScreen';
 import {MembershipScreen} from '../screens/MembershipScreen';
 import {DuesScreen} from '../screens/DuesScreen';
 import {MyQrScreen} from '../screens/MyQrScreen';
+import {SupportScreen} from '../screens/SupportScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
@@ -165,6 +166,10 @@ function ProfileNavigator() {
         name="MyQr"
         component={MyQrScreen}
       />
+      <ProfileStack.Screen
+        name="Support"
+        component={SupportScreen}
+      />
     </ProfileStack.Navigator>
   );
 }
@@ -180,7 +185,10 @@ function MessagesNavigator() {
 }
 
 export function RootNavigator({instantSplash = false}: {instantSplash?: boolean} = {}) {
-  const [splashFinished, setSplashFinished] = useState(false);
+  // A returning pro with a restorable session must never sit through the
+  // logo animation again — cold starts after a background kill go straight
+  // to their last screen. The splash plays only on true fresh starts.
+  const [splashFinished, setSplashFinished] = useState(instantSplash);
   const hydrated = useSessionStore(state => state.hydrated);
   const accessToken = useSessionStore(state => state.accessToken);
   const user = useSessionStore(state => state.user);
@@ -189,6 +197,9 @@ export function RootNavigator({instantSplash = false}: {instantSplash?: boolean}
     hydrate().catch(() => undefined);
   }, [hydrate]);
   const finishSplash = useCallback(() => setSplashFinished(true), []);
+  if (!hydrated && instantSplash) {
+    return <View style={bootStyles.root} />;
+  }
   if (!hydrated || !splashFinished) {
     return <SplashScreen ready={hydrated} instant={instantSplash} onFinish={finishSplash} />;
   }
@@ -228,3 +239,7 @@ export function RootNavigator({instantSplash = false}: {instantSplash?: boolean}
     </Stack.Navigator>
   );
 }
+
+const bootStyles = StyleSheet.create({
+  root: {flex: 1, backgroundColor: ProColors.deep},
+});

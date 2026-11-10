@@ -12,6 +12,7 @@ import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import {
   Colors,
   Typography,
@@ -42,6 +43,7 @@ import {
 } from '../services/queries';
 import {useFavoritesList, useToggleFavorite} from '../services/queries';
 import {useToast} from '../stores/toast';
+import {currentLocation} from '../services/location';
 import {isApiConfigured} from '../services/config';
 import type {EngineerProfileDto} from '@nahtreek/types';
 import {portraitFor} from '../assets/imagery';
@@ -66,7 +68,7 @@ const FILTERS = [
   'Geotechnical',
   'Renovation Audit',
 ];
-const SORTS = ['Top Rated', 'Available Now', 'Saved'];
+const SORTS = ['Top Rated', 'Nearest', 'Available Now', 'Saved'];
 const ENGINEER_CATEGORIES = [
   {
     title: 'All engineers',
@@ -103,6 +105,7 @@ export function EngineerDiscoveryScreen() {
   const requestPlanQuotes = usePlanQuoteRequest();
   const isTabScreen = (navigation.getState() as {type: string}).type === 'tab';
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const city = useCity(state => state.city);
   const selectedState = useCity(state => state.state);
   const setCity = useCity(state => state.setCity);
@@ -113,6 +116,29 @@ export function EngineerDiscoveryScreen() {
   const [mode, setMode] = useState<'engineers' | 'services'>('engineers');
   const [filter, setFilter] = useState('All');
   const [sort, setSort] = useState('Top Rated');
+  const [geo, setGeo] = useState<{latitude: number; longitude: number} | undefined>();
+  const [geoLoading, setGeoLoading] = useState(false);
+  const pickSort = async (option: string) => {
+    if (option !== 'Nearest') {
+      setSort(option);
+      return;
+    }
+    // Nearest needs the customer's position: resolve once, then rank by it.
+    if (geo) {
+      setSort(option);
+      return;
+    }
+    setGeoLoading(true);
+    try {
+      const position = await currentLocation();
+      setGeo({latitude: position.latitude, longitude: position.longitude});
+      setSort(option);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Location is unavailable.', 'error');
+    } finally {
+      setGeoLoading(false);
+    }
+  };
   const [filterSheet, setFilterSheet] = useState<'sort' | 'specialization' | null>(null);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [consult, setConsult] = useState<EngineerProfileDto | null>(null);
@@ -160,6 +186,7 @@ export function EngineerDiscoveryScreen() {
     filter,
     city,
     selectedState,
+    sort === 'Nearest' ? geo : undefined,
   );
   const createRequest = useCreateRequest();
   const engineers = useMemo(() => {
@@ -237,7 +264,7 @@ export function EngineerDiscoveryScreen() {
         keyExtractor={item => item.id}
         contentContainerStyle={[
           styles.list,
-          {paddingBottom: insets.bottom + 104},
+          {paddingBottom: (isTabScreen ? tabBarHeight : insets.bottom) + 24},
         ]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
@@ -349,8 +376,8 @@ export function EngineerDiscoveryScreen() {
                   </Text>
                 </View>
                 <View style={styles.filterControls}>
-                  <Pressable style={styles.filterButton} accessibilityRole="button" accessibilityLabel={`Sort engineers, currently ${sort}`} onPress={() => setFilterSheet('sort')}>
-                    <Text numberOfLines={1} style={styles.filterValue}>{sort}</Text>
+                  <Pressable style={styles.filterButton} accessibilityRole="button" accessibilityLabel={`Sort engineers, currently ${geoLoading ? 'locating you' : sort}`} onPress={() => setFilterSheet('sort')}>
+                    <Text numberOfLines={1} style={styles.filterValue}>{geoLoading ? 'Locating…' : sort}</Text>
                     <Icon name={ICONS.chevronDown} size={16} color={Colors.navyDeep} />
                   </Pressable>
                   <Pressable style={styles.filterButton} accessibilityRole="button" accessibilityLabel={`Choose specialization, currently ${filter}`} onPress={() => setFilterSheet('specialization')}>
@@ -509,7 +536,7 @@ export function EngineerDiscoveryScreen() {
             accessibilityRole="button"
             style={styles.filterOption}
             onPress={() => {
-              if (filterSheet === 'sort') setSort(option);
+              if (filterSheet === 'sort') void pickSort(option);
               else setFilter(option);
               setFilterSheet(null);
             }}>

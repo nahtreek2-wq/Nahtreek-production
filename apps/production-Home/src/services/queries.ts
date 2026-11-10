@@ -200,6 +200,7 @@ export function useEngineList(
   specialization?: string,
   city?: string,
   state?: string,
+  coords?: {latitude: number; longitude: number},
 ) {
   const params: string[] = [];
   if (sort) params.push('sort=' + encodeURIComponent(sort));
@@ -210,6 +211,10 @@ export function useEngineList(
       'city=' + encodeURIComponent(city.split(',')[0]?.trim() ?? city),
     );
   if (state) params.push('state=' + encodeURIComponent(state));
+  if (coords) {
+    params.push('lat=' + encodeURIComponent(coords.latitude));
+    params.push('lng=' + encodeURIComponent(coords.longitude));
+  }
   return usePagedList<EngineerProfileDto>(
     [
       ...queryKeys.engineers,
@@ -217,6 +222,7 @@ export function useEngineList(
       specialization ?? 'All',
       city ?? 'all',
       state ?? 'all',
+      coords ? `${coords.latitude.toFixed(3)},${coords.longitude.toFixed(3)}` : 'no-geo',
     ],
     '/discovery/engineers?' + params.join('&'),
     () => getOfflineEngineers(city),

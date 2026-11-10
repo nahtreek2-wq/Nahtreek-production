@@ -10,6 +10,7 @@ import {
 import {ClientColors} from '../design-system/tokens';
 import {BottomSheet, Button, ChipRow, Icon, ICONS, Input} from './ui';
 import {LocationPicker} from './LocationPicker';
+import {PlusPerkStrip} from './PlusPerkStrip';
 import type {SelectedLocation} from '../services/location';
 import type {EngineerProfileDto, EngineerRequestDto} from '@nahtreek/types';
 
@@ -185,6 +186,7 @@ export function ConsultationSheet({
           </Text>
         </View>
       ) : null}
+      <PlusPerkStrip consultFee={engineer.consultationFee ?? undefined} />
       <View style={styles.progressHeader}>
         <Text style={styles.stepCount}>
           STEP {step + 1} OF {steps.length}

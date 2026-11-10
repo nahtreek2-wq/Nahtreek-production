@@ -5,6 +5,13 @@ it('answers company questions on-device', () => {
   expect(localPlannerReply('UNSURE', 'Tell me about your company')).toMatch(/NAHTREEK connects homeowners/);
 });
 
+it('uses cached plan figures when present, generic copy when absent', () => {
+  expect(localPlannerReply('UNSURE', 'Tell me about your company', {freeMessages: 5, feePaisa: 12900}))
+    .toMatch(/5 free chats, then ₹129\/month/);
+  expect(localPlannerReply('UNSURE', 'Tell me about your company', null)).toMatch(/free to start/);
+  expect(localPlannerReply('UNSURE', 'Tell me about your company')).not.toMatch(/₹129/);
+});
+
 it.each([
   'Who won the cricket match?',
   'Suggest a good movie tonight',

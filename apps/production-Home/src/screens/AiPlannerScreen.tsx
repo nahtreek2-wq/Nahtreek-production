@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
+import {useQueryClient} from '@tanstack/react-query';
 import {launchImageLibrary} from 'react-native-image-picker';
 import Voice from '@react-native-voice/voice';
 import {useNavigation, useRoute} from '@react-navigation/native';
@@ -33,13 +34,16 @@ import {
   activateDemoAi,
   cancelAiSubscription,
   confirmAiSubscription,
+  fetchAiPlan,
   fetchAiSubscription,
   isConfirmingError,
   isPaywallError,
   quotaLabel,
   subscribeAi,
+  type AiPlanView,
   type AiSubscriptionView,
 } from '../services/aiBilling';
+import {inr, inrMonth} from '../utils/format';
 import {setAiBookingPrefill} from '../services/aiBookingPrefill';
 import {isApiConfigured} from '../services/config';
 import {runtimeConfig} from '../config/runtime';
@@ -219,6 +223,7 @@ function ProjectChoice({project, index, busy, selected, onPress}: {
 
 export function AiPlannerScreen() {
   const navigation = useNavigation<Nav>();
+  const queryClient = useQueryClient();
   const route = useRoute<any>();
   const user = useSessionStore(state => state.user);
   const [conversationId, setConversationId] = useState<string | undefined>(
@@ -243,6 +248,11 @@ export function AiPlannerScreen() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const [billing, setBilling] = useState<AiSubscriptionView | null>(null);
+  const [plusPlan, setPlusPlan] = useState<AiPlanView | null>(null);
+  const plusPrice = plusPlan ? inrMonth(plusPlan.feePaisa) : billing ? inrMonth(billing.feePaisa) : 'NAHTREEK Plus';
+  const consultPerk = plusPlan
+    ? `${plusPlan.consultDiscountBps / 100}% off engineer consultations (up to ${inr(plusPlan.consultDiscountCapPaisa)})`
+    : 'Consultation discounts on engineer bookings';
   const [paywalled, setPaywalled] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [activating, setActivating] = useState(false);
@@ -257,6 +267,11 @@ export function AiPlannerScreen() {
       setBilling(await fetchAiSubscription());
     } catch {
       // Quota display is best-effort; the server still gates every AI action.
+    }
+    try {
+      setPlusPlan(await fetchAiPlan());
+    } catch {
+      // Plan copy falls back to the subscription fee already loaded.
     }
   };
 
@@ -340,8 +355,12 @@ export function AiPlannerScreen() {
 
   // Billing views merge over the previous one so a view without quota fields
   // can never blank the free-chat pill.
-  const applyBilling = (view: AiSubscriptionView) =>
+  const applyBilling = (view: AiSubscriptionView) => {
     setBilling(previous => (previous ? {...previous, ...view} : view));
+    // Detail screens read billing through react-query: keep their Plus
+    // badge and discount in sync with subscribe/confirm/cancel here.
+    void queryClient.invalidateQueries({queryKey: ['ai-billing']});
+  };
 
   // After a successful GPay payment the first charge still needs seconds to
   // land at Razorpay. Poll confirm (then the plain status as a webhook may
@@ -482,7 +501,9 @@ export function AiPlannerScreen() {
         : {
             id: `local-reply-${Date.now()}`,
             type: 'ASSISTANT_TEXT',
-            content: localPlannerReply(projectType ?? 'UNSURE', content),
+            content: localPlannerReply(projectType ?? 'UNSURE', content,
+              plusPlan ? {freeMessages: plusPlan.freeMessages, feePaisa: plusPlan.feePaisa}
+                : billing ? {freeMessages: billing.freeQuota, feePaisa: billing.feePaisa} : null),
           };
       setMessages(current => [...current, reply]);
       void refreshBilling();
@@ -748,7 +769,7 @@ export function AiPlannerScreen() {
           <View style={styles.paywall}>
             <Text style={styles.paywallTitle}>Unlock unlimited NAHTREEK AI</Text>
             <Text style={styles.paywallCopy}>
-              Your 5 free chats are used. ₹129/month unlocks:
+              Your {plusPlan?.freeMessages ?? billing?.freeQuota ?? ''} free chats are used. {plusPrice} unlocks:
             </Text>
             <View style={styles.paywallBenefits}>
               <Text style={styles.paywallBenefit}>✓ Unlimited planning chats, in English or Tamil</Text>
@@ -757,10 +778,10 @@ export function AiPlannerScreen() {
               <Text style={styles.paywallBenefit}>✓ Plus badge professionals see on your requests</Text>
               <Text style={styles.paywallBenefit}>✓ Priority review if you report a payment problem</Text>
               <Text style={styles.paywallBenefit}>✓ Faster home service — late pros pay penalties</Text>
-              <Text style={styles.paywallBenefit}>✓ 2% off engineer consultations (up to ₹100)</Text>
+              <Text style={styles.paywallBenefit}>✓ {consultPerk}</Text>
             </View>
             <Button
-              label="Subscribe · ₹129/month"
+              label={`Subscribe · ${plusPrice}`}
               loadingLabel="Opening checkout…"
               onPress={() => void subscribe()}
               loading={subscribing || activating}
@@ -795,9 +816,9 @@ export function AiPlannerScreen() {
             {isApiConfigured && billing && !billing.effective ? (
               <View style={styles.proCard}>
                 <View style={styles.proCopy}>
-                  <Text style={styles.proTitle}>NAHTREEK Plus · ₹129/month</Text>
+                  <Text style={styles.proTitle}>NAHTREEK Plus · {plusPrice}</Text>
                   <Text style={styles.proText}>
-                    {quota ?? '5 free chats included'} — then unlimited chats, project plans, photo analysis, faster service with late penalties, 2% off engineer consults and priority reviews.
+                    {quota ?? 'Free chats included'} — then unlimited chats, project plans, photo analysis, faster service with late penalties, engineer consult discounts and priority reviews.
                   </Text>
                 </View>
                 <Button

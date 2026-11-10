@@ -244,6 +244,7 @@ export function RequestsScreen() {
               }
               onChat={openChat}
               onCancel={cancel}
+              onFindAnother={() => navigation.navigate('EngineerDiscovery')}
               onReview={() => {
                 setReviewing(item);
                 setRating('5');
@@ -292,12 +293,14 @@ export function RequestCard({
   onChat,
   onCancel,
   onReview,
+  onFindAnother,
 }: {
   request: EngineerRequestDto;
   onOpen: () => void;
   onChat: (request: EngineerRequestDto) => void;
   onCancel: (request: EngineerRequestDto) => void;
   onReview: () => void;
+  onFindAnother?: () => void;
 }) {
   const terminal = ['DECLINED', 'CANCELLED', 'COMPLETED'].includes(
     request.status,
@@ -361,6 +364,13 @@ export function RequestCard({
             label="Cancel"
             variant="danger"
             onPress={() => onCancel(request)}
+            style={styles.action}
+          />
+        ) : null}
+        {['DECLINED', 'CANCELLED'].includes(request.status) && onFindAnother ? (
+          <Button
+            label="Find another engineer"
+            onPress={onFindAnother}
             style={styles.action}
           />
         ) : null}

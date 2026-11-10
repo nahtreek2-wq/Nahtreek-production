@@ -65,6 +65,7 @@ function setup(over: {req?: any; pay?: any; pays?: any[]; provider?: any; accoun
     fetchPayment: jest.fn(), createOnHoldTransfer: jest.fn().mockResolvedValue({id: 'trf_1'}),
     createDirectTransfer: jest.fn().mockResolvedValue({id: 'trf_1'}), releaseTransfer: jest.fn().mockResolvedValue({id: 'trf_1'}),
     createRefund: jest.fn().mockResolvedValue({id: 'rfnd_1', status: 'pending'}),
+    fetchRefunds: jest.fn().mockResolvedValue([]),
     verifyPaymentSignature: jest.fn().mockReturnValue(true), verifyWebhookSignature: jest.fn().mockReturnValue(true),
     ...over.provider};
   const push = {dispatch: jest.fn().mockResolvedValue({})};
@@ -259,6 +260,40 @@ describe('payments release and refund', () => {
       .resolves.toMatchObject({status: 'REFUND_PENDING'});
     expect(provider.createRefund).not.toHaveBeenCalled();
   });
+  it('retries a pending refund instead of returning a stuck view', async () => {
+    const {provider, service} = setup({pay: payment({status: 'REFUND_PENDING', providerPaymentId: 'pay_1'})});
+    await expect(service.requestRefund('client', {serviceRequestId: 'req', reason: 'tap retry'}, false))
+      .resolves.toMatchObject({status: 'REFUND_PENDING'});
+    expect(provider.fetchRefunds).toHaveBeenCalledWith('pay_1');
+    expect(provider.createRefund).toHaveBeenCalledWith('pay_1', 200000);
+  });
+  it('adopts a processed remote refund without recreating it', async () => {
+    const {db, provider, service} = setup({pay: payment({status: 'REFUND_PENDING', providerPaymentId: 'pay_1'}),
+      provider: {fetchRefunds: jest.fn().mockResolvedValue([{id: 'rfnd_1', status: 'processed', amount: 200000}])}});
+    await expect(service.requestRefund('client', {serviceRequestId: 'req', reason: 'tap retry'}, false))
+      .resolves.toMatchObject({status: 'REFUNDED'});
+    expect(provider.createRefund).not.toHaveBeenCalled();
+    expect(db.payment.update).toHaveBeenCalledWith(expect.objectContaining(
+      {data: expect.objectContaining({status: 'REFUNDED'})}));
+  });
+  it('leaves a live remote refund alone so webhooks finish it', async () => {
+    const {provider, service} = setup({pay: payment({status: 'REFUND_PENDING', providerPaymentId: 'pay_1'}),
+      provider: {fetchRefunds: jest.fn().mockResolvedValue([{id: 'rfnd_1', status: 'pending', amount: 200000}])}});
+    await expect(service.requestRefund('client', {serviceRequestId: 'req', reason: 'tap retry'}, false))
+      .resolves.toMatchObject({status: 'REFUND_PENDING'});
+    expect(provider.createRefund).not.toHaveBeenCalled();
+  });
+  it('sweeps only stale pending refunds and survives poisoned rows', async () => {
+    const stuck = payment({status: 'REFUND_PENDING', providerPaymentId: 'pay_1'});
+    const {db, provider, service} = setup({pays: [stuck]});
+    db.auditLog.create.mockResolvedValue({});
+    db.payment.findMany.mockResolvedValueOnce([stuck, {...stuck, id: 'poison', providerPaymentId: 'pay_bad'}]);
+    provider.fetchRefunds.mockRejectedValueOnce(new Error('boom')).mockResolvedValue([]);
+    const result = await service.retryPendingRefunds(10);
+    expect(db.payment.findMany).toHaveBeenCalledWith(expect.objectContaining(
+      {where: expect.objectContaining({status: 'REFUND_PENDING'})}));
+    expect(result).toEqual({checked: 2, retried: 1});
+  });
   it('gates work start on payment only when configured', async () => {
     await expect(setup({provider: {enabled: false}}).service.requirePaid('req')).resolves.toBeUndefined();
     await expect(setup({pay: payment({status: 'ORDER_CREATED'})}).service.requirePaid('req')).rejects.toMatchObject({status: 400});
@@ -301,6 +336,21 @@ describe('payments admin list', () => {
     const result = await service.listForAdmin({status: 'DISPUTED', page: '1', limit: '20'});
     expect(result.data[0]).toMatchObject({clientName: 'Plus Client', clientPlus: true});
     expect(result.data[1]).toMatchObject({clientName: 'Free Client', clientPlus: false});
+  });
+});
+
+describe('payments dues view', () => {
+  it('publishes commission terms so apps never hardcode rates or dues room', async () => {
+    const {db, service} = setup();
+    db.payment.findMany.mockResolvedValue([
+      {id: 'pay-1', serviceRequestId: 'req-1', engineerRequestId: null, amountPaisa: 200000,
+        platformFeePaisa: 14000, createdAt: new Date()}]);
+    db.professionalPenalty = {findMany: jest.fn().mockResolvedValue([])};
+    db.membership = {findUnique: jest.fn().mockResolvedValue(null)};
+    await expect(service.dues('pro-user')).resolves.toMatchObject({duesPaisa: 14000, blocked: false,
+      blockThresholdPaisa: 50000, isMember: false,
+      terms: {memberFeeBps: 700, standardFeeBps: 1000, memberDuesBlockPaisa: 200000,
+        standardDuesBlockPaisa: 50000, freeJobsPerMonth: 1}});
   });
 });
 
@@ -377,7 +427,9 @@ describe('payments webhooks', () => {
     try {
       await expect(reverted.ctx.service.handleWebhook(raw({id: 'e4', event: 'refund.failed',
         payload: {refund: {entity: {id: 'rfnd_1', payment_id: 'pay_1'}}}}), 'sig')).resolves.toMatchObject({ok: true});
-      expect(reverted.ctx.db.payment.update.mock.calls[0][0].data.status).toBe('PAID');
+      // Stays REFUND_PENDING so the retry sweeper can finish it; the client is told a retry is coming.
+      expect(reverted.ctx.db.payment.update).not.toHaveBeenCalled();
+      expect(reverted.ctx.db.notification.createMany).toHaveBeenCalled();
     } finally { reverted.restore(); }
   });
   it('auto-refunds captures that arrive for closed bookings', async () => {

@@ -18,6 +18,9 @@ jest.mock('@react-navigation/native', () => ({
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
+jest.mock('@react-navigation/bottom-tabs', () => ({
+  useBottomTabBarHeight: () => 0,
+}));
 jest.mock('../src/services/queries', () => ({
   useEngineList: () => mockEngineListState,
   useFavoritesList: () => ({data: []}),

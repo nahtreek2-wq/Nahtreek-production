@@ -48,6 +48,8 @@ jest.mock('../src/stores/session', () => ({
 }));
 jest.mock('../src/services/queries', () => ({
   useUpdateClientProfile: () => ({mutate: jest.fn()}),
+  useFavoritesList: () => ({data: []}),
+  useToggleFavorite: () => ({isPending: false, mutate: jest.fn()}),
 }));
 jest.mock('../src/stores/toast', () => ({
   useToast: () => jest.fn(),
@@ -64,6 +66,8 @@ jest.mock('../src/components/ui', () => {
     ),
     Icon: () => null,
     ICONS: {location: 'location', chevronRight: 'chevronRight'},
+    MemberBadge: () => null,
+    RatingStars: () => null,
   };
 });
 jest.mock('../src/screens/PlatformHistoryScreen', () => ({

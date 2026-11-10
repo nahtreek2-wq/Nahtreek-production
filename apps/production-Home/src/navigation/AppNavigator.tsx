@@ -81,7 +81,7 @@ function PrivateRequests() {
 }
 function PrivateMessages() {
   return (
-    <AccountGate title="Messages" heading="Your conversations, together" message="Sign in to chat after a professional accepts your request.">
+    <AccountGate title="Messages" heading="Your conversations, together" message="Sign in to chat as soon as your request exists — no need to wait for acceptance.">
       <MessagingScreen />
     </AccountGate>
   );

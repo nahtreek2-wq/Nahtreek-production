@@ -8,11 +8,11 @@ import {ProColors} from '../src/theme/professionalTheme';
 
 const EXPECTED: Record<IconChipTone, {background: string; foreground: string}> = {
   navy: {background: ProColors.primary, foreground: '#FFFFFF'},
-  amber: {background: ProColors.accent, foreground: ProColors.onAccent},
+  amber: {background: ProColors.primary, foreground: '#FFFFFF'},
   green: {background: ProColors.success, foreground: '#FFFFFF'},
   red: {background: ProColors.error, foreground: '#FFFFFF'},
-  blue: {background: ProColors.rich, foreground: '#FFFFFF'},
-  slate: {background: ProColors.secondary, foreground: '#FFFFFF'},
+  blue: {background: ProColors.primary, foreground: '#FFFFFF'},
+  slate: {background: ProColors.primary, foreground: '#FFFFFF'},
 };
 
 it.each(Object.keys(EXPECTED) as IconChipTone[])('chip tone %s pairs a solid block with a readable glyph', tone => {

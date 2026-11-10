@@ -6,13 +6,14 @@ import {api} from '../services/apiClient';
 import {Alert, ScrollView, StyleSheet, Text, TextInput, Pressable, View} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {AppHeader, Button, StatusBadge} from '../components/ui';
+import {AppHeader, Avatar, Button, StatusBadge} from '../components/ui';
 import type {TrackableStatus} from '../components/ui/StatusBadge';
 import {
   useServiceRequest,
   useCancelServiceRequest,
 } from '../services/platformQueries';
 import {useToast} from '../stores/toast';
+import {cleanReviewComment} from '../utils/format';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {fetchAiSubscription} from '../services/aiBilling';
 import {useClientProfile, useConversationsList, useCreateConversation, useUpdateClientProfile} from '../services/queries';
@@ -50,7 +51,7 @@ export function ServiceRequestDetailScreen() {
   const [rating, setRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const review = useMutation({
-    mutationFn: () => api.post(`/service-requests/${route.params.requestId}/reviews`, {rating, comment: reviewText.trim()}),
+    mutationFn: () => api.post(`/service-requests/${route.params.requestId}/reviews`, {rating, comment: cleanReviewComment(reviewText)}),
     onSuccess: async () => {
       setReviewText('');
       toast('Thanks for sharing your feedback', 'success');
@@ -97,7 +98,18 @@ export function ServiceRequestDetailScreen() {
         {item ? (
           <View style={[s.card, styles.detailCard]}>
             <Text style={s.title}>{item.category.title}</Text>
-            <Text style={styles.provider}>Sent to {item.provider.fullName}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`View ${item.provider.fullName}'s profile`}
+              onPress={() => nav.navigate('ProviderProfile', {professionalProfileId: item.provider.id})}
+              style={styles.proHeader}>
+              <Avatar name={item.provider.fullName} uri={item.provider.avatarUrl} size={48} />
+              <View style={styles.proCopy}>
+                <Text style={styles.provider}>{item.provider.fullName}</Text>
+                <Text style={s.text}>{item.provider.title} · {item.provider.baseCity}</Text>
+              </View>
+              <Text style={styles.proLink}>View ›</Text>
+            </Pressable>
             <StatusBadge status={currentStage as TrackableStatus} />
             {submissionNotice ? (
               <View accessibilityRole="alert" style={styles.submissionNotice}>
@@ -122,7 +134,7 @@ export function ServiceRequestDetailScreen() {
               <Text style={styles.addressNoticeTitle}>Need to change this address?</Text>
               <Text style={s.text}>Address changes aren’t supported after a request is sent. Contact the professional before they travel. If the location must change, cancel the request when that action is available, then create a new request with the correct address and map pin.</Text>
             </View>
-            {item.journey ? <JourneyPanel id={item.id} client isPlus={billing.data?.effective} load={() => api.get(`/service-workflow/${item.id}`)} act={body => api.post(`/service-workflow/${item.id}/actions`, body)} receiptEmail={profile.data?.email ?? null} onSaveReceiptEmail={email => updateProfile.mutateAsync({email}).then(() => undefined)} payment={{createOrder: () => api.post<CreatedOrder>('/payments/orders', {serviceRequestId: item.id}), verify: result => api.post<PaymentStatusView>('/payments/verify', {serviceRequestId: item.id, ...result}), dispute: (reason: string) => api.post<PaymentStatusView>('/payments/disputes', {serviceRequestId: item.id, reason}), loadStatus: () => api.get<PaymentStatusView | null>(`/payments/requests/${item.id}`).catch((error: any) => error?.status === 404 ? null : Promise.reject(error)), checkout: openCheckout}} /> : null}
+            {item.journey ? <JourneyPanel id={item.id} client isPlus={billing.data?.effective} load={() => api.get(`/service-workflow/${item.id}`)} act={body => api.post(`/service-workflow/${item.id}/actions`, body)} receiptEmail={profile.data?.email ?? null} onSaveReceiptEmail={email => updateProfile.mutateAsync({email}).then(() => undefined)} onFindAnother={() => nav.navigate('ServiceProviders', {serviceId: item.category.id, title: item.category.title})} payment={{createOrder: () => api.post<CreatedOrder>('/payments/orders', {serviceRequestId: item.id}), verify: result => api.post<PaymentStatusView>('/payments/verify', {serviceRequestId: item.id, ...result}), dispute: (reason: string) => api.post<PaymentStatusView>('/payments/disputes', {serviceRequestId: item.id, reason}), loadStatus: () => api.get<PaymentStatusView | null>(`/payments/requests/${item.id}`).catch((error: any) => error?.status === 404 ? null : Promise.reject(error)), checkout: openCheckout}} /> : null}
             {item.status === 'COMPLETED' && item.journey?.stage === 'COMPLETED' ? (
               item.reviews?.length ? (
                 <View style={styles.reviewSubmitted}>
@@ -150,11 +162,11 @@ export function ServiceRequestDetailScreen() {
                     multiline
                     style={styles.reviewInput}
                   />
-                  <Button label="Send review" loading={review.isPending} disabled={reviewText.trim().length < 3} onPress={() => review.mutate()} />
+                  <Button label="Send review" loading={review.isPending} disabled={cleanReviewComment(reviewText).length < 3} onPress={() => review.mutate()} />
                 </View>
               )
             ) : null}
-            {['ACCEPTED','EN_ROUTE','ARRIVED','IN_PROGRESS','AWAITING_CONFIRMATION','COMPLETED','DISPUTED'].includes(currentStage ?? '') ? (
+            {['PENDING','ACCEPTED','EN_ROUTE','ARRIVED','IN_PROGRESS','AWAITING_CONFIRMATION','COMPLETED','DISPUTED'].includes(currentStage ?? '') ? (
               <Button label="Message professional" loading={createConversation.isPending} onPress={openChat} />
             ) : null}
             {!item.journey && activeStep >= 0 ? (
@@ -223,13 +235,15 @@ const styles = StyleSheet.create({
   reviewInput: {minHeight: 92, padding: 12, borderWidth: 1, borderColor: Colors.slate200, borderRadius: 12, color: Colors.slate900, textAlignVertical: 'top'},
   reviewSummary: {fontSize: 15, lineHeight: 22, color: Colors.slate800},
   detailCard: {borderWidth: 1, borderColor: Colors.slate100},
+  proHeader: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4},
+  proCopy: {flex: 1, gap: 2},
+  proLink: {fontSize: 14, fontWeight: '700', color: Colors.navyMid},
   provider: {fontSize: 16, fontWeight: '600', color: Colors.navyDeep},
   submissionNotice: {padding: Spacing.md, borderRadius: 14, backgroundColor: Colors.successBg, gap: Spacing.xs},
   submissionTitle: {fontSize: 16, fontWeight: '700', color: Colors.success},
   submissionBody: {fontSize: 14, lineHeight: 21, color: Colors.slate800},
   addressNotice: {padding: Spacing.md, borderRadius: 14, backgroundColor: Colors.surface, borderWidth: 1, borderColor: ClientColors.border, gap: Spacing.xs},
   addressNoticeTitle: {fontSize: 15, fontWeight: '700', color: Colors.navyDeep},
-  status: {alignSelf: 'flex-start', color: ClientColors.accentText, fontWeight: '700'},
   sectionTitle: {fontSize: 16, fontWeight: '700', color: Colors.slate900, marginTop: Spacing.sm},
   timeline: {marginTop: Spacing.md, padding: Spacing.md, backgroundColor: Colors.surface, borderWidth: 1, borderColor: ClientColors.border, borderRadius: 16, gap: Spacing.md},
   step: {flexDirection: 'row', gap: 12, alignItems: 'flex-start'},

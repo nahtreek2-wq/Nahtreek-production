@@ -54,9 +54,11 @@ const defaultHooks = (requestId: string): CollectHooks => ({
 const rupees = (paisa: number) =>
   `₹${(paisa / 100).toLocaleString('en-IN')}`;
 
-// Order created but never paid (or refunded/cancelled) is not money in hand:
-// the engineer can still declare a direct collection afterwards.
-const UNPAID_STATUSES = ['NOT_STARTED', 'ORDER_CREATED', 'FAILED', 'REFUNDED'];
+// Order created but never paid is not money in hand: the engineer can still
+// declare a direct collection afterwards. A full refund is terminal — the
+// money went back to the customer, so the card shows the refund instead of
+// inviting a backdated declaration on a closed payment.
+const UNPAID_STATUSES = ['NOT_STARTED', 'ORDER_CREATED', 'FAILED'];
 
 export function CollectPaymentCard({
   requestId,
@@ -77,6 +79,13 @@ export function CollectPaymentCard({
     queryKey: ['pro-collect-status', requestId],
     queryFn: resolved.loadStatus,
     retry: 1,
+    // The customer may pay inside the app while this screen is open — keep
+    // checking until a payment is recorded, then go quiet.
+    refetchInterval: query => {
+      const view = query.state.data as CollectStatusView | null | undefined;
+      return view && !UNPAID_STATUSES.includes(view.status) ? false : 15000;
+    },
+    refetchIntervalInBackground: false,
   });
   const declare = useMutation({
     mutationFn: resolved.declare,
@@ -117,7 +126,7 @@ export function CollectPaymentCard({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <ProIconChip name="hand-coin" tone="amber" size={50} iconSize={27} />
+        <ProIconChip name="hand-coin" size={50} iconSize={27} />
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Payment for this job</Text>
           <Text style={styles.hint}>Cash or UPI collected at the customer&apos;s home</Text>
@@ -151,6 +160,15 @@ export function CollectPaymentCard({
             received directly. Your commission (10%, or 7% for Pro members
             with the first job each month free) moves to dues.
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Check again for an in-app payment"
+            onPress={() => void status.refetch()}
+            style={styles.link}>
+            <Text style={styles.linkText}>
+              {status.isFetching ? 'Checking…' : 'Check again for an in-app payment'}
+            </Text>
+          </Pressable>
           {formOpen ? (
             <View style={styles.gap}>
               <Text style={styles.label}>Amount received (₹)</Text>
@@ -231,7 +249,7 @@ function RecordedState({
     const settled = view.status === 'SETTLED';
     return (
       <View style={styles.stateRow}>
-        <ProIconChip name={settled ? 'check-circle' : 'hand-coin'} tone={settled ? 'green' : 'amber'} size={46} iconSize={25} />
+        <ProIconChip name={settled ? 'check-circle' : 'hand-coin'} tone={settled ? 'green' : 'navy'} size={46} iconSize={25} />
         <View style={styles.gapFlex}>
           <Text style={styles.body}>
             {settled
@@ -276,9 +294,22 @@ function RecordedState({
       </View>
     );
   }
+  if (view.status === 'REFUND_PENDING' || view.status === 'REFUNDED') {
+    const pending = view.status === 'REFUND_PENDING';
+    return (
+      <View style={styles.stateRow}>
+        <ProIconChip name="cash-refund" size={46} iconSize={25} />
+        <Text style={[styles.body, styles.gapFlex]}>
+          Paid online {rupees(view.amountPaisa)} —{' '}
+          {pending ? 'refund in progress.' : 'refunded in full to the customer.'}{' '}
+          No share releases to you for this job.
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.stateRow}>
-      <ProIconChip name="credit-card-check" tone="blue" size={46} iconSize={25} />
+      <ProIconChip name="credit-card-check" size={46} iconSize={25} />
       <Text style={[styles.body, styles.gapFlex]}>
         Paid online {rupees(view.amountPaisa)} — your{' '}
         {rupees(view.professionalAmountPaisa)} share releases after review.

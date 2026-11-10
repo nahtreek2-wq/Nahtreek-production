@@ -36,8 +36,6 @@
 		13B07F961A680F5B00A75B9A /* NahtreekProfessional.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NahtreekProfessional.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FAF1A68108700A75B9A /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = NahtreekProfessional/AppDelegate.h; sourceTree = "<group>"; };
 		13B07FB01A68108700A75B9A /* AppDelegate.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = AppDelegate.mm; path = NahtreekProfessional/AppDelegate.mm; sourceTree = "<group>"; };
-		B7C5CEDE0000000000000002 /* SceneDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SceneDelegate.h; path = NahtreekProfessional/SceneDelegate.h; sourceTree = "<group>"; };
-		B7C5CEDE0000000000000003 /* SceneDelegate.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = SceneDelegate.mm; path = NahtreekProfessional/SceneDelegate.mm; sourceTree = "<group>"; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = NahtreekProfessional/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = NahtreekProfessional/Info.plist; sourceTree = "<group>"; };
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = NahtreekProfessional/main.m; sourceTree = "<group>"; };
@@ -51,6 +49,8 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = NahtreekProfessional/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		89C6BE57DB24E9ADA2F236DE /* Pods-NahtreekProfessional-NahtreekProfessionalTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NahtreekProfessional-NahtreekProfessionalTests.release.xcconfig"; path = "Target Support Files/Pods-NahtreekProfessional-NahtreekProfessionalTests/Pods-NahtreekProfessional-NahtreekProfessionalTests.release.xcconfig"; sourceTree = "<group>"; };
 		A14C00000000000000000002 /* NahtreekRuntimeConfig.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = NahtreekRuntimeConfig.m; path = NahtreekProfessional/NahtreekRuntimeConfig.m; sourceTree = "<group>"; };
+		B7C5CEDE0000000000000002 /* SceneDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SceneDelegate.h; path = NahtreekProfessional/SceneDelegate.h; sourceTree = "<group>"; };
+		B7C5CEDE0000000000000003 /* SceneDelegate.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = SceneDelegate.mm; path = NahtreekProfessional/SceneDelegate.mm; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 

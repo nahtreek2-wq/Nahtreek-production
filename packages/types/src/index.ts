@@ -150,9 +150,24 @@ export interface NotificationDto {
   isRead: boolean;
 }
 
+export interface FavoriteProfessionalDto {
+  id: string;
+  fullName: string;
+  avatarUrl: string | null;
+  title: string;
+  verificationStatus: string;
+  averageRating: number;
+  totalReviewsCount: number;
+  isAvailable: boolean;
+  baseCity: string;
+  startingPrice: number | null;
+  engineerProfile: {consultationFee: number | null} | null;
+}
+
 export interface FavoriteDto {
   professionalId: string;
   createdAt: string;
+  professional?: FavoriteProfessionalDto | null;
 }
 
 export interface PaginationMeta {

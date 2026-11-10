@@ -1,5 +1,5 @@
 import {ScreenHeader} from '../components/ScreenHeader';
-import React from 'react';
+import React, {useState} from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
+import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useInfiniteQuery, useMutation, useQueryClient} from '@tanstack/react-query';
 import {
@@ -58,6 +59,7 @@ function notificationVisual(kind: string): 'message' | 'schedule' | 'verificatio
 
 export function NotificationsScreen() {
   const scrollMotion = useScrollMotion();
+  const tabBarHeight = useBottomTabBarHeight();
   const navigation =
     useNavigation<NativeStackNavigationProp<ProfileStackParamList>>();
   const tabs =
@@ -84,6 +86,10 @@ export function NotificationsScreen() {
   const open = (item: NotificationItem) => {
     if (!item.isRead) {
       markRead.mutate(item.id);
+    }
+    if ((item.data as {destination?: string} | undefined)?.destination === 'support') {
+      tabs?.navigate('Profile', {screen: 'Support'});
+      return;
     }
     if (item.data?.conversationId) {
       tabs?.navigate('Messages', {
@@ -112,10 +118,12 @@ export function NotificationsScreen() {
     }
   };
   const items = notifications.data?.pages.flatMap(page => page.data) ?? [];
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const visibleItems = unreadOnly ? items.filter(item => !item.isRead) : items;
   const today = new Date().toDateString();
-  const feed = items.map((item, index) => {
+  const feed = visibleItems.map((item, index) => {
     const section = new Date(item.time).toDateString() === today ? 'Today' : 'Earlier';
-    const previous = items[index - 1];
+    const previous = visibleItems[index - 1];
     const previousSection = previous && (new Date(previous.time).toDateString() === today ? 'Today' : 'Earlier');
     return {...item, section: section !== previousSection ? section : undefined};
   });
@@ -156,6 +164,25 @@ export function NotificationsScreen() {
           </Pressable>
         </View>
       ) : (
+        <>
+        {items.length > 0 ? <View style={styles.tools}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show all notifications"
+            accessibilityState={{selected: !unreadOnly}}
+            onPress={() => setUnreadOnly(false)}
+            style={[styles.filterChip, !unreadOnly && styles.filterChipOn]}>
+            <Text style={[styles.filterText, !unreadOnly && styles.filterTextOn]}>All</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show unread notifications only"
+            accessibilityState={{selected: unreadOnly}}
+            onPress={() => setUnreadOnly(true)}
+            style={[styles.filterChip, unreadOnly && styles.filterChipOn]}>
+            <Text style={[styles.filterText, unreadOnly && styles.filterTextOn]}>Unread{unread > 0 ? ` (${unread})` : ''}</Text>
+          </Pressable>
+        </View> : null}
         <Animated.FlatList
           onScroll={scrollMotion.onScroll}
           scrollEventThrottle={16}
@@ -168,13 +195,25 @@ export function NotificationsScreen() {
               colors={[Colors.navyMid]}
             />
           }
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, {paddingBottom: tabBarHeight + Spacing.xxl}]}
           ListEmptyComponent={
-            <EmptyState
-              icon="bell-outline"
-              title="No notifications yet"
-              message="New requests, status changes and client messages will appear here."
-            />
+            unreadOnly && items.length > 0 ? (
+              <EmptyState
+                icon="bell-check-outline"
+                title="All caught up"
+                message="Every notification is read. New updates will appear here."
+                actionLabel="Show all"
+                onAction={() => setUnreadOnly(false)}
+              />
+            ) : (
+              <EmptyState
+                icon="bell-outline"
+                title="No notifications yet"
+                message="New requests, status changes and client messages will appear here."
+                actionLabel="View jobs"
+                onAction={() => tabs?.navigate('Requests', {screen: 'RequestInbox'})}
+              />
+            )
           }
           ListFooterComponent={notifications.hasNextPage ? (
             <Pressable
@@ -209,6 +248,7 @@ export function NotificationsScreen() {
             </Pressable>
           </>)}
         />
+        </>
       )}
     </View>
   );
@@ -237,6 +277,11 @@ const styles = StyleSheet.create({
   },
   markAllText: {...Typography.button, lineHeight: 22, color: Colors.navyMid},
   list: {padding: 20, paddingBottom: Spacing.xxl, gap: Spacing.sm, flexGrow: 1},
+  tools: {flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: 20, paddingTop: 12},
+  filterChip: {paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.slate200},
+  filterChipOn: {backgroundColor: Colors.navyDeep, borderColor: Colors.navyDeep},
+  filterText: {...Typography.badge, lineHeight: 16, fontWeight: '700', color: Colors.navyMid},
+  filterTextOn: {color: Colors.white},
   card: {
     minHeight: 86,
     flexDirection: 'row',

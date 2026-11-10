@@ -245,6 +245,11 @@ export function RequestDetailScreen() {
           : 'Customer told that you cannot take this job.',
         'success',
       );
+      // A declined job leaves nothing to do on this screen — return to the
+      // inbox instead of stranding the pro on a dead "no action" box.
+      if (status === 'DECLINED') {
+        navigation.goBack();
+      }
     },
     onError: error => {
       toast(error instanceof Error ? error.message : 'Could not update this job.', 'error');
@@ -363,8 +368,16 @@ export function RequestDetailScreen() {
           serviceProvider={Boolean(serviceProvider && kind === 'service')}
           kind={kind}
           onViewDues={() =>
-            (navigation as {navigate: (route: string) => void}).navigate('Dues')
+            navigation
+              .getParent<BottomTabNavigationProp<MainTabParamList>>()
+              ?.navigate('Profile', {screen: 'Dues'})
           }
+          onShowQr={() =>
+            navigation
+              .getParent<BottomTabNavigationProp<MainTabParamList>>()
+              ?.navigate('Profile', {screen: 'MyQr'})
+          }
+          onBackToJobs={() => navigation.goBack()}
           codeEntry={kind === 'engineering' && codeEntry}
           code={code}
           onCodeChange={setCode}
@@ -390,6 +403,8 @@ function RequestContent({
   serviceProvider,
   kind,
   onViewDues,
+  onShowQr,
+  onBackToJobs,
   codeEntry,
   code,
   onCodeChange,
@@ -406,6 +421,8 @@ function RequestContent({
   serviceProvider: boolean;
   kind: 'engineering' | 'service';
   onViewDues: () => void;
+  onShowQr: () => void;
+  onBackToJobs: () => void;
   codeEntry: boolean;
   code: string;
   onCodeChange: (value: string) => void;
@@ -442,7 +459,7 @@ function RequestContent({
     <ScrollMotionBar offset={scrollMotion.offset} reducedMotion={scrollMotion.reducedMotion} />
     <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
       <View style={styles.jobOverview}>
-        <JobContextVisual kind={serviceProvider ? 'service' : 'engineering'} title={request.title} size={64} />
+        <JobContextVisual kind={serviceProvider ? 'service' : 'engineering'} title={request.title} seed={request.id} size={64} />
         <View style={styles.flex}>
           <Text style={styles.jobEyebrow}>{serviceProvider ? 'SERVICE JOB' : 'ENGINEERING REQUEST'}</Text>
           <Text style={styles.jobHeading}>{request.title}</Text>
@@ -515,10 +532,10 @@ function RequestContent({
       {serviceProvider && !request.journey ? (
         <ServiceProgress status={request.status} />
       ) : null}
-      <Section title="What the customer needs" icon="clipboard-text" tone="blue">
+      <Section title="What the customer needs" icon="clipboard-text">
         <Text style={styles.body}>{request.description}</Text>
       </Section>
-      <Section title="Where to go" icon="map-marker" tone="amber">
+      <Section title="Where to go" icon="map-marker">
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={`View ${request.location} on map`}
@@ -545,7 +562,7 @@ function RequestContent({
           {actionError}
         </Text>
       ) : null}
-      {['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) ? (
+      {['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) ? (
         <Pressable
           accessibilityRole="button"
           disabled={messaging}
@@ -572,7 +589,7 @@ function RequestContent({
       {codeEntry ? (
         <View style={styles.codeCard}>
           <View style={styles.sectionHeading}>
-            <ProIconChip name="key-variant" tone="amber" size={42} iconSize={23} />
+            <ProIconChip name="key-variant" size={42} iconSize={23} />
             <Text style={styles.codeTitle}>Enter the completion code</Text>
           </View>
           <Text style={styles.codeHint}>
@@ -633,9 +650,18 @@ function RequestContent({
             <Text style={styles.closedText}>
               No action is needed for this job.
             </Text>
+            {request.status === 'COMPLETED' && serviceProvider ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Show my QR code" onPress={onShowQr} style={styles.closedAction}>
+                <Text style={styles.closedActionText}>Show my QR</Text>
+              </Pressable>
+            ) : (
+              <Pressable accessibilityRole="button" accessibilityLabel="Back to jobs" onPress={onBackToJobs} style={styles.closedAction}>
+                <Text style={styles.closedActionText}>Back to jobs</Text>
+              </Pressable>
+            )}
           </View>
         ))}
-      <Section title="Job updates" icon="timeline-text" tone="slate">
+      <Section title="Job updates" icon="timeline-text">
         <View style={styles.timeline}>
           {request.history.length ? (
             request.history.map((item, index) => (
@@ -948,15 +974,22 @@ const styles = StyleSheet.create({
   declineText: {...Typography.button, lineHeight: 22, color: Colors.error},
   error: {...Typography.body, color: Colors.error, marginTop: Spacing.md},
   closed: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
     marginTop: Spacing.lg,
     padding: 20,
+    gap: Spacing.sm,
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.md,
   },
-  closedText: {...Typography.body, color: Colors.slate600, flex: 1},
+  closedText: {...Typography.body, color: Colors.slate600},
+  closedAction: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.xs,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.navyDeep,
+  },
+  closedActionText: {...Typography.button, lineHeight: 22, color: Colors.white},
   messageButton: {
     minHeight: 50,
     flexDirection: 'row',

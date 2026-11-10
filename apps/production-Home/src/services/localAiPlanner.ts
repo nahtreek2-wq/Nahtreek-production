@@ -77,11 +77,19 @@ export function detectLocalServiceIntent(text: string) {
   return found ? {serviceId: found.serviceId, label: found.label, pro: found.pro} : null;
 }
 
-export function localPlannerReply(projectType: LocalProjectType, message: string) {
+export type LocalPlanFigures = {freeMessages: number; feePaisa: number} | null;
+
+// Plan figures ride in from the cached /ai-billing/plan view when the screen
+// has one; with no figures the copy stays generic instead of hardcoding them.
+export function localPlannerReply(projectType: LocalProjectType, message: string, plan?: LocalPlanFigures) {
   const project = projectNames[projectType].toLowerCase();
   const detail = message.trim();
-  if (isLocalCompanyQuestion(detail))
-    return 'NAHTREEK connects homeowners with verified civil engineers and home-service providers. In this Home app you can find pros, raise requests, chat in-app, and track jobs — and NAHTREEK AI (5 free chats, then ₹129/month) helps you plan the work. What are you building or fixing?';
+  if (isLocalCompanyQuestion(detail)) {
+    const plus = plan
+      ? `NAHTREEK AI (${plan.freeMessages} free chats, then ₹${(plan.feePaisa / 100).toLocaleString('en-IN')}/month)`
+      : 'NAHTREEK AI (free to start — a Plus plan unlocks more)';
+    return `NAHTREEK connects homeowners with verified civil engineers and home-service providers. In this Home app you can find pros, raise requests, chat in-app, and track jobs — and ${plus} helps you plan the work. What are you building or fixing?`;
+  }
   if (isLocalOffTopic(detail))
     return 'I can only help with home construction, repairs, services, and questions about the NAHTREEK app. What are you planning to build or fix?';
   const service = detectLocalServiceIntent(detail);

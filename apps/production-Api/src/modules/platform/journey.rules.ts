@@ -21,6 +21,7 @@ export function actionStage(stage: string, action: string, client: boolean) {
     START: [['ARRIVED'], 'IN_PROGRESS', false], FINISH: [['IN_PROGRESS'], 'AWAITING_CONFIRMATION', false],
     CONFIRM: [['AWAITING_CONFIRMATION'], 'COMPLETED', true], ISSUE: [['IN_PROGRESS', 'AWAITING_CONFIRMATION'], 'DISPUTED', true],
     CANCEL: [['PENDING', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'], 'CANCELLED', true],
+    RESCHEDULE: [['PENDING', 'ACCEPTED'], stage, true],
   };
   const rule = transitions[action];
   return rule && rule[0].includes(stage) && rule[2] === client ? rule[1] : null;

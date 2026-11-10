@@ -15,6 +15,10 @@ jest.mock('@react-native-community/netinfo', () => ({
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
+jest.mock('@react-native-community/datetimepicker', () => {
+  const React = require('react');
+  return {__esModule: true, default: () => null};
+});
 jest.mock('@react-native-voice/voice', () => ({
   __esModule: true,
   default: {

@@ -57,6 +57,11 @@ export class AiBillingController {
     return this.service.aiMe(user.sub);
   }
 
+  @Get('plan')
+  plan() {
+    return this.service.aiPlan();
+  }
+
   @Post('subscribe')
   subscribe(@CurrentUser() user: JwtPayload) {
     return this.service.aiSubscribe(user.sub);

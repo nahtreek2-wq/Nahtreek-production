@@ -14,6 +14,7 @@ import {
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   Colors,
+  IndiaLocale,
   Spacing,
   Typography,
 } from '@nahtreek/design-system';
@@ -39,8 +40,9 @@ import {
   useUpdateClientProfile,
 } from '../services/queries';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
-import {fetchAiSubscription} from '../services/aiBilling';
+import {fetchAiPlan, fetchAiSubscription} from '../services/aiBilling';
 import {useToast} from '../stores/toast';
+import {cleanReviewComment} from '../utils/format';
 import type {EngineerRequestDto} from '@nahtreek/types';
 import type {RootStackParamList} from '../navigation/types';
 
@@ -86,12 +88,12 @@ function ReviewSection({request}: {request: EngineerRequestDto}) {
   }
 
   const submit = () => {
-    if (comment.trim().length < 4) {
+    if (cleanReviewComment(comment).length < 4) {
       toast('Please write a few words about the work.', 'error');
       return;
     }
     post.mutate(
-      {id: request.id, rating, comment: comment.trim()},
+      {id: request.id, rating, comment: cleanReviewComment(comment)},
       {
         onSuccess: () => {
           toast('Thanks for rating your professional.', 'success');
@@ -150,6 +152,7 @@ export function RequestDetailScreen() {
   const profile = useClientProfile();
   const updateProfile = useUpdateClientProfile();
   const billing = useQuery({queryKey: ['ai-billing'], queryFn: fetchAiSubscription, staleTime: 60000, retry: 1});
+  const aiPlan = useQuery({queryKey: ['ai-plan'], queryFn: fetchAiPlan, staleTime: 5 * 60_000, retry: 1});
   const request = requests.data;
   const paymentHooks = useMemo(() => {
     const id = request?.id ?? '';
@@ -206,7 +209,7 @@ export function RequestDetailScreen() {
     if (!request) return;
     Alert.alert(
       'Cancel this request?',
-      'The engineer will be notified. This cannot be undone.',
+      'The engineer will be notified and the request will close. If you already paid, the held amount is refunded automatically. You can send a new request anytime.',
       [
         {text: 'Keep request', style: 'cancel'},
         {
@@ -317,7 +320,7 @@ export function RequestDetailScreen() {
             <View style={styles.summaryRow}>
               <Icon name={ICONS.currency} size={18} color={Colors.slate500} />
               <Text numberOfLines={1} allowFontScaling={false} style={styles.summaryLabel}>Consultation fee</Text>
-              <Text style={styles.summaryValue}>₹{request.consultationFee.toLocaleString('en-IN')}</Text>
+              <Text style={styles.summaryValue}>{IndiaLocale.formatCurrency(request.consultationFee)}</Text>
             </View>
           ) : null}
         </Card>
@@ -335,6 +338,7 @@ export function RequestDetailScreen() {
               receiptEmail={profile.data?.email ?? null}
               onSaveReceiptEmail={email => updateProfile.mutateAsync({email}).then(() => undefined)}
               isPlus={billing.data?.effective}
+              plusDiscount={aiPlan.data ? {percent: aiPlan.data.consultDiscountBps / 100, capPaisa: aiPlan.data.consultDiscountCapPaisa} : null}
             />
           </View>
         ) : null}
@@ -463,7 +467,7 @@ export function RequestDetailScreen() {
               address: request.locationAddress,
             })}
           />
-          {['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) ? (
+          {['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) ? (
             <Button
               label="Open messages"
               icon={
@@ -493,8 +497,8 @@ export function RequestDetailScreen() {
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.offWhite},
-  content: {padding: Spacing.lg, paddingBottom: Spacing.xxl},
-  summaryCard: {padding: Spacing.lg},
+  content: {padding: 20, paddingBottom: Spacing.xxl},
+  summaryCard: {padding: 20},
   paymentWrap: {marginTop: Spacing.xl},
   codeCard: {marginTop: Spacing.xl, padding: Spacing.lg, alignItems: 'center', gap: Spacing.xs},
   codeTitle: {...Typography.badge, color: Colors.slate500},

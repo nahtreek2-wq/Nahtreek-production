@@ -4,7 +4,11 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 
+// Pros clarify scope with the customer BEFORE accepting, so PENDING jobs can
+// chat. Only never-started (DRAFT) and closed (DECLINED/CANCELLED) jobs stay
+// silent — the participant check still limits chat to the assigned parties.
 const CHAT_ENABLED_REQUEST_STATUSES = new Set<RequestStatus>([
+  RequestStatus.PENDING,
   RequestStatus.ACCEPTED,
   RequestStatus.IN_PROGRESS,
   RequestStatus.COMPLETED,
@@ -72,7 +76,7 @@ export class ChatService {
     const request = await this.getRequest(dto.engineerRequestId);
     this.assertParticipant(userId, request);
     if (!CHAT_ENABLED_REQUEST_STATUSES.has(request.status)) {
-      throw new BadRequestException('Messaging becomes available after the request is accepted');
+      throw new BadRequestException('This request is closed, so messaging is unavailable');
     }
     return this.openForRequest(request.id, userId);
   }
@@ -81,7 +85,7 @@ export class ChatService {
     const request = await this.getRequest(engineerRequestId);
     if (requestingUserId) this.assertParticipant(requestingUserId, request);
     if (!CHAT_ENABLED_REQUEST_STATUSES.has(request.status)) {
-      throw new BadRequestException('Messaging becomes available after the request is accepted');
+      throw new BadRequestException('This request is closed, so messaging is unavailable');
     }
     const existing = await this.prisma.conversation.findFirst({
       where: { engineerRequestId: request.id },
@@ -124,7 +128,7 @@ export class ChatService {
       throw new NotFoundException('Conversation not found');
     }
     if (!CHAT_ENABLED_REQUEST_STATUSES.has(request.status)) {
-      throw new BadRequestException('Messaging becomes available after the request is accepted');
+      throw new BadRequestException('This request is closed, so messaging is unavailable');
     }
     const include = {
       participants: { include: { user: { include: { clientProfile: true, professionalProfile: true } } } },
@@ -291,6 +295,8 @@ export class ChatService {
     const latest = conversation.messages[0];
     return {
       id: conversation.id,
+      // Lets apps group one person's job threads into a single chat row.
+      ...(other ? {otherUserId: other.userId} : {}),
       title: professionalName,
       subtitle: conversation.engineerRequest
         ? `Re: ${conversation.engineerRequest.projectTitle}`

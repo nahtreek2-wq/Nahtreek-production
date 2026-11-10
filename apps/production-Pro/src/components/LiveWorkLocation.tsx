@@ -85,7 +85,7 @@ export function LiveWorkLocation({verified, verificationStatus, statusUnknown, s
 }
 
 const styles = StyleSheet.create({
-  card: {padding: 16, marginTop: 16, marginBottom: 16, gap: 10, backgroundColor: ProColors.surface, borderRadius: 16, borderWidth: 1, borderColor: ProColors.border},
+  card: {padding: 16, marginTop: 20, gap: 10, backgroundColor: ProColors.surface, borderRadius: 16, borderWidth: 1, borderColor: ProColors.border},
   heading: {flexDirection: 'row', alignItems: 'center', gap: 12},
   flex: {flex: 1},
   title: {...ProType.card, color: ProColors.text},

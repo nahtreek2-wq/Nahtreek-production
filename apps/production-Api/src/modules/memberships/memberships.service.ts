@@ -6,6 +6,7 @@ import {PushService} from '../notifications/push.service';
 import {ChatGateway} from '../chat/chat.gateway';
 import {RazorpayError, RazorpayProvider, RazorpaySubscription} from '../payments/razorpay.provider';
 import {CancelMembershipDto} from './memberships.dto';
+import {DUES_BLOCK_Paisa, MEMBER_DUES_BLOCK_Paisa, MEMBER_FEE_BPS, MEMBER_FREE_JOBS_PER_MONTH, PENALTY_LATE_ACCEPT_Paisa, PENALTY_LATE_ARRIVAL_Paisa, PLATFORM_FEE_BPS, PLUS_ACCEPT_WINDOW_MS, PLUS_ARRIVAL_GRACE_MS, PLUS_DISCOUNT_BPS, PLUS_DISCOUNT_CAP_Paisa} from '../payments/commission';
 
 // Pro membership: a Razorpay recurring subscription that buys a lower
 // commission (7% vs 10%), discovery priority and the member badge. Access is
@@ -71,10 +72,18 @@ export class MembershipsService {
     throw new ServiceUnavailableException('Billing provider unavailable. Try again.');
   }
 
+  // Published plan terms, straight from the enforcement constants: the apps
+  // render price, rates and dues room from here and never hardcode figures.
+  private terms() {
+    return {memberFeeBps: MEMBER_FEE_BPS, standardFeeBps: PLATFORM_FEE_BPS,
+      memberDuesBlockPaisa: MEMBER_DUES_BLOCK_Paisa, standardDuesBlockPaisa: DUES_BLOCK_Paisa,
+      freeJobsPerMonth: MEMBER_FREE_JOBS_PER_MONTH};
+  }
+
   private viewOf(m: Row) {
     return {status: m.status, effective: this.isEffective(m), currentPeriodStart: m.currentPeriodStart,
       currentPeriodEnd: m.currentPeriodEnd, cancelAtPeriodEnd: m.cancelAtPeriodEnd,
-      feePaisa: MEMBERSHIP_FEE_PAISE, currency: 'INR'};
+      feePaisa: MEMBERSHIP_FEE_PAISE, currency: 'INR', terms: this.terms()};
   }
 
   private async profileOf(userId: string) {
@@ -239,7 +248,7 @@ export class MembershipsService {
     const m = await this.db.membership.findUnique({where: {professionalProfileId: profile.id}});
     const savings = await this.lifetimeSavings(profile.id);
     if (!m) return {status: MembershipStatus.NONE, effective: false, currentPeriodStart: null,
-      currentPeriodEnd: null, cancelAtPeriodEnd: false, feePaisa: MEMBERSHIP_FEE_PAISE, currency: 'INR', ...savings};
+      currentPeriodEnd: null, cancelAtPeriodEnd: false, feePaisa: MEMBERSHIP_FEE_PAISE, currency: 'INR', terms: this.terms(), ...savings};
     return {...this.viewOf(m), ...savings};
   }
 
@@ -281,7 +290,7 @@ export class MembershipsService {
         }
         const updated = await this.aiApplyRemote(ai, remote, event.event === 'subscription.charged');
         if (updated.status === MembershipStatus.ACTIVE)
-          await tellAi('NAHTREEK AI unlocked', 'Your ₹129 Plus subscription is active. Chat, plan and upload without limits — plus priority service and engineer discounts.', 'AI_SUBSCRIPTION_ACTIVATED');
+          await tellAi('NAHTREEK AI unlocked', `Your ₹${AI_SUBSCRIPTION_FEE_PAISE / 100} Plus subscription is active. Chat, plan and upload without limits — plus priority service and engineer discounts.`, 'AI_SUBSCRIPTION_ACTIVATED');
         break;
       }
       case 'subscription.authenticated':
@@ -504,9 +513,10 @@ export class MembershipsService {
   async assertAiAccess(userId: string, kind: 'message' | 'plan' | 'upload') {
     if (await this.isAiEffectiveByUser(userId)) return;
     if (kind === 'message' && (await this.aiFreeUsed(userId)) < AI_FREE_MESSAGES) return;
+    const fee = `₹${AI_SUBSCRIPTION_FEE_PAISE / 100}/month`;
     const message = kind === 'message'
-      ? 'NAHTREEK AI needs a subscription. Your 5 free chats are used — subscribe for ₹129/month to keep going.'
-      : 'Photo uploads and project plans need NAHTREEK Plus (₹129/month) — subscribe to unlock them.';
+      ? `NAHTREEK AI needs a subscription. Your ${AI_FREE_MESSAGES} free chats are used — subscribe for ${fee} to keep going.`
+      : `Photo uploads and project plans need NAHTREEK Plus (${fee}) — subscribe to unlock them.`;
     throw new HttpException({statusCode: HttpStatus.PAYMENT_REQUIRED, message, code: 'AI_SUBSCRIPTION_REQUIRED'}, HttpStatus.PAYMENT_REQUIRED);
   }
 
@@ -516,6 +526,22 @@ export class MembershipsService {
     if (!row) return {status: 'NONE' as MembershipStatus, effective: false, currentPeriodStart: null, currentPeriodEnd: null,
       cancelAtPeriodEnd: false, lastChargeAt: null, feePaisa: AI_SUBSCRIPTION_FEE_PAISE, freeUsed, freeQuota: AI_FREE_MESSAGES};
     return {...this.aiViewOf(row), freeUsed, freeQuota: AI_FREE_MESSAGES};
+  }
+
+  // Public plan card: every price and perk the apps show for NAHTREEK Plus.
+  // Apps must render from here so copy can never drift from the constants
+  // the server actually enforces.
+  aiPlan() {
+    return {
+      feePaisa: AI_SUBSCRIPTION_FEE_PAISE,
+      freeMessages: AI_FREE_MESSAGES,
+      consultDiscountBps: PLUS_DISCOUNT_BPS,
+      consultDiscountCapPaisa: PLUS_DISCOUNT_CAP_Paisa,
+      acceptWindowMs: PLUS_ACCEPT_WINDOW_MS,
+      arrivalGraceMs: PLUS_ARRIVAL_GRACE_MS,
+      lateAcceptPenaltyPaisa: PENALTY_LATE_ACCEPT_Paisa,
+      lateArrivalPenaltyPaisa: PENALTY_LATE_ARRIVAL_Paisa,
+    };
   }
 
   async aiSubscribe(userId: string) {

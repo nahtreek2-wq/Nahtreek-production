@@ -55,7 +55,7 @@ export function QuickActions({
 }
 
 const styles = StyleSheet.create({
-  grid: {flexDirection: 'row', flexWrap: 'wrap', gap: ProSpacing.sm, marginTop: ProSpacing.lg, marginBottom: ProSpacing.xl},
+  grid: {flexDirection: 'row', flexWrap: 'wrap', gap: ProSpacing.sm, marginBottom: ProSpacing.xl},
   tile: {
     flexBasis: '31%',
     flexGrow: 1,

@@ -25,7 +25,7 @@ export class BookDto extends MatchDto {
   @IsOptional() @IsDateString() scheduledAt?: string;
 }
 export class JourneyActionDto {
-  @IsIn(['ACCEPT', 'DECLINE', 'DEPART', 'ARRIVE', 'QUOTE', 'APPROVE_QUOTE', 'START', 'FINISH', 'CONFIRM', 'ISSUE', 'CANCEL']) action: string;
+  @IsIn(['ACCEPT', 'DECLINE', 'DEPART', 'ARRIVE', 'QUOTE', 'APPROVE_QUOTE', 'START', 'FINISH', 'CONFIRM', 'ISSUE', 'CANCEL', 'RESCHEDULE']) action: string;
   @IsInt() @Min(1) revision: number;
   @IsOptional() @IsString() @MaxLength(2000) note?: string;
   @IsOptional() @IsNumber() @Min(0) @Max(1000000) amount?: number;
@@ -33,4 +33,5 @@ export class JourneyActionDto {
   @IsOptional() @IsIn(['ONLINE', 'AT_HOME']) collectionMode?: 'ONLINE' | 'AT_HOME';
   @IsOptional() @IsInt() @Min(100) @Max(100000000) collectedAmountPaisa?: number;
   @IsOptional() @IsIn(['CASH', 'UPI']) collectedMethod?: 'CASH' | 'UPI';
+  @IsOptional() @IsString() @MaxLength(40) scheduledAt?: string;
 }

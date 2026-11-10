@@ -81,6 +81,30 @@ it('shows a recorded direct collection with a dues link', async () => {
   t.done();
 });
 
+it('offers a manual recheck while no payment is recorded', async () => {
+  const loadStatus = jest.fn().mockResolvedValue(null);
+  const t = setup({loadStatus, declare: jest.fn()});
+  await t.render();
+  expect(t.texts()).toContain('Check again for an in-app payment');
+  const callsBefore = loadStatus.mock.calls.length;
+  await t.press('Check again for an in-app payment');
+  expect(loadStatus.mock.calls.length).toBeGreaterThan(callsBefore);
+  t.done();
+});
+
+it('shows refunds as returning to the customer, never releasing', async () => {
+  const pending = setup({loadStatus: jest.fn().mockResolvedValue({...declared, status: 'REFUND_PENDING', collectionMode: 'ONLINE'}), declare: jest.fn()});
+  await pending.render();
+  expect(pending.texts()).toContain('refund in progress');
+  expect(pending.texts()).not.toContain('releases after review');
+  pending.done();
+  const done = setup({loadStatus: jest.fn().mockResolvedValue({...declared, status: 'REFUNDED', collectionMode: 'ONLINE'}), declare: jest.fn()});
+  await done.render();
+  expect(done.texts()).toContain('refunded in full to the customer');
+  expect(done.texts()).not.toContain('releases after review');
+  done.done();
+});
+
 it('shows an online payment as releasing after review', async () => {
   const hooks: CollectHooks = {
     loadStatus: jest.fn().mockResolvedValue({...declared, status: 'HELD', collectionMode: 'ONLINE'}),

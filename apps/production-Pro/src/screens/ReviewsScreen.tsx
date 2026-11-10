@@ -114,7 +114,7 @@ export function ReviewsScreen() {
               </View>
             </MotionReveal>
           )) : (
-            <EmptyState icon="star-outline" title="Your first review is on its way" message="After a client completes and rates a job, their feedback and your updated rating will appear here." />
+            <EmptyState icon="star-outline" title="Your first review is on its way" message="After a client completes and rates a job, their feedback and your updated rating will appear here. Ask happy clients to scan your QR after a job." actionLabel="Show my QR" onAction={() => (navigation as {navigate: (route: string) => void}).navigate('MyQr')} />
           )}
           <Text style={styles.privacyNote}>Only ratings from completed work are included. Client contact details are never shown here.</Text>
         </Animated.ScrollView>

@@ -1,4 +1,5 @@
 import RazorpayCheckout from 'react-native-razorpay';
+import {IndiaLocale} from '@nahtreek/design-system';
 import {ApiError, api} from './apiClient';
 
 export type AiSubscriptionView = {
@@ -28,8 +29,23 @@ export function quotaLabel(view: AiSubscriptionView | null): string | null {
   return left === 1 ? '1 free AI chat left' : `${left} free AI chats left`;
 }
 
+export type AiPlanView = {
+  feePaisa: number;
+  freeMessages: number;
+  consultDiscountBps: number;
+  consultDiscountCapPaisa: number;
+  acceptWindowMs: number;
+  arrivalGraceMs: number;
+  lateAcceptPenaltyPaisa: number;
+  lateArrivalPenaltyPaisa: number;
+};
+
 export function fetchAiSubscription() {
   return api.get<AiSubscriptionView>('/ai-billing/me');
+}
+
+export function fetchAiPlan() {
+  return api.get<AiPlanView>('/ai-billing/plan');
 }
 
 export function cancelAiSubscription() {
@@ -49,11 +65,13 @@ export function activateDemoAi() {
 export async function subscribeAi(): Promise<AiSubscriptionView> {
   const started = await api.post<{effective: boolean; keyId: string; subscriptionId: string | null; shortUrl: string | null}>('/ai-billing/subscribe', {});
   if ((started.effective && !started.shortUrl) || !started.subscriptionId) return fetchAiSubscription();
+  const plan = await fetchAiPlan().catch(() => null);
+  const price = plan ? `${IndiaLocale.formatCurrency(Math.round(plan.feePaisa / 100))}/month` : 'monthly plan';
   await RazorpayCheckout.open({
     key: started.keyId,
     subscription_id: started.subscriptionId,
     name: 'NAHTREEK AI',
-    description: 'Unlimited AI chats, plans, uploads + Plus booking perks — ₹129/month',
+    description: `Unlimited AI chats, plans, uploads + Plus booking perks — ${price}`,
     theme: {color: '#FACC15'},
   });
   return api.post<AiSubscriptionView>('/ai-billing/confirm', {});

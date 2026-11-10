@@ -85,7 +85,7 @@ Unit tests, mobile TypeScript checks, Android builds and emulator launch checks 
 | Android background push | Preview worker is scheduled and Firebase accepted a physical-device test. Complete two-phone display/tap/logout acceptance. Production Firebase remains unconfigured. See [setup](FIREBASE_PUSH_SETUP.md). |
 | Credential rotation | Current provider credentials were not rotated in this pass. Replacement credentials must be generated in the owning provider accounts and deployed before old ones are revoked. See [rotation runbook](CREDENTIAL_ROTATION.md). |
 | Production infrastructure | Separate production database, storage, domains, keys, signing and monitored deployment remain launch work; preview deployment does not prove production readiness. |
-| Payments and payouts | Live gateway orders, webhook reconciliation, refunds and professional settlements remain unimplemented. |
+| Payments and payouts | Gateway orders, webhook reconciliation, refunds (with retry sweeper), receipts and professional settlements are implemented; live keys, Route activation and the refund-retry cron remain setup work. |
 | Production account verification | Preview email OTP is separate from the unconfigured production SMS flow. |
 | AI documents and voice | Upload records do not implement image interpretation, PDF extraction or voice assistance. |
 | iOS push | APNs/Firebase iOS setup and native implementation are not included in the Android work. |

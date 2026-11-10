@@ -254,6 +254,29 @@ describe('service booking delivery and location', () => {
         title: 'Plus priority request'})}));
     });
 
+    it('attaches Plus terms to the journey for Plus clients only', async () => {
+      const readRig = (plus: boolean) => {
+        const journeyRow = {requestId: 'req', stage: 'ACCEPTED', mode: 'SCHEDULED', revision: 1,
+          quoteAccepted: false, codeAttempts: 0, expiresAt: new Date(Date.now() + 3600000),
+          payloadHash: 'h', idempotencyKey: 'k',
+          request: {id: 'req', client: {userId: 'client-user'},
+            provider: {userId: 'pro-user', presence: null}}};
+        const db: any = {
+          serviceJourney: {findMany: jest.fn().mockResolvedValue([]),
+            findFirst: jest.fn().mockResolvedValue(journeyRow)},
+          aiSubscription: {findUnique: jest.fn().mockResolvedValue(plus ? plusSub : null)},
+        };
+        const service = new JourneyService(db, {dispatch: jest.fn().mockResolvedValue({})} as any,
+          {emitUserUpdate: jest.fn()} as any);
+        return service;
+      };
+      const plusView = await readRig(true).read('client-user', 'req') as any;
+      expect(plusView.plusTerms).toMatchObject({acceptWindowMs: 900000, arrivalGraceMs: 900000,
+        lateAcceptPenaltyPaisa: 2500, lateArrivalPenaltyPaisa: 5000});
+      const plainView = await readRig(false).read('client-user', 'req') as any;
+      expect(plainView.plusTerms).toBeNull();
+    });
+
     it('keeps the 60-minute window for everyone else', async () => {
       const {service, tx} = bookingRig(false);
       const before = Date.now();

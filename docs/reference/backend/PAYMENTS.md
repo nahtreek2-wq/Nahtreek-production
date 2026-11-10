@@ -99,6 +99,21 @@ applies status-guarded transitions (`payment.captured`, `payment.failed`,
 ignored; captures on superseded orders are adopted only on exact amount match,
 else disputed for support.
 
+## Refund retries
+
+A failed `createRefund` call or a `refund.failed` event leaves the row in
+`REFUND_PENDING` — never reverted to `PAID`, which would strand the money
+with no retry path. Two mechanisms finish it:
+
+- `POST /payments/refund` while `REFUND_PENDING` reconciles with Razorpay:
+  adopts processed remote refunds, waits on live pending ones, recreates
+  missing/failed ones (fetch-then-create, so no double refund).
+- `POST /api/v1/internal/payments/retry-refunds` (cron secret, every
+  15 minutes) sweeps `REFUND_PENDING` rows older than 10 minutes with the
+  same reconcile. One poisoned row never blocks the rest.
+
+Both paths send the client a refund receipt email on completion.
+
 ## Endpoints
 
 | Method | Route | Role |
@@ -114,6 +129,7 @@ else disputed for support.
 | GET | `/payments/admin/summary` | ADMIN (ledger by status) |
 | GET | `/payments/admin/list` | ADMIN (paginated ledger rows) |
 | POST | `/internal/payments/webhook` | signature (no JWT) |
+| POST | `/internal/payments/retry-refunds` | cron secret (every 15 min) |
 
 Admin console (`apps/admin-web` → Payments view) renders the summary cards,
 the filterable ledger, and per-payment actions: retry release, full refund,
@@ -127,6 +143,9 @@ and dispute resolution with audit notes.
 - `START` rechecks payment inside the booking transaction: a refund racing
   the start cannot let unpaid work begin.
 - Closed bookings cannot be paid; late captures auto-refund or dispute.
+- Key-mode fail-fast at boot: test keys in production or live keys in
+  preview/development refuse to start, so a deploy can never charge the
+  wrong money mode.
 
 ## Client checkout UI
 

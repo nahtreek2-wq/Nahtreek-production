@@ -353,7 +353,7 @@ export function EngineerProfileScreen() {
           <Card style={styles.block}>
             <Text style={styles.reviewName}>No reviews yet</Text>
             <Text style={styles.reviewComment}>
-              Completed jobs from verified clients will appear here.
+              Reviews come only from completed NAHTREEK bookings, so every rating here is from a real customer.
             </Text>
           </Card>
         ) : null}
@@ -376,10 +376,10 @@ export function EngineerProfileScreen() {
         ]}>
         <TouchableOpacity
           style={styles.ctaMessage}
-          accessibilityLabel="Messaging becomes available when a request is accepted"
+          accessibilityLabel="Messaging becomes available once you have a request with this engineer"
           onPress={() =>
             toast(
-              'Messaging becomes available after your request is accepted.',
+              'Send a request first — messaging opens as soon as your request exists, before acceptance.',
               'info',
             )
           }>

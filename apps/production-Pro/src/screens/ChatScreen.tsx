@@ -1,9 +1,11 @@
 import {ScreenHeader} from '../components/ScreenHeader';
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
-  Animated,
   AppState,
+  FlatList,
+  Keyboard,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +20,7 @@ import type {
   NativeStackScreenProps,
 } from '@react-navigation/native-stack';
 import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
+import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {
   BorderRadius,
@@ -28,10 +31,11 @@ import {
 import type {MainTabParamList, MessagesStackParamList} from '../navigation/types';
 import {api} from '../services/apiClient';
 import {openChatSocket} from '../services/chatSocket';
-import {ScrollMotionBar, useScrollMotion} from '../components/ScrollMotionBar';
 import {useSessionStore} from '../stores/session';
 import {useProToast} from '../stores/proToast';
 import {EmptyState} from '../components/EmptyState';
+import {ScreenLoading} from '../components/ScreenLoading';
+import {JobContextVisual} from '../components/JobContextVisual';
 
 type Props = NativeStackScreenProps<MessagesStackParamList, 'Chat'>;
 type Message = {
@@ -42,9 +46,32 @@ type Message = {
   content: string;
   createdAt: string;
 };
+// Delivery truth the client actually knows: a message is sending until the
+// server accepts it, then sent. Delivered/read ticks would be faked — the
+// server sends no receipt events — so sent is the final honest state.
+type LocalMessage = Message & {status?: 'sending' | 'sent' | 'failed'};
+
+type FeedItem =
+  | {kind: 'day'; key: string; label: string}
+  | {kind: 'message'; key: string; message: LocalMessage; mine: boolean; showSender: boolean};
+
+const QUICK_REPLIES = ['On my way', 'I will reach in 15 minutes', 'I will share photos of the work'];
+
+function dayLabel(iso: string): string {
+  const date = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return date.toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric'});
+}
+
+function timeLabel(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-IN', {hour: 'numeric', minute: '2-digit'});
+}
 
 export function ChatScreen() {
-  const scrollMotion = useScrollMotion();
   const insets = useSafeAreaInsets();
   const route = useRoute<Props['route']>();
   const navigation =
@@ -53,33 +80,84 @@ export function ChatScreen() {
   const toast = useProToast();
   const currentUser = useSessionStore(state => state.user);
   const accessToken = useSessionStore(state => state.accessToken);
-  const {conversationId, title, subtitle, avatarUrl, requestId, requestKind} = route.params;
+  const {conversationId, title, subtitle, avatarUrl, requestId, requestKind, threads} = route.params;
+  const jobLabel = (value?: string) => (value ?? 'Job').replace(/^Re:\s*/, '');
+  const switchThread = (thread: NonNullable<typeof threads>[number]) => {
+    if (thread.conversationId === conversationId || sending.current) return;
+    // Never carry a half-typed message into another job's thread.
+    setDraft('');
+    setShowJumpPill(false);
+    navigation.setParams({
+      conversationId: thread.conversationId,
+      title: thread.title,
+      subtitle: thread.subtitle,
+      avatarUrl: thread.avatarUrl,
+      requestId: thread.requestId,
+      requestKind: thread.requestKind,
+      threads,
+    });
+  };
   const [draft, setDraft] = useState('');
+  const [connected, setConnected] = useState(true);
+  const [showJumpPill, setShowJumpPill] = useState(false);
+  // The floating tab bar hides with the keyboard but overlays the composer
+  // when it is closed — keep the composer and latest message above it.
+  const tabBarHeight = useBottomTabBarHeight();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  const barClearance = keyboardVisible ? 0 : tabBarHeight;
+  const listRef = useRef<FlatList<FeedItem>>(null);
   const sending = useRef(false);
   const messages = useQuery({
     queryKey: ['professional-messages', conversationId],
     queryFn: () =>
       api.get<Message[]>(`/conversations/${conversationId}/messages`),
-    refetchInterval: 5000,
+    // The socket pushes live messages; polling is only the offline fallback.
+    refetchInterval: connected ? false : 5000,
     refetchIntervalInBackground: false,
   });
+
+  const upsertLocal = (message: LocalMessage) => {
+    queryClient.setQueryData<LocalMessage[]>(
+      ['professional-messages', conversationId],
+      (previous: LocalMessage[] | undefined) =>
+        [
+          ...(previous ?? []).filter((item: LocalMessage) => item.id !== message.id),
+          message,
+        ].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    );
+  };
+
   const send = useMutation({
-    mutationFn: (content: string) =>
-      api.post<Message>(`/conversations/${conversationId}/messages`, {content}),
-    onSuccess: message => {
-      queryClient.setQueryData<Message[]>(
+    mutationFn: async ({content, localId}: {content: string; localId: string}) => {
+      const message = await api.post<Message>(`/conversations/${conversationId}/messages`, {content});
+      return {message, localId};
+    },
+    onSuccess: ({message, localId}) => {
+      queryClient.setQueryData<LocalMessage[]>(
         ['professional-messages', conversationId],
-        (previous: Message[] | undefined) =>
+        (previous: LocalMessage[] | undefined) =>
           [
-            ...(previous ?? []).filter((item: Message) => item.id !== message.id),
-            message,
+            ...(previous ?? []).filter((item: LocalMessage) => item.id !== message.id && item.id !== localId),
+            {...message, status: 'sent'},
           ].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       );
       queryClient
         .invalidateQueries({queryKey: ['professional-conversations']})
         .catch(() => undefined);
     },
-    onError: error => {
+    onError: (error, {localId}) => {
+      queryClient.setQueryData<LocalMessage[]>(
+        ['professional-messages', conversationId],
+        (previous: LocalMessage[] | undefined) =>
+          (previous ?? []).map((item: LocalMessage) =>
+            item.id === localId ? {...item, status: 'failed'} : item,
+          ),
+      );
       toast(error instanceof Error ? error.message : 'Message failed to send.', 'error');
     },
     onSettled: () => {
@@ -103,9 +181,11 @@ export function ChatScreen() {
     }
     const socket = openChatSocket(accessToken);
     if (!socket) {
+      setConnected(false);
       return;
     }
     const refresh = () => {
+      setConnected(true);
       socket.emit('conversation:join', {conversationId});
       queryClient
         .invalidateQueries({
@@ -117,19 +197,21 @@ export function ChatScreen() {
       if (message.conversationId !== conversationId) {
         return;
       }
-      queryClient.setQueryData<Message[]>(
+      queryClient.setQueryData<LocalMessage[]>(
         ['professional-messages', conversationId],
-        (previous: Message[] | undefined) =>
+        (previous: LocalMessage[] | undefined) =>
           [
-            ...(previous ?? []).filter((item: Message) => item.id !== message.id),
-            message,
+            ...(previous ?? []).filter((item: LocalMessage) => item.id !== message.id),
+            {...message, status: 'sent'},
           ].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       );
       queryClient
         .invalidateQueries({queryKey: ['professional-conversations']})
         .catch(() => undefined);
     };
+    const markOffline = () => setConnected(false);
     socket.on('connect', refresh);
+    socket.on('disconnect', markOffline);
     socket.on('message:created', receive);
     const appState = AppState.addEventListener('change', state =>
       state === 'active' ? socket.connect() : socket.disconnect(),
@@ -137,23 +219,54 @@ export function ChatScreen() {
     return () => {
       appState.remove();
       socket.off('connect', refresh);
+      socket.off('disconnect', markOffline);
       socket.off('message:created', receive);
       socket.disconnect();
     };
   }, [accessToken, conversationId, queryClient]);
 
-  const submit = () => {
-    const content = draft.trim();
+  const submit = (raw: string) => {
+    const content = raw.trim();
     if (!content || sending.current) {
       return;
     }
     sending.current = true;
-    send.mutate(content, {
-      onSuccess: () =>
-        setDraft(current => (current.trim() === content ? '' : current)),
+    const localId = `local-${Date.now()}`;
+    upsertLocal({
+      id: localId,
+      conversationId,
+      senderUserId: currentUser?.id ?? 'me',
+      senderName: currentUser?.fullName ?? 'You',
+      content,
+      createdAt: new Date().toISOString(),
+      status: 'sending',
     });
+    setDraft(current => (current.trim() === content ? '' : current));
+    send.mutate({content, localId});
   };
-  const data = [...(messages.data ?? [])].reverse();
+
+  const feed = useMemo<FeedItem[]>(() => {
+    const sorted = [...((messages.data ?? []) as LocalMessage[])].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
+    const items: FeedItem[] = [];
+    let lastDay = '';
+    let lastSender = '';
+    for (const message of sorted) {
+      const day = new Date(message.createdAt).toDateString();
+      if (day !== lastDay) {
+        lastDay = day;
+        lastSender = '';
+        items.push({kind: 'day', key: `day-${day}`, label: dayLabel(message.createdAt)});
+      }
+      const mine = message.senderUserId === currentUser?.id;
+      const showSender = !mine && message.senderUserId !== lastSender;
+      lastSender = message.senderUserId;
+      items.push({kind: 'message', key: message.id, message, mine, showSender});
+    }
+    return items.reverse();
+  }, [messages.data, currentUser?.id]);
+
   return (
     <View style={styles.root}>
       <ScreenHeader
@@ -162,19 +275,34 @@ export function ChatScreen() {
         avatarUrl={avatarUrl}
         onBack={() => navigation.goBack()}
       />
+      {threads && threads.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.threadRow}>
+        {threads.map(thread => {
+          const selected = thread.conversationId === conversationId;
+          return (
+            <Pressable
+              key={thread.conversationId}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${jobLabel(thread.subtitle)} chat`}
+              accessibilityState={{selected}}
+              onPress={() => switchThread(thread)}
+              style={[styles.threadChip, selected && styles.threadChipOn]}>
+              <Text style={[styles.threadText, selected && styles.threadTextOn]} numberOfLines={1}>{jobLabel(thread.subtitle)}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView> : null}
       {requestId && requestKind ? <Pressable accessibilityRole="button" accessibilityLabel={`View related ${requestKind === 'service' ? 'service job' : 'engineering request'}`} onPress={() => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('Requests', {screen: 'RequestDetail', params: {id: requestId, kind: requestKind}})} style={styles.jobContext}>
-        <MaterialCommunityIcons name={requestKind === 'service' ? 'toolbox-outline' : 'ruler-square-compass'} size={20} color={Colors.navyMid} />
+        <JobContextVisual kind={requestKind} title={title} seed={requestId} size={40} />
         <Text style={styles.jobContextText} numberOfLines={1}>{subtitle || 'Related job'}</Text>
         <Text style={styles.jobContextAction}>View job  →</Text>
       </Pressable> : null}
-      <ScrollMotionBar offset={scrollMotion.offset} reducedMotion={scrollMotion.reducedMotion} />
+      {!connected ? <View style={styles.offlineBar}>
+        <MaterialCommunityIcons name="wifi-off" size={15} color={Colors.white} />
+        <Text style={styles.offlineText}>Reconnecting — new messages may be delayed</Text>
+      </View> : null}
       <KeyboardAwareView style={styles.flex}>
         {messages.isPending ? (
-          <EmptyState
-            icon="message-processing-outline"
-            title="Loading conversation"
-            message="Getting your messages…"
-          />
+          <ScreenLoading label="Loading conversation…" rows={4} />
         ) : messages.isError ? (
           <View style={styles.errorWrap}>
             <EmptyState
@@ -186,57 +314,107 @@ export function ChatScreen() {
               <Text style={styles.retryText}>Try again</Text>
             </Pressable>
           </View>
-        ) : data.length ? (
-          <Animated.FlatList
-            inverted
-            onScroll={scrollMotion.onScroll}
-            scrollEventThrottle={16}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            data={data}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.list}
-            renderItem={({item}) => {
-              const mine = item.senderUserId === currentUser?.id;
-              return (
-                <View
-                  style={[styles.bubbleWrap, mine && styles.bubbleWrapMine]}>
-                  <View style={[styles.bubble, mine && styles.bubbleMine]}>
-                    {!mine ? (
-                      <Text style={styles.sender}>{item.senderName}</Text>
-                    ) : null}
-                    <Text style={[styles.message, mine && styles.messageMine]}>
-                      {item.content}
-                    </Text>
-                    <Text style={[styles.time, mine && styles.timeMine]}>
-                      {new Date(item.createdAt).toLocaleTimeString('en-IN', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </Text>
+        ) : feed.length ? (
+          <View style={styles.flex}>
+            <FlatList
+              ref={listRef}
+              inverted
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              data={feed}
+              keyExtractor={item => item.key}
+              contentContainerStyle={styles.list}
+              ListHeaderComponent={<View style={{height: barClearance}} />}
+              onScroll={event => setShowJumpPill(event.nativeEvent.contentOffset.y > 300)}
+              scrollEventThrottle={200}
+              renderItem={({item}) => {
+                if (item.kind === 'day') {
+                  return (
+                    <View style={styles.dayWrap}>
+                      <Text style={styles.day}>{item.label}</Text>
+                    </View>
+                  );
+                }
+                const {message, mine, showSender} = item;
+                const failed = message.status === 'failed';
+                return (
+                  <View
+                    style={[styles.bubbleWrap, mine && styles.bubbleWrapMine]}>
+                    <View style={[styles.bubble, mine && styles.bubbleMine, failed && styles.bubbleFailed]}>
+                      {showSender ? (
+                        <Text style={styles.sender}>{message.senderName}</Text>
+                      ) : null}
+                      <Text style={[styles.message, mine && styles.messageMine]}>
+                        {message.content}
+                      </Text>
+                      <View style={styles.metaRow}>
+                        <Text style={[styles.time, mine && styles.timeMine]}>
+                          {timeLabel(message.createdAt)}
+                        </Text>
+                        {mine ? message.status === 'sending' ? (
+                          <MaterialCommunityIcons name="clock-outline" size={13} color={Colors.slate300} />
+                        ) : failed ? (
+                          <MaterialCommunityIcons name="alert-circle-outline" size={14} color={Colors.error} />
+                        ) : (
+                          <MaterialCommunityIcons name="check" size={15} color={Colors.slate300} />
+                        ) : null}
+                      </View>
+                      {failed ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Retry sending message"
+                          onPress={() => {
+                            queryClient.setQueryData<LocalMessage[]>(
+                              ['professional-messages', conversationId],
+                              (previous: LocalMessage[] | undefined) =>
+                                (previous ?? []).filter((entry: LocalMessage) => entry.id !== message.id),
+                            );
+                            submit(message.content);
+                          }}
+                          style={styles.retryBubble}>
+                          <Text style={styles.retryBubbleText}>Tap to retry</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              );
-            }}
-          />
+                );
+              }}
+            />
+            {showJumpPill ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Jump to latest messages"
+                onPress={() => listRef.current?.scrollToOffset({offset: 0, animated: true})}
+                style={styles.jumpPill}>
+                <MaterialCommunityIcons name="chevron-down" size={20} color={Colors.white} />
+              </Pressable>
+            ) : null}
+          </View>
         ) : (
           <View style={styles.empty}>
             <EmptyState
               icon="message-outline"
               title="No messages yet"
-              message="Send a clear message about this request."
+              message="Send a clear message about this job to get started."
             />
+            <View style={styles.quickRow}>
+              {QUICK_REPLIES.map(reply => (
+                <Pressable
+                  key={reply}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use quick reply: ${reply}`}
+                  onPress={() => setDraft(reply)}
+                  style={styles.quickReply}>
+                  <Text style={styles.quickReplyText}>{reply}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
         )}
-        {send.error ? (
-          <Text accessibilityRole="alert" style={styles.sendError}>
-            Message not sent. Your text is still here—tap send to retry.
-          </Text>
-        ) : null}
         <View
           style={[
             styles.composer,
-            {paddingBottom: Math.max(insets.bottom, 20)},
+            {paddingBottom: Math.max(insets.bottom, 20) + barClearance},
           ]}>
           <TextInput
             accessibilityLabel="Message"
@@ -252,7 +430,7 @@ export function ChatScreen() {
               send.isPending ? 'Sending message' : 'Send message'
             }
             disabled={!draft.trim() || send.isPending}
-            onPress={submit}
+            onPress={() => submit(draft)}
             style={[
               styles.send,
               (!draft.trim() || send.isPending) && styles.sendDisabled,
@@ -270,29 +448,25 @@ export function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  jobContext: {minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: Colors.slate200, backgroundColor: Colors.white},
+  threadRow: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.slate200},
+  threadChip: {maxWidth: 180, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.offWhite, borderWidth: 1, borderColor: Colors.slate200},
+  threadChipOn: {backgroundColor: Colors.navyDeep, borderColor: Colors.navyDeep},
+  threadText: {...Typography.caption, fontWeight: '700', color: Colors.navyMid},
+  threadTextOn: {color: Colors.white},
+  jobContext: {minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.slate200, backgroundColor: Colors.white},
   jobContextText: {...Typography.caption, color: Colors.slate800, flex: 1},
   jobContextAction: {...Typography.caption, fontWeight: '700', color: Colors.navyMid},
+  offlineBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 7, backgroundColor: Colors.navyDeep},
+  offlineText: {...Typography.caption, color: Colors.white},
   root: {flex: 1, backgroundColor: Colors.offWhite},
   flex: {flex: 1, minWidth: 0},
-  header: {
-    minHeight: 92,
-    paddingTop: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.navyDeep,
-  },
-  back: {width: 48, height: 48, alignItems: 'center', justifyContent: 'center'},
-  headerTitle: {...Typography.h3, color: Colors.white},
-  headerSubtitle: {...Typography.caption, color: Colors.slate300},
-  list: {padding: 20},
-  bubbleWrap: {alignItems: 'flex-start', marginBottom: Spacing.sm},
+  list: {padding: 16},
+  dayWrap: {alignItems: 'center', marginVertical: 10},
+  day: {...Typography.badge, lineHeight: 16, color: Colors.slate600, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.slate200, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, overflow: 'hidden'},
+  bubbleWrap: {alignItems: 'flex-start', marginBottom: 6},
   bubbleWrapMine: {alignItems: 'flex-end'},
   bubble: {
-    maxWidth: '90%',
+    maxWidth: '85%',
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     backgroundColor: Colors.white,
@@ -307,6 +481,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: BorderRadius.lg,
     borderBottomRightRadius: BorderRadius.xs,
   },
+  bubbleFailed: {borderColor: Colors.error},
   sender: {
     ...Typography.badge,
     lineHeight: 16,
@@ -315,29 +490,29 @@ const styles = StyleSheet.create({
   },
   message: {...Typography.body, color: Colors.slate800},
   messageMine: {color: Colors.white},
+  metaRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 3},
   time: {
     ...Typography.badge,
     lineHeight: 16,
     color: Colors.slate500,
     textAlign: 'right',
-    marginTop: 3,
   },
   timeMine: {color: Colors.slate300},
-  empty: {flex: 1, justifyContent: 'center', padding: 20},
+  retryBubble: {marginTop: 4, alignSelf: 'flex-end'},
+  retryBubbleText: {...Typography.badge, lineHeight: 16, fontWeight: '700', color: Colors.error},
+  empty: {flex: 1, justifyContent: 'center', padding: 20, gap: 12},
+  quickRow: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8},
+  quickReply: {paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.navyMid},
+  quickReplyText: {...Typography.caption, fontWeight: '700', color: Colors.navyMid},
   errorWrap: {flex: 1, justifyContent: 'center', padding: 20},
   retry: {alignSelf: 'center', padding: 20},
   retryText: {...Typography.button, lineHeight: 22, color: Colors.navyMid},
-  sendError: {
-    ...Typography.caption,
-    color: Colors.error,
-    paddingHorizontal: 20,
-    paddingBottom: Spacing.xs,
-  },
+  jumpPill: {position: 'absolute', right: 16, bottom: 12, width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.navyDeep, elevation: 4, shadowColor: Colors.navyDeep, shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: {width: 0, height: 2}},
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: Spacing.sm,
-    padding: 20,
+    padding: 16,
     backgroundColor: Colors.white,
     borderTopWidth: 1,
     borderTopColor: Colors.slate200,

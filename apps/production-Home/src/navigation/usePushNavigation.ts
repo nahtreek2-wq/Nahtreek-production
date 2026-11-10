@@ -19,6 +19,7 @@ export type PushRoute =
   | {name: 'ServiceRequestDetail'; params: {requestId: string}}
   | {name: 'EngineerDiscovery'; params: undefined}
   | {name: 'Notifications'; params: undefined}
+  | {name: 'Help'; params: undefined}
   | {name: 'MainTabs'; params: {screen: 'Home' | 'Profile'}};
 
 // Maps a push tap-through payload to a navigation target. Unknown or
@@ -38,6 +39,8 @@ export function routeForPushDestination(payload: PushDestinationPayload | null |
       return {name: 'EngineerDiscovery', params: undefined};
     case 'notifications':
       return {name: 'Notifications', params: undefined};
+    case 'support':
+      return {name: 'Help', params: undefined};
     case 'profile':
       return {name: 'MainTabs', params: {screen: 'Profile'}};
     case 'home':

@@ -164,6 +164,7 @@ export function RequestsScreen() {
   const tabs = navigation.getParent<BottomTabNavigationProp<MainTabParamList>>();
   const roles = useSessionStore(state => state.user?.roles ?? []);
   const [filter, setFilter] = useState<Filter>('ALL');
+  const [oldestFirst, setOldestFirst] = useState(false);
   const hasEngineer = roles.includes('ENGINEER');
   const hasService = roles.includes('SERVICE_PROVIDER');
   const engineer = hasEngineer && !hasService;
@@ -228,8 +229,11 @@ export function RequestsScreen() {
     );
   }, [requests.data]);
   const visible = useMemo(
-    () => allRequests.filter(item => matchesFilter(item, filter)),
-    [allRequests, filter],
+    () => {
+      const items = allRequests.filter(item => matchesFilter(item, filter));
+      return oldestFirst ? [...items].reverse() : items;
+    },
+    [allRequests, filter, oldestFirst],
   );
   const counts = useMemo(
     () => ({
@@ -276,7 +280,6 @@ export function RequestsScreen() {
       <>
       {!requests.isPending && !requests.isError ? (
         <MotionReveal style={styles.stageArea}>
-          <Text style={styles.chooseLabel}>FILTER JOBS</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stageGrid}>
             {(Object.keys(filterDetails) as Filter[]).map(key => {
               const details = filterDetails[key];
@@ -350,6 +353,14 @@ export function RequestsScreen() {
                 <Text style={styles.listCount}>
                   {visible.length} {visible.length === 1 ? 'job' : 'jobs'}
                 </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={oldestFirst ? 'Sort newest first' : 'Sort oldest first'}
+                  onPress={() => setOldestFirst(value => !value)}
+                  style={styles.sortChip}>
+                  <MaterialCommunityIcons name={oldestFirst ? 'sort-clock-ascending-outline' : 'sort-clock-descending-outline'} size={16} color={Colors.navyMid} />
+                  <Text style={styles.sortText}>{oldestFirst ? 'Oldest' : 'Newest'}</Text>
+                </Pressable>
               </View>
             ) : null
           }
@@ -411,7 +422,7 @@ function RequestCard({
       onPress={onPress}
       style={({pressed}) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.cardTop}>
-        <JobContextVisual kind={request.kind} title={request.title} size={46} />
+        <JobContextVisual kind={request.kind} title={request.title} seed={request.id} size={46} />
         <View style={styles.flex}>
           <Text style={styles.kindLabel}>{request.kind === 'engineering' ? 'ENGINEERING' : 'HOME SERVICE'}</Text>
           {request.clientPlus ? (
@@ -520,11 +531,13 @@ const styles = StyleSheet.create({
   listHeading: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     marginTop: Spacing.xs,
   },
-  listTitle: {...Typography.h2, color: Colors.slate900},
+  listTitle: {...Typography.h2, color: Colors.slate900, flex: 1},
   listCount: {...Typography.caption, color: Colors.slate500},
+  sortChip: {flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.slate200},
+  sortText: {...Typography.badge, lineHeight: 16, fontWeight: '700', color: Colors.navyMid},
   retry: {
     alignSelf: 'center',
     minHeight: 48,

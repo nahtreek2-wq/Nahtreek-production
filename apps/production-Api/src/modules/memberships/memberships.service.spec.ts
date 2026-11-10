@@ -214,7 +214,9 @@ describe('membership reconcile and view', () => {
   });
   it('reports NONE for professionals who never subscribed', async () => {
     const {service} = setup({none: true});
-    await expect(service.me('pro')).resolves.toMatchObject({status: 'NONE', effective: false, feePaisa: 39900});
+    await expect(service.me('pro')).resolves.toMatchObject({status: 'NONE', effective: false, feePaisa: 39900,
+      terms: {memberFeeBps: 700, standardFeeBps: 1000, memberDuesBlockPaisa: 200000,
+        standardDuesBlockPaisa: 50000, freeJobsPerMonth: 1}});
   });
   it('proves membership savings from jobs billed below the standard rate', async () => {
     const {db, service} = setup({membership: {status: 'ACTIVE', currentPeriodEnd: future()}});

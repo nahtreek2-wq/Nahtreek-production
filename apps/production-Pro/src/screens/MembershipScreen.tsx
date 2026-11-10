@@ -1,9 +1,9 @@
 import React, {useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {ProIconChip} from '../components/ProIconChip';
-import type {IconChipTone} from '../components/ProIconChip';
 import {ScreenHeader} from '../components/ScreenHeader';
 import {ScreenLoading} from '../components/ScreenLoading';
 import {EmptyState} from '../components/EmptyState';
@@ -13,9 +13,11 @@ import {ProColors, ProRadius, ProSpacing, ProType} from '../theme/professionalTh
 import {CheckoutCancelledError, GatewayUnavailableError, openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
 import type {CheckoutInput, CheckoutResult} from '../../../../packages/mobile-booking/razorpayGateway';
 
+export type MembershipTerms = {memberFeeBps: number; standardFeeBps: number; memberDuesBlockPaisa: number;
+  standardDuesBlockPaisa: number; freeJobsPerMonth: number};
 export type MembershipView = {status: string; effective: boolean; currentPeriodStart: string | null;
   currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean; feePaisa: number; currency: string;
-  lifetimeSavingsPaisa?: number; jobsAtMemberRate?: number};
+  terms: MembershipTerms; lifetimeSavingsPaisa?: number; jobsAtMemberRate?: number};
 export type MembershipHooks = {
   load: () => Promise<MembershipView>;
   subscribe: () => Promise<MembershipView & {keyId: string; subscriptionId: string | null; shortUrl: string | null}>;
@@ -31,13 +33,24 @@ const defaultHooks: MembershipHooks = {
   cancel: () => api.post<MembershipView>('/memberships/cancel', {}),
 };
 
-const BENEFITS: {title: string; body: string; icon: string; tone: IconChipTone}[] = [
-  {title: 'First job every month at 0% commission', body: 'Your first booking each calendar month keeps the full amount.', icon: 'gift', tone: 'green'},
-  {title: '7% commission, not 10%', body: 'Keep more of every other job while your membership is active.', icon: 'percent', tone: 'navy'},
-  {title: '₹2,000 dues room, not ₹500', body: 'New jobs pause only after ₹2,000 unsettled instead of ₹500.', icon: 'cash-multiple', tone: 'amber'},
-  {title: 'Top of discovery', body: 'Members rank above non-members in client search results.', icon: 'arrow-up-bold-circle', tone: 'blue'},
-  {title: 'Pro member badge', body: 'A verified badge on your profile and discovery cards.', icon: 'medal', tone: 'amber'},
-];
+const inr = (paisa: number) => `₹${(paisa / 100).toLocaleString('en-IN')}`;
+const pct = (bps: number) => `${bps / 100}%`;
+
+// Every figure below renders from server terms — the plan price, rates and
+// dues room change on the backend without an app release.
+function benefitsFor(terms: MembershipTerms): {title: string; body: string; icon: string}[] {
+  const free = terms.freeJobsPerMonth;
+  return [
+    {title: free === 1 ? 'First job every month at 0% commission' : `${free} jobs every month at 0% commission`,
+      body: 'Your first booking each calendar month keeps the full amount.', icon: 'gift'},
+    {title: `${pct(terms.memberFeeBps)} commission, not ${pct(terms.standardFeeBps)}`,
+      body: 'Keep more of every other job while your membership is active.', icon: 'percent'},
+    {title: `${inr(terms.memberDuesBlockPaisa)} dues room, not ${inr(terms.standardDuesBlockPaisa)}`,
+      body: `New jobs pause only after ${inr(terms.memberDuesBlockPaisa)} unsettled instead of ${inr(terms.standardDuesBlockPaisa)}.`, icon: 'cash-multiple'},
+    {title: 'Top of discovery', body: 'Members rank above non-members in client search results.', icon: 'arrow-up-bold-circle'},
+    {title: 'Pro member badge', body: 'A PRO badge on your profile and discovery cards, next to the Verified identity badge.', icon: 'medal'},
+  ];
+}
 
 function messageFor(error: unknown): string {
   if (error instanceof GatewayUnavailableError) return error.message;
@@ -50,13 +63,21 @@ function messageFor(error: unknown): string {
 
 export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHooks}) {
   const navigation = useNavigation();
+  const tabBarHeight = useBottomTabBarHeight();
   const cache = useQueryClient();
   const toast = useProToast();
   const [failed, setFailed] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [activating, setActivating] = useState(false);
   const query = useQuery({queryKey: ['membership'], queryFn: hooks.load, retry: 1});
-  const refresh = () => void cache.invalidateQueries({queryKey: ['membership']});
+  const refresh = () => {
+    // Membership flips dues math (member rate/room from server terms), so the dues and
+    // profile screens must reload with it — otherwise Dues keeps the
+    // pre-member blocked UI after subscribing.
+    void cache.invalidateQueries({queryKey: ['membership']});
+    void cache.invalidateQueries({queryKey: ['pro-dues']});
+    void cache.invalidateQueries({queryKey: ['professional-profile']});
+  };
 
   // After a successful GPay payment the first charge still needs seconds to
   // land at Razorpay. Poll confirm (then the plain status as a webhook may
@@ -155,22 +176,19 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
         </Pressable>
       </> : null}
       {view && !view.effective ? <View style={styles.card}>
+        <Image source={require('../assets/professionals/engineer-work-banner-v1.png')} style={styles.heroImage} resizeMode="cover" accessibilityLabel="Professional at work on a home site" />
         <View style={styles.heroRow}>
-          <ProIconChip name="crown" tone="amber" size={58} iconSize={30} />
-          <Text style={styles.price}>₹399<Text style={styles.perMonth}>/month</Text></Text>
+          <ProIconChip name="crown" size={58} iconSize={30} />
+          <Text style={styles.price}>{inr(view.feePaisa)}<Text style={styles.perMonth}>/month</Text></Text>
         </View>
         {view.status === 'PAST_DUE' ? <Text style={styles.warning}>Your last membership payment failed. Subscribe again to restore benefits with a fresh month.</Text> : null}
-        {BENEFITS.map(benefit => <View key={benefit.title} style={styles.benefit}>
-          <ProIconChip name={benefit.icon} tone={benefit.tone} size={44} iconSize={23} />
+        {benefitsFor(view.terms).map(benefit => <View key={benefit.title} style={styles.benefit}>
+          <ProIconChip name={benefit.icon} size={44} iconSize={23} />
           <View style={styles.benefitCopy}>
             <Text style={styles.benefitTitle}>{benefit.title}</Text>
             <Text style={styles.text}>{benefit.body}</Text>
           </View>
         </View>)}
-        <Pressable accessibilityRole="button" accessibilityLabel="Subscribe to Pro membership" accessibilityState={{disabled: busy, busy: subscribe.isPending}}
-          disabled={busy} onPress={() => subscribe.mutate()} style={[styles.button, busy && {opacity: 0.5}]}>
-          <Text style={styles.buttonText}>{subscribe.isPending ? 'Opening secure checkout…' : view.status === 'PENDING' ? 'Complete authorization' : 'Subscribe for ₹399/month'}</Text>
-        </Pressable>
         {activating ? <View style={styles.activating}>
           <ActivityIndicator size="small" color={ProColors.primary} />
           <Text style={styles.text}>Payment received — activating your membership…</Text>
@@ -182,7 +200,7 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
             <Text style={styles.secondaryButtonText}>{cancel.isPending ? 'Cancelling…' : 'Cancel this checkout'}</Text>
           </Pressable>
         </> : null}
-        <Text style={styles.small}>Recurring UPI autopay via Razorpay. Cancel anytime; benefits run until the paid month ends.</Text>
+        <Text style={styles.small}>Recurring autopay via Razorpay (UPI, cards and netbanking). Cancel anytime; benefits run until the paid month ends.</Text>
       </View> : null}
       {view?.effective ? <View style={styles.card}>
         <View style={styles.activeBadge}><Text style={styles.activeBadgeText}>PRO MEMBER</Text></View>
@@ -190,15 +208,21 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
           <ProIconChip name="check-decagram" tone="green" size={52} iconSize={28} />
           <Text style={[styles.heading, styles.flex]}>Your Pro benefits are active</Text>
         </View>
-        <Text style={styles.text}>First job each month free, 7% commission after that, ₹2,000 dues room, top discovery placement and the member badge{endDate ? ` through ${endDate}` : ''}.</Text>
+        <Text style={styles.text}>First job each month free, {pct(view.terms.memberFeeBps)} commission after that, {inr(view.terms.memberDuesBlockPaisa)} dues room, top discovery placement and the member badge{endDate ? ` through ${endDate}` : ''}.</Text>
         {(view.lifetimeSavingsPaisa ?? 0) > 0 ? <View style={styles.savings}>
-          <Text style={styles.savingsTitle}>You have saved ₹{((view.lifetimeSavingsPaisa ?? 0) / 100).toLocaleString('en-IN')} so far</Text>
-          <Text style={styles.savingsBody}>{view.jobsAtMemberRate ?? 0} {(view.jobsAtMemberRate ?? 0) === 1 ? 'job' : 'jobs'} billed below the 10% standard rate.</Text>
+          <Text style={styles.savingsTitle}>You have saved {inr(view.lifetimeSavingsPaisa ?? 0)} so far</Text>
+          <Text style={styles.savingsBody}>{view.jobsAtMemberRate ?? 0} {(view.jobsAtMemberRate ?? 0) === 1 ? 'job' : 'jobs'} billed below the {pct(view.terms.standardFeeBps)} standard rate.</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="View commission dues" onPress={() => (navigation as {navigate: (route: string) => void}).navigate('Dues')} style={styles.savingsLink}>
             <Text style={styles.savingsLinkText}>View commission dues</Text>
           </Pressable>
         </View> : null}
-        {view.cancelAtPeriodEnd ? <Text style={styles.text}>You cancelled renewal. Benefits end {endDate ?? 'at the period end'}; resubscribe anytime after.</Text>
+        {view.cancelAtPeriodEnd ? <>
+          <Text style={styles.text}>You cancelled renewal. Benefits end {endDate ?? 'at the period end'}; resubscribe anytime after.</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="View commission dues" disabled={busy}
+            onPress={() => (navigation as {navigate: (route: string) => void}).navigate('Dues')} style={[styles.secondaryButton, busy && {opacity: 0.5}]}>
+            <Text style={styles.secondaryButtonText}>View commission dues</Text>
+          </Pressable>
+        </>
         : <Pressable accessibilityRole="button" accessibilityLabel="Cancel membership" disabled={busy}
           onPress={() => startCancel(false)} style={[styles.secondaryButton, busy && {opacity: 0.5}]}>
           <Text style={styles.secondaryButtonText}>{cancel.isPending ? 'Cancelling…' : 'Cancel membership'}</Text>
@@ -207,6 +231,12 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
       {cancelled ? <Text style={styles.text}>Checkout cancelled. Nothing was charged — subscribe whenever you are ready.</Text> : null}
       {failed ? <View accessibilityRole="alert" style={styles.actionError}><Text style={styles.error}>{failed}</Text></View> : null}
     </ScrollView>
+    {view && !view.effective && !activating ? <View style={[styles.stickyBar, {paddingBottom: tabBarHeight + ProSpacing.md}]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Subscribe to Pro membership" accessibilityState={{disabled: busy, busy: subscribe.isPending}}
+        disabled={busy} onPress={() => subscribe.mutate()} style={[styles.button, busy && {opacity: 0.5}]}>
+        <Text style={styles.buttonText}>{subscribe.isPending ? 'Opening secure checkout…' : view.status === 'PENDING' ? 'Complete authorization' : `Subscribe for ${inr(view.feePaisa)}/month`}</Text>
+      </Pressable>
+    </View> : null}
   </View>;
 }
 
@@ -215,6 +245,8 @@ const styles = StyleSheet.create({
   flex: {flex: 1},
   body: {padding: ProSpacing.lg, gap: ProSpacing.md},
   card: {backgroundColor: ProColors.surface, borderRadius: ProRadius.card, padding: ProSpacing.lg, gap: ProSpacing.md},
+  heroImage: {width: '100%', height: 120, borderRadius: ProRadius.input},
+  stickyBar: {backgroundColor: ProColors.surface, borderTopWidth: 1, borderTopColor: ProColors.border, padding: ProSpacing.md},
   heroRow: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md},
   price: {fontSize: 34, fontWeight: '800', color: ProColors.text},
   perMonth: {fontSize: 16, fontWeight: '600', color: ProColors.muted},

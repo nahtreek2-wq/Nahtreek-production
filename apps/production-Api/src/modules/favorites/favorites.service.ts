@@ -6,11 +6,25 @@ export class FavoritesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(userId: string) {
-    return this.prisma.favorite.findMany({
+    // Saved merges engineers and service providers in one list, so each row
+    // carries the professional's card fields — no per-row detail fetch, and
+    // no schema change (Favorite has no Prisma relation to join on).
+    const rows = await this.prisma.favorite.findMany({
       where: { userId },
       select: { professionalId: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
+    if (!rows.length) return [];
+    const profiles = await this.prisma.professionalProfile.findMany({
+      where: { id: { in: rows.map(row => row.professionalId) } },
+      select: { id: true, fullName: true, avatarUrl: true, title: true,
+        verificationStatus: true, averageRating: true, totalReviewsCount: true,
+        isAvailable: true, baseCity: true, startingPrice: true,
+        engineerProfile: { select: { consultationFee: true } } },
+    });
+    const byId = new Map(profiles.map(profile => [profile.id, profile]));
+    return rows.map(row => ({ professionalId: row.professionalId, createdAt: row.createdAt,
+      professional: byId.get(row.professionalId) ?? null }));
   }
 
   async add(userId: string, professionalId: string) {

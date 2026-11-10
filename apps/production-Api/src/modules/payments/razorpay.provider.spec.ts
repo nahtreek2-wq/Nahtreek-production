@@ -22,6 +22,25 @@ describe('razorpay provider', () => {
     delete process.env.RAZORPAY_KEY_SECRET;
     expect(new RazorpayProvider().enabled).toBe(false);
   });
+  it('detects key mode and refuses cross-mode deploys', () => {
+    expect(new RazorpayProvider().keyMode).toBe('test');
+    process.env.RAZORPAY_KEY_ID = 'rzp_live_id';
+    expect(new RazorpayProvider().keyMode).toBe('live');
+    process.env.APP_ENV = 'production';
+    process.env.RAZORPAY_KEY_ID = 'rzp_test_id';
+    expect(() => new RazorpayProvider().assertKeyMode()).toThrow(/TEST keys/);
+    process.env.APP_ENV = 'preview';
+    process.env.RAZORPAY_KEY_ID = 'rzp_live_id';
+    expect(() => new RazorpayProvider().assertKeyMode()).toThrow(/LIVE keys/);
+    process.env.RAZORPAY_KEY_ID = 'rzp_test_id';
+    expect(() => new RazorpayProvider().assertKeyMode()).not.toThrow();
+  });
+  it('lists refunds for the retry guard', async () => {
+    fetchMock.mockResolvedValue({ok: true, json: async () => ({items: [{id: 'rfnd_1', status: 'processed', amount: 200000}]})});
+    await expect(new RazorpayProvider().fetchRefunds('pay_1')).resolves.toEqual(
+      [{id: 'rfnd_1', status: 'processed', amount: 200000}]);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.razorpay.com/v1/payments/pay_1/refunds');
+  });
   it('creates orders with basic auth and paisa amounts', async () => {
     fetchMock.mockResolvedValue({ok: true, json: async () => ({id: 'order_1', amount: 200000, currency: 'INR', status: 'created'})});
     const order = await new RazorpayProvider().createOrder({amountPaisa: 200000, currency: 'INR', receipt: 'pay', notes: {a: 'b'}});

@@ -2,9 +2,11 @@
  * Presentation tokens for NAHTREEK Professionals. Same visual language as the
  * Home app: navy surfaces, white cards, construction-yellow actions with navy
  * content (white fails AA on yellow). The Pro app reads picture-first:
- * ProIconChip puts big recognizable glyphs on solid color blocks so each row
- * is understood before its words are read. Tinted soft colors remain for
- * small status badges and info bands.
+ * ProIconChip puts big recognizable glyphs on solid navy blocks so each row
+ * is understood before its words are read. Icons are one natural navy
+ * everywhere; red and green appear only for semantic blocked/error and
+ * success states. Tinted soft colors remain for small status badges and
+ * info bands.
  */
 export const ProColors = {
   primary: '#0B2D5B',

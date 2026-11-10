@@ -20,6 +20,7 @@ import {
   BorderRadius,
 } from '@nahtreek/design-system';
 import {ClientColors} from '../design-system/tokens';
+import {inrMonth} from '../utils/format';
 import {Avatar, Icon, ICONS, BottomSheet, Button} from '../components/ui';
 import {IconName} from '../components/ui/Icon';
 import {StateDistrictFields} from '../components/StateDistrictFields';
@@ -250,7 +251,7 @@ export function ProfileScreen() {
         {
           icon: ICONS.ai,
           label: 'NAHTREEK AI Pro',
-          value: aiBilling?.effective ? 'Active' : '₹129/month',
+          value: aiBilling?.effective ? 'Active' : aiBilling ? inrMonth(aiBilling.feePaisa) : 'View plans',
           onPress: () => navigation.navigate('AiPlanner'),
         },
         {

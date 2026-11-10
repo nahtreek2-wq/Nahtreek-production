@@ -1,5 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import {Colors, Spacing, Typography} from '@nahtreek/design-system';
 
@@ -7,6 +8,7 @@ export function ConnectivityNotice() {
   const [online, setOnline] = useState(true);
   const [restored, setRestored] = useState(false);
   const previous = useRef<boolean | undefined>();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => NetInfo.addEventListener(state => {
     const next = state.isConnected !== false && state.isInternetReachable !== false;
@@ -20,7 +22,9 @@ export function ConnectivityNotice() {
 
   if (online && !restored) return null;
   const offline = !online;
-  return <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.banner, offline ? styles.offline : styles.online]}>
+  // Mounted above the navigator: clear the notch/status bar instead of
+  // overlapping it, extending the banner's own background upward.
+  return <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.banner, offline ? styles.offline : styles.online, {paddingTop: insets.top + Spacing.sm}]}>
     <View style={styles.copy}>
       <Text style={[styles.title, offline ? styles.offlineText : styles.onlineText]}>{offline ? 'You are offline' : 'Back online'}</Text>
       <Text style={styles.message}>{offline ? 'Your details stay on this screen. Reconnect before submitting or refreshing.' : 'You can continue where you left off.'}</Text>

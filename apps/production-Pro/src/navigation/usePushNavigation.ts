@@ -26,6 +26,8 @@ export function routeForProPushDestination(payload: ProPushDestinationPayload | 
       return {tab: 'Requests' as const, screen: 'RequestInbox' as const, params: undefined};
     case 'pro-reviews':
       return {tab: 'Profile' as const, screen: 'Reviews' as const, params: undefined};
+    case 'support':
+      return {tab: 'Profile' as const, screen: 'Support' as const, params: undefined};
     case 'pro-profile':
       return {tab: 'Profile' as const, screen: 'ProfileOverview' as const, params: undefined};
     case 'pro-home':

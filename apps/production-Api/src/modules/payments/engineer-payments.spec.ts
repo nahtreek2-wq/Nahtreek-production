@@ -69,6 +69,7 @@ function setup(over: {req?: any; sreq?: any; pay?: any; pays?: any[]; provider?:
     fetchPayment: jest.fn(), createOnHoldTransfer: jest.fn().mockResolvedValue({id: 'trf_1'}),
     createDirectTransfer: jest.fn().mockResolvedValue({id: 'trf_1'}), releaseTransfer: jest.fn().mockResolvedValue({id: 'trf_1'}),
     createRefund: jest.fn().mockResolvedValue({id: 'rfnd_1', status: 'pending'}),
+    fetchRefunds: jest.fn().mockResolvedValue([]),
     verifyPaymentSignature: jest.fn().mockReturnValue(true), verifyWebhookSignature: jest.fn().mockReturnValue(true),
     ...over.provider};
   const push = {dispatch: jest.fn().mockResolvedValue({})};

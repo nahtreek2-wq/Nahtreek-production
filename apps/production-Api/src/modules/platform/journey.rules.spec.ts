@@ -10,6 +10,12 @@ describe('service journey rules',()=>{
   expect(actionStage('PENDING','CANCEL',false)).toBeNull();
   expect(actionStage('PENDING','CANCEL',true)).toBe('CANCELLED');
  });
+ it('lets only the client reschedule before work starts',()=>{
+  expect(actionStage('PENDING','RESCHEDULE',true)).toBe('PENDING');
+  expect(actionStage('ACCEPTED','RESCHEDULE',true)).toBe('ACCEPTED');
+  expect(actionStage('PENDING','RESCHEDULE',false)).toBeNull();
+  expect(actionStage('EN_ROUTE','RESCHEDULE',true)).toBeNull();
+ });
  it('only exposes precise recent positions as fresh',()=>{
   const p={online:true,accuracy:20,observedAt:new Date()};
   expect(freshLocation(p)).toBe(true);

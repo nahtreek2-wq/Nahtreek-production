@@ -7,15 +7,29 @@ import {
   StyleSheet,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {
   Colors,
   Typography,
   Spacing,
   BorderRadius,
 } from '@nahtreek/design-system';
-import {ClientColors} from '../design-system/tokens';
-import {AppHeader, Card, Icon, ICONS, SectionHeader} from '../components/ui';
+import {AppHeader, Button, Card, Icon, ICONS, Input, SectionHeader} from '../components/ui';
+import {api} from '../services/apiClient';
+import {useSessionStore} from '../stores/session';
+import {useToast} from '../stores/toast';
+import type {RootStackParamList} from '../navigation/types';
+
+type SupportTicket = {id: string; subject: string; message: string; bookingRef: string | null;
+  status: 'OPEN' | 'ANSWERED' | 'RESOLVED'; adminReply: string | null; createdAt: string};
+
+const TICKET_STATUS: Record<SupportTicket['status'], string> = {
+  OPEN: 'Open — support will reply here',
+  ANSWERED: 'Answered by support',
+  RESOLVED: 'Resolved',
+};
 
 const FAQS = [
   {
@@ -28,7 +42,7 @@ const FAQS = [
   },
   {
     q: 'How do I receive progress updates?',
-    a: 'Open Request details to see status updates. Messages become available after the request is accepted.',
+    a: 'Open Request details to see status updates. Messages open as soon as your request exists — you can clarify details before acceptance.',
   },
   {
     q: 'What happens without internet?',
@@ -37,9 +51,34 @@ const FAQS = [
 ];
 
 export function HelpScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
+  const token = useSessionStore(state => state.accessToken);
+  const cache = useQueryClient();
   const [open, setOpen] = useState<number | null>(0);
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+  const [bookingRef, setBookingRef] = useState('');
+  const tickets = useQuery({
+    queryKey: ['support-tickets'],
+    queryFn: () => api.get<{data: SupportTicket[]}>('/support/tickets/me?limit=20').then(res => res.data),
+    enabled: Boolean(token),
+    retry: 1,
+  });
+  const file = useMutation({
+    mutationFn: () => api.post('/support/tickets', {
+      subject: subject.trim(), message: message.trim(),
+      ...(bookingRef.trim() ? {bookingRef: bookingRef.trim()} : {}),
+    }),
+    onSuccess: () => {
+      setSubject(''); setMessage(''); setBookingRef('');
+      void cache.invalidateQueries({queryKey: ['support-tickets']});
+      toast('Support request sent. Replies appear here and in Notifications.', 'success');
+    },
+    onError: error => toast(error instanceof Error ? error.message : 'Could not send your request.', 'error'),
+  });
+  const valid = subject.trim().length >= 4 && message.trim().length >= 10;
 
   return (
     <View style={styles.container}>
@@ -72,11 +111,61 @@ export function HelpScreen() {
           </Card>
         ))}
 
+        <SectionHeader title="Contact support" />
+        {!token ? (
+          <Card style={styles.faq}>
+            <Text style={styles.faqA}>Sign in to send a support request and track replies here.</Text>
+            <View style={styles.loginGap}>
+              <Button label="Sign in" onPress={() => navigation.navigate('Login')} />
+            </View>
+          </Card>
+        ) : (
+          <Card style={styles.form}>
+            <Input label="Subject" value={subject} onChangeText={setSubject}
+              placeholder="e.g. Refund not received" maxLength={120} />
+            <Input label="Booking or request ID (optional)" value={bookingRef} onChangeText={setBookingRef}
+              placeholder="Paste from Request details" maxLength={40} autoCapitalize="none" />
+            <Input label="Describe the issue" value={message} onChangeText={setMessage} multiline
+              placeholder="What happened? Include dates and amounts if it is about a payment." maxLength={2000} />
+            <Button label="Send support request" loading={file.isPending} loadingLabel="Sending"
+              disabled={!valid || file.isPending} onPress={() => file.mutate()} />
+          </Card>
+        )}
+        {token ? (
+          <>
+            <SectionHeader title="My support requests" />
+            {tickets.isPending ? (
+              <Card style={styles.faq}><Text style={styles.faqA}>Loading your requests…</Text></Card>
+            ) : tickets.isError ? (
+              <Card style={styles.faq}>
+                <Text style={styles.faqA}>Could not load your requests.</Text>
+                <View style={styles.loginGap}>
+                  <Button label={tickets.isFetching ? 'Checking…' : 'Try again'} variant="secondary"
+                    onPress={() => void tickets.refetch()} />
+                </View>
+              </Card>
+            ) : tickets.data?.length ? tickets.data.map(ticket => (
+              <Card key={ticket.id} style={styles.faq}>
+                <Text style={styles.faqQ}>{ticket.subject}</Text>
+                <Text style={styles.ticketStatus}>{TICKET_STATUS[ticket.status]}</Text>
+                <Text style={styles.faqA}>{ticket.message}</Text>
+                {ticket.adminReply ? (
+                  <View style={styles.replyBox}>
+                    <Text style={styles.replyLabel}>Support reply</Text>
+                    <Text style={styles.replyText}>{ticket.adminReply}</Text>
+                  </View>
+                ) : null}
+              </Card>
+            )) : (
+              <Card style={styles.faq}><Text style={styles.faqA}>No support requests yet. Replies from the team appear here.</Text></Card>
+            )}
+          </>
+        ) : null}
+
         <View style={styles.note}>
           <Icon name={ICONS.support} size={14} color={Colors.slate500} />
           <Text style={styles.noteLabel}>
-            For an accepted request, contact your professional through Messages.
-            Additional support contact details will appear when available.
+            For job questions, contact your professional through Messages. Use support requests for payments, refunds and account issues.
           </Text>
         </View>
       </ScrollView>
@@ -124,6 +213,35 @@ const styles = StyleSheet.create({
   },
   faq: {
     marginBottom: Spacing.sm,
+  },
+  form: {
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  loginGap: {
+    marginTop: Spacing.sm,
+  },
+  ticketStatus: {
+    ...Typography.badge,
+    color: Colors.navyMid,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  replyBox: {
+    marginTop: Spacing.sm,
+    backgroundColor: Colors.softBlue,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    gap: 2,
+  },
+  replyLabel: {
+    ...Typography.badge,
+    fontWeight: '700',
+    color: Colors.navyDeep,
+  },
+  replyText: {
+    ...Typography.body,
+    color: Colors.slate800,
   },
   faqHead: {
     flexDirection: 'row',

@@ -1,14 +1,19 @@
-import React from 'react';
-import {View, Text, ScrollView, StyleSheet} from 'react-native';
+import React, {useState} from 'react';
+import {Pressable, TouchableOpacity, View, Text, ScrollView, StyleSheet} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useQuery} from '@tanstack/react-query';
-import {Colors, Typography, Spacing, BorderRadius} from '@nahtreek/design-system';
-import {AppHeader, Avatar, Card, Icon, ICONS, MemberBadge, RatingStars, SectionHeader, VerifiedBadge} from '../components/ui';
+import {Colors, Typography, Spacing} from '@nahtreek/design-system';
+import {AppHeader, Avatar, BottomSheet, Button, Card, Icon, ICONS, MemberBadge, RatingStars, SectionHeader, VerifiedBadge} from '../components/ui';
+import {ServiceBookingForm} from '../components/ServiceBookingForm';
 import {EngineerCardSkeleton} from '../components/SkeletonLoader';
 import {ErrorState} from '../components/ui';
 import {api} from '../services/apiClient';
+import {useFavoritesList, useToggleFavorite} from '../services/queries';
+import {useServiceCategories, type ServiceCategory} from '../services/platformQueries';
+import {useSessionStore} from '../stores/session';
+import {useToast} from '../stores/toast';
 import type {RootStackParamList} from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -27,9 +32,42 @@ export function ProviderProfileScreen() {
   const detail = useQuery({queryKey: ['provider-profile', professionalProfileId],
     queryFn: () => api.get<ProviderDetailDto>(`/discovery/providers/${professionalProfileId}`), retry: 1});
   const pro = detail.data;
+  const toast = useToast();
+  const token = useSessionStore(state => state.accessToken);
+  const favoritesQ = useFavoritesList();
+  const toggleFavorite = useToggleFavorite();
+  const fav = (favoritesQ.data ?? []).some(f => f.professionalId === professionalProfileId);
+  const onHeart = () => {
+    if (!token) { navigation.navigate('Login'); return; }
+    if (toggleFavorite.isPending) return;
+    toggleFavorite.mutate({professionalId: professionalProfileId, isAdding: !fav}, {
+      onSuccess: () => toast(!fav ? 'Saved to your list' : 'Removed from saved', 'success'),
+      onError: () => toast('Could not update saved professionals. Please try again.', 'error'),
+    });
+  };
+  // Booking needs a service id: match the provider's offered categories to
+  // the live catalogue. No match (stale catalogue) falls back to browsing.
+  const categories = useServiceCategories();
+  const [sheet, setSheet] = useState(false);
+  const [service, setService] = useState<ServiceCategory | null>(null);
+  const offered = (categories.data ?? []).filter(item =>
+    (pro?.serviceCategories ?? []).some(key =>
+      key === item.id || key === item.slug || key.toLowerCase() === item.title.toLowerCase()));
+  const requestService = () => {
+    if (!token) { navigation.navigate('Login'); return; }
+    if (!offered.length) { navigation.navigate('Services', {}); return; }
+    setService(offered.length === 1 ? offered[0] : null);
+    setSheet(true);
+  };
 
   return <View style={[styles.root, {paddingBottom: insets.bottom}]}>
-    <AppHeader title="Professional profile" subtitle={pro ? `${pro.fullName} · ${pro.title}` : undefined} onBack={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('MainTabs')} />
+    <AppHeader title="Professional profile" subtitle={pro ? `${pro.fullName} · ${pro.title}` : undefined} onBack={() => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('MainTabs')}
+      right={
+        <TouchableOpacity onPress={onHeart} accessibilityRole="button"
+          accessibilityLabel={fav ? 'Remove from saved' : 'Save professional'} style={styles.heart}>
+          <Icon name={fav ? ICONS.heart : ICONS.heartOutline} size={20} color={Colors.white} />
+        </TouchableOpacity>
+      } />
     {detail.isPending ? <EngineerCardSkeleton /> : detail.isError || !pro ? (
       <ErrorState title="Could not load this professional" message="Check your connection and try again."
         actionLabel={detail.isFetching ? 'Checking…' : 'Try again'} onAction={() => void detail.refetch()} />
@@ -73,14 +111,41 @@ export function ProviderProfileScreen() {
           </Card>
         ))}
         <Text style={styles.hint}>Reviews come only from completed NAHTREEK bookings, so every rating here is from a real customer.</Text>
+        {pro.serviceCategories.length > 0 ? (
+          <View style={styles.servicesCard}>
+            <Text style={styles.servicesTitle}>Services offered</Text>
+            {pro.serviceCategories.map(key => (
+              <Text key={key} style={styles.meta}>• {(categories.data ?? []).find(item => item.id === key || item.slug === key)?.title ?? key}</Text>
+            ))}
+          </View>
+        ) : null}
+        <Button label="Request this professional" onPress={requestService} />
       </ScrollView>
     )}
+    <BottomSheet visible={sheet} onClose={() => { setSheet(false); setService(null); }}
+      title={service ? 'Tell us about the work' : 'Choose a service'} subtitle={pro ? `Requesting ${pro.fullName}` : undefined}>
+      {service && pro ? (
+        <ServiceBookingForm serviceId={service.id} preferred={{id: pro.id, fullName: pro.fullName}}
+          onBooked={id => { setSheet(false); setService(null); navigation.navigate('ServiceRequestDetail', {requestId: id, submitted: true}); }} />
+      ) : offered.map(item => (
+        <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Request ${item.title}`}
+          onPress={() => setService(item)} style={styles.serviceRow}>
+          <Text style={styles.serviceTitle}>{item.title}</Text>
+          <Icon name={ICONS.chevronRight} size={20} color={Colors.navyMid} />
+        </Pressable>
+      ))}
+    </BottomSheet>
   </View>;
 }
 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: Colors.offWhite},
-  body: {padding: Spacing.md, gap: Spacing.md},
+  body: {padding: 20, gap: Spacing.md},
+  heart: {padding: 8},
+  servicesCard: {gap: 4, backgroundColor: Colors.white, borderRadius: 14, padding: Spacing.lg},
+  servicesTitle: {fontSize: 15, fontWeight: '700', color: Colors.navyDeep, marginBottom: 2},
+  serviceRow: {minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10},
+  serviceTitle: {flex: 1, fontSize: 16, fontWeight: '600', color: Colors.navyDeep},
   head: {flexDirection: 'row', gap: Spacing.md, alignItems: 'center'},
   headCopy: {flex: 1, gap: 2},
   nameRow: {flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flexWrap: 'wrap'},

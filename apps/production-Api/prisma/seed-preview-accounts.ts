@@ -35,6 +35,9 @@ const LOCATIONS = [
   {city: 'Coimbatore', state: 'Tamil Nadu', latitude: 11.0168, longitude: 76.9558},
   {city: 'Krishnagiri', state: 'Tamil Nadu', latitude: 12.5266, longitude: 78.2147},
   {city: 'Chennai', state: 'Tamil Nadu', latitude: 13.0827, longitude: 80.2707},
+  {city: 'Salem', state: 'Tamil Nadu', latitude: 11.6643, longitude: 78.1460},
+  {city: 'Tiruchirappalli', state: 'Tamil Nadu', latitude: 10.7905, longitude: 78.7047},
+  {city: 'Madurai', state: 'Tamil Nadu', latitude: 9.9252, longitude: 78.1198},
 ];
 const SPECIALIZATIONS = [
   'Structural Design', 'Architectural 3D', 'Site Plan Approval',
@@ -240,7 +243,9 @@ async function main() {
             bio: 'Fictional preview account for NAHTREEK testing. Not an identity-verified professional.',
             yearsOfExperience: 3 + (account.index % 9),
             onboardingStep: 'IDENTITY',
-            verificationStatus: VerificationStatus.NOT_SUBMITTED,
+            // Preview-only: verified so discovery lists them. The (Demo)
+            // name marker, bio and audit row keep them visibly synthetic.
+            verificationStatus: VerificationStatus.VERIFIED,
             isAvailable: true,
             baseCity: location.city,
             baseState: location.state,
@@ -248,7 +253,7 @@ async function main() {
             baseStateNorm: normPlace(location.state),
             baseLatitude: location.latitude,
             baseLongitude: location.longitude,
-            serviceCategories: engineer ? [] : [service[0]],
+            serviceCategories: engineer ? [] : [service[0], SERVICES[(account.index + 5) % SERVICES.length][0]],
             startingPrice: engineer ? 1200 + (account.index % 5) * 300 : 300 + (account.index % 5) * 100,
             serviceAreas: {create: {name: location.city, city: location.city}},
           }});
@@ -265,6 +270,14 @@ async function main() {
               specializationId: specializationByName.get(specialization)!,
             }});
           }
+          // Fresh presence so ASAP matching finds seeded providers right
+          // after a seed run; real pros overwrite this from the Pro app.
+          await tx.providerPresence.upsert({where: {professionalProfileId: profile.id},
+            create: {professionalProfileId: profile.id, online: true,
+              latitude: location.latitude, longitude: location.longitude,
+              accuracy: 25, observedAt: new Date()},
+            update: {online: true, latitude: location.latitude, longitude: location.longitude,
+              accuracy: 25, observedAt: new Date()}});
         }
         await tx.auditLog.create({data: {
           userId: user.id,

@@ -7,7 +7,8 @@ import type {PaymentHooks} from '../../../packages/mobile-booking/PaymentSection
 import {CheckoutCancelledError} from '../../../packages/mobile-booking/razorpayGateway';
 
 function setup(hooks: PaymentHooks, props?: {requestKind?: 'service' | 'engineer'; quoteAmount?: number;
-  receiptEmail?: string | null; onSaveReceiptEmail?: (email: string) => Promise<unknown>; isPlus?: boolean}) {
+  receiptEmail?: string | null; onSaveReceiptEmail?: (email: string) => Promise<unknown>; isPlus?: boolean;
+  plusDiscount?: {percent: number; capPaisa: number} | null}) {
   const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
   let screen!: renderer.ReactTestRenderer;
   const render = async () => {
@@ -15,7 +16,7 @@ function setup(hooks: PaymentHooks, props?: {requestKind?: 'service' | 'engineer
       screen = renderer.create(<QueryClientProvider client={client}>
         <PaymentSection requestId="req" quoteAmount={props?.quoteAmount ?? 2000} requestKind={props?.requestKind}
           hooks={hooks} receiptEmail={props?.receiptEmail} onSaveReceiptEmail={props?.onSaveReceiptEmail}
-          isPlus={props?.isPlus} />
+          isPlus={props?.isPlus} plusDiscount={props?.plusDiscount} />
       </QueryClientProvider>);
     });
     await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
@@ -139,13 +140,20 @@ it('tells Plus members their consultation discount applies at checkout', async (
     loadStatus: jest.fn().mockResolvedValue(null),
     checkout: jest.fn(),
   };
-  const plus = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500, isPlus: true});
+  const plus = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500, isPlus: true,
+    plusDiscount: {percent: 2, capPaisa: 10000}});
   await plus.render();
   expect(plus.texts()).toContain('Your Plus 2% discount (up to ₹100) applies automatically at checkout.');
   plus.done();
+  const noPlan = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500, isPlus: true});
+  await noPlan.render();
+  // Plan endpoint unreachable: generic sentence, never stale hard numbers.
+  expect(noPlan.texts()).toContain('Your Plus discount applies automatically at checkout.');
+  expect(noPlan.texts()).not.toContain('2% discount (up to');
+  noPlan.done();
   const regular = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500});
   await regular.render();
-  expect(regular.texts()).not.toContain('Plus 2% discount');
+  expect(regular.texts()).not.toContain('Plus discount');
   regular.done();
 });
 

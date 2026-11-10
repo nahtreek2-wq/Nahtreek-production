@@ -1,18 +1,18 @@
 import React, {useState} from 'react';
 import {Animated as NativeAnimated, FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
-import {Colors} from '@nahtreek/design-system';
+import {Colors, IndiaLocale} from '@nahtreek/design-system';
 import {ClientColors} from '../design-system/tokens';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {AppHeader, Avatar, BottomSheet, Button, Icon, ICONS, MemberBadge} from '../components/ui';
+import {AppHeader, Avatar, BottomSheet, Button, Icon, ICONS, MemberBadge, RatingStars} from '../components/ui';
 import {
   useServiceProviders,
   type ServiceProvider,
 } from '../services/platformQueries';
 import {useCity} from '../stores/city';
 import {useSessionStore} from '../stores/session';
-import {useUpdateClientProfile} from '../services/queries';
+import {useFavoritesList, useToggleFavorite, useUpdateClientProfile} from '../services/queries';
 import {useToast} from '../stores/toast';
 import {DistrictLocationPicker} from '../components/DistrictLocationPicker';
 import {isApiConfigured} from '../services/config';
@@ -39,6 +39,18 @@ export function ServiceProvidersScreen() {
   const updateProfile = useUpdateClientProfile();
   const toast = useToast();
   const providers = useServiceProviders(city, route.params.serviceId, selectedState);
+  const favoritesQ = useFavoritesList();
+  const toggleFavorite = useToggleFavorite();
+  const savedIds = new Set((favoritesQ.data ?? []).map(f => f.professionalId));
+  const onHeart = (item: ServiceProvider) => {
+    if (!token) { nav.navigate('Login'); return; }
+    if (toggleFavorite.isPending) return;
+    const adding = !savedIds.has(item.id);
+    toggleFavorite.mutate({professionalId: item.id, isAdding: adding}, {
+      onSuccess: () => toast(adding ? 'Saved to your list' : 'Removed from saved', 'success'),
+      onError: () => toast('Could not update saved professionals. Please try again.', 'error'),
+    });
+  };
   const [selected, setSelected] = useState<ServiceProvider | null>(null);
   const [nearbyOpen, setNearbyOpen] = useState(false);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
@@ -162,6 +174,14 @@ export function ServiceProvidersScreen() {
                   {item.title} · {item.baseCity}
                 </Text>
               </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={savedIds.has(item.id) ? `Remove ${item.fullName} from saved` : `Save ${item.fullName}`}
+                hitSlop={8}
+                onPress={() => onHeart(item)}
+                style={styles.heart}>
+                <Icon name={savedIds.has(item.id) ? ICONS.heart : ICONS.heartOutline} size={22} color={Colors.navyMid} />
+              </Pressable>
               <Icon name={ICONS.chevronRight} size={22} color={Colors.navyMid} />
             </Pressable>
             <Text style={s.text}>{item.yearsOfExperience} years of experience · Verified profile</Text>
@@ -172,13 +192,10 @@ export function ServiceProvidersScreen() {
               </Text>
             </View>
             {item.totalReviewsCount > 0 ? (
-              <Text style={s.text}>
-                {item.averageRating.toFixed(1)} ★ · {item.totalReviewsCount}{' '}
-                reviews
-              </Text>
+              <RatingStars rating={item.averageRating} count={item.totalReviewsCount} />
             ) : <Text style={s.text}>New profile · No reviews yet</Text>}
             <View style={styles.pricePanel}>
-              <Text style={styles.price}>{item.startingPrice != null ? `From ₹${item.startingPrice.toLocaleString('en-IN')}` : 'Ask for a quote'}</Text>
+              <Text style={styles.price}>{item.startingPrice != null ? `From ${IndiaLocale.formatCurrency(item.startingPrice)}` : 'Ask for a quote'}</Text>
               {item.startingPrice != null ? <Text style={s.text}>Final cost confirmed before work</Text> : null}
             </View>
             <Pressable
@@ -240,6 +257,7 @@ const styles = StyleSheet.create({
   cardPressed: {opacity: 0.85},
   nameRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
   name: {flexShrink: 1},
+  heart: {padding: 6, marginRight: 2},
   addressLink: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, marginBottom: 8, minHeight: 72},
   disabledAction: {opacity: 0.55},
   locationIcon: {width: 48, height: 48, alignItems: 'center', justifyContent: 'center'},
@@ -257,7 +275,5 @@ const styles = StyleSheet.create({
   mapLabel: {flex: 1, fontSize: 15, lineHeight: 22, fontWeight: '600', color: '#111F35'},
   changeCityButton: {minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: ClientColors.accentSoft},
   changeCityText: {fontSize: 13, fontWeight: '700', color: Colors.navyDeep},
-  cityOption: {minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.slate200},
-  cityOptionText: {flex: 1, color: Colors.navyDeep, fontSize: 15, fontWeight: '600'},
 });
 import {ServiceBookingForm} from '../components/ServiceBookingForm';

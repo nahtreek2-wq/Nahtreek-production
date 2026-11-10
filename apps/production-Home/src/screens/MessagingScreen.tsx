@@ -85,7 +85,7 @@ export function MessagingScreen() {
             <View style={styles.footerIntro}>
               <Text style={styles.footerTitle}>Start a new conversation</Text>
               <Text style={styles.footerText}>
-                Send a request. The chat opens here when your professional accepts it.
+                Send a request. The chat opens here immediately — you can clarify details before acceptance.
               </Text>
               <View style={styles.footerActions}>
                 <TouchableOpacity accessibilityRole="button" style={styles.footerBtn} onPress={() => navigation.navigate('Services')}>

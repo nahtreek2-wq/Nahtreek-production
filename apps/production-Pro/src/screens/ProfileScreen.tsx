@@ -26,7 +26,6 @@ import {mediaUrl, saveProfessionalPhoto} from '../services/media';
 import {useQueryClient} from '@tanstack/react-query';
 import {MotionReveal} from '../components/MotionReveal';
 import {ProIconChip} from '../components/ProIconChip';
-import type {IconChipTone} from '../components/ProIconChip';
 import {WorkVisual} from '../components/WorkVisual';
 import {ProColors, ProSpacing, ProType} from '../theme/professionalTheme';
 import {useReducedMotion} from '../../../../packages/mobile-ui/useReducedMotion';
@@ -59,16 +58,6 @@ type ProfileActionRowProps = {
   onPress: () => void;
 };
 
-const ROW_TONES: Record<string, IconChipTone> = {
-  'cash-multiple': 'amber',
-  'crown-outline': 'amber',
-  'star-circle-outline': 'amber',
-  'bell-outline': 'blue',
-  'tune-variant': 'slate',
-  'file-certificate-outline': 'green',
-  'shield-check-outline': 'green',
-};
-
 function ProfileActionRow({
   icon,
   title,
@@ -88,7 +77,7 @@ function ProfileActionRow({
         last && styles.actionRowLast,
         pressed && (reducedMotion ? styles.rowPressed : styles.actionRowPressed),
       ]}>
-      <ProIconChip name={icon} tone={ROW_TONES[icon] ?? 'navy'} size={44} iconSize={23} />
+      <ProIconChip name={icon} size={44} iconSize={23} />
       <View style={styles.flex}>
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowText}>{description}</Text>
@@ -414,9 +403,7 @@ export function ProfileScreen() {
                     ? ProColors.success
                     : isRejected
                     ? ProColors.error
-                    : isUnderReview
-                    ? ProColors.primary
-                    : ProColors.warning
+                    : ProColors.primary
                 }
               />
             </View>
@@ -487,22 +474,15 @@ export function ProfileScreen() {
           </View>
         </MotionReveal>
 
-        <Text style={styles.groupLabel}>PAYMENTS & DUES</Text>
+        <Text style={styles.groupLabel}>PAYMENTS & MEMBERSHIP</Text>
         <MotionReveal delay={108}>
           <View style={styles.settingsGroup}>
             <ProfileActionRow
               icon="cash-multiple"
               title="Commission dues"
               description="Settle your pay-at-home platform share"
-              last
               onPress={() => navigation.navigate('Dues')}
             />
-          </View>
-        </MotionReveal>
-
-        <Text style={styles.groupLabel}>PRO MEMBERSHIP</Text>
-        <MotionReveal delay={115}>
-          <View style={styles.settingsGroup}>
             <ProfileActionRow
               icon="crown-outline"
               title="Pro membership"
@@ -526,8 +506,14 @@ export function ProfileScreen() {
               icon="tune-variant"
               title="Notification preferences"
               description="Choose the alerts you want to receive"
-              last
               onPress={() => navigation.navigate('NotificationSettings')}
+            />
+            <ProfileActionRow
+              icon="lifebuoy"
+              title="Help & support"
+              description="Payments, dues and account issues"
+              last
+              onPress={() => navigation.navigate('Support')}
             />
           </View>
         </MotionReveal>

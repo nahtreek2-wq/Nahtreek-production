@@ -16,6 +16,13 @@ const CLIENT_CANCELLABLE_STATUSES = new Set<RequestStatus>([
   RequestStatus.ACCEPTED,
 ]);
 
+// Reviews render verbatim on profiles: collapse blank-line floods and padding
+// spaces (mirrors cleanReviewComment in the Home app) so one paste cannot
+// break every card that shows it.
+function cleanReviewComment(value: string): string {
+  return value.replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 const ENGINEER_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   DRAFT: [RequestStatus.PENDING],
   PENDING: [RequestStatus.ACCEPTED, RequestStatus.DECLINED],
@@ -184,7 +191,7 @@ export class RequestsService {
         professionalProfileId: request.engineer.professionalProfileId,
         engineerRequestId: request.id,
         rating: review.rating,
-        comment: review.comment.trim(),
+        comment: cleanReviewComment(review.comment),
       },
     });
     await this.recalculateRating(request.engineer.professionalProfileId);
@@ -203,7 +210,7 @@ export class RequestsService {
   }
 
   async addServiceReview(id: string, userId: string, review: CreateReviewDto) {
-    const comment = review.comment.trim();
+    const comment = cleanReviewComment(review.comment);
     if (comment.length < 3) throw new BadRequestException('Write at least 3 characters about your experience');
     const request = await this.prisma.serviceRequest.findFirst({
       where: {id, client: {userId}},

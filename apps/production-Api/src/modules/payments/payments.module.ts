@@ -3,12 +3,12 @@ import {ChatModule} from '../chat/chat.module';
 import {NotificationsModule} from '../notifications/notifications.module';
 import {MembershipsModule} from '../memberships/memberships.module';
 import {BillingProviderModule} from './billing-provider.module';
-import {PaymentsController, PaymentsWebhookController} from './payments.controller';
+import {PaymentsController, PaymentsMaintenanceController, PaymentsWebhookController} from './payments.controller';
 import {PaymentsService} from './payments.service';
 
 @Module({
   imports: [NotificationsModule, ChatModule, MembershipsModule, BillingProviderModule],
-  controllers: [PaymentsController, PaymentsWebhookController],
+  controllers: [PaymentsController, PaymentsMaintenanceController, PaymentsWebhookController],
   providers: [PaymentsService],
   exports: [PaymentsService],
 })

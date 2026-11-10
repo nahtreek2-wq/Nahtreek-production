@@ -18,6 +18,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   Colors,
   BorderRadius,
+  IndiaLocale,
   Spacing,
   Typography,
 } from '@nahtreek/design-system';
@@ -120,7 +121,7 @@ export function SearchScreen() {
       priceLabel={
         item.consultationFee === undefined
           ? 'On request'
-          : `₹${item.consultationFee.toLocaleString('en-IN')}`
+          : IndiaLocale.formatCurrency(item.consultationFee)
       }
       onPress={() =>
         navigation.navigate('EngineerProfile', {engineerId: item.id})

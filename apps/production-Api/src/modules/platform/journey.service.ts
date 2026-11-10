@@ -14,6 +14,7 @@ import {resolveServiceCategory, serviceCategoryKeys} from './service-category';
 
 function journeyNotification(action: string, stage: string) {
   const messages: Record<string, [string, string]> = {
+    RESCHEDULE: ['Visit time changed', 'The customer picked a new visit time. Tap to review it.'],
     ACCEPT: ['Booking confirmed', 'Your professional accepted. Tap to track the visit.'],
     DECLINE: ['That pro can’t make it', 'No replacement was assigned. Pick another verified pro in one tap.'],
     DEPART: ['Your pro is on the way', 'Follow the visit live and keep your start code ready.'],
@@ -181,8 +182,14 @@ export class JourneyService {
     const client = j.request.client.userId === userId;
     const p = j.request.provider.presence;
     const {request, payloadHash, idempotencyKey, startCode, ...safe} = j;
+    // Plus terms travel with the booking so neither app hardcodes penalty or
+    // window figures — the values below are the same constants enforcement
+    // uses, and null for non-Plus bookings.
+    const plus = await isPlusClient(this.db, j.request.client.userId).catch(() => false);
     return {...safe, startCode: client && ['ARRIVED'].includes(j.stage) ? startCode : undefined,
       tracking: j.stage === 'EN_ROUTE' && p ? {latitude: p.latitude, longitude: p.longitude, updatedAt: p.observedAt, stale: !freshLocation(p)} : null,
+      plusTerms: plus ? {acceptWindowMs: PLUS_ACCEPT_WINDOW_MS, arrivalGraceMs: PLUS_ARRIVAL_GRACE_MS,
+        lateAcceptPenaltyPaisa: PENALTY_LATE_ACCEPT_Paisa, lateArrivalPenaltyPaisa: PENALTY_LATE_ARRIVAL_Paisa} : null,
       serverTime: new Date().toISOString()};
   }
 
@@ -278,6 +285,17 @@ export class JourneyService {
       if (dto.action === 'ISSUE') {
         if (!dto.note || dto.note.trim().length < 10) throw new BadRequestException('Explain the issue so it can be reviewed');
         patch.issue = dto.note.trim();
+      }
+      if (dto.action === 'RESCHEDULE') {
+        const when = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+        if (!when || !Number.isFinite(when.getTime()) || when.getTime() < Date.now()+30*60000 || when.getTime() > Date.now()+30*86400000)
+          throw new BadRequestException('Choose a visit between 30 minutes and 30 days from now');
+        patch.scheduledAt = when;
+        patch.mode = 'SCHEDULED';
+        if (j.stage === 'PENDING') {
+          const plus = await isPlusClient(this.db, snapshot.request.client.userId).catch(() => false);
+          patch.expiresAt = new Date(Date.now() + (plus ? PLUS_ACCEPT_WINDOW_MS : 3600000));
+        }
       }
       await tx.serviceJourney.update({where: {requestId: id}, data: patch});
       const status: RequestStatus = stage === 'COMPLETED' ? 'COMPLETED' : stage === 'CANCELLED' ? 'CANCELLED' : stage === 'DECLINED' ? 'DECLINED' :

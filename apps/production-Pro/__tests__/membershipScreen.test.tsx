@@ -10,9 +10,14 @@ import {CheckoutCancelledError} from '../../../packages/mobile-booking/razorpayG
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
+jest.mock('@react-navigation/bottom-tabs', () => ({
+  useBottomTabBarHeight: () => 0,
+}));
 
+const terms = {memberFeeBps: 700, standardFeeBps: 1000, memberDuesBlockPaisa: 200000,
+  standardDuesBlockPaisa: 50000, freeJobsPerMonth: 1};
 const none: MembershipView = {status: 'NONE', effective: false, currentPeriodStart: null,
-  currentPeriodEnd: null, cancelAtPeriodEnd: false, feePaisa: 39900, currency: 'INR'};
+  currentPeriodEnd: null, cancelAtPeriodEnd: false, feePaisa: 39900, currency: 'INR', terms};
 const active: MembershipView = {...none, status: 'ACTIVE', effective: true,
   currentPeriodEnd: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()};
 
@@ -53,6 +58,21 @@ it('subscribes through checkout and confirm', async () => {
   expect(hooks.subscribe).toHaveBeenCalledTimes(1);
   expect(hooks.checkout).toHaveBeenCalledWith(expect.objectContaining({keyId: 'k', subscriptionId: 'sub'}));
   expect(hooks.confirm).toHaveBeenCalledTimes(1);
+  t.done();
+});
+
+it('renders price and rates from server terms, not hardcoded figures', async () => {
+  const custom = {...none, feePaisa: 49900,
+    terms: {...terms, memberFeeBps: 500, memberDuesBlockPaisa: 300000}};
+  const hooks: MembershipHooks = {
+    load: jest.fn().mockResolvedValue(custom),
+    subscribe: jest.fn(), confirm: jest.fn(), cancel: jest.fn(), checkout: jest.fn(),
+  };
+  const t = setup(hooks);
+  await t.render();
+  expect(t.texts()).toContain('₹499');
+  expect(t.texts()).toContain('5% commission, not 10%');
+  expect(t.texts()).toContain('₹3,000 dues room, not ₹500');
   t.done();
 });
 

@@ -1,7 +1,10 @@
 // At-home collection economics, dependency-free so journey and request
 // flows can enforce dues without importing the payments service.
+export const PLATFORM_FEE_BPS = 1000; // 10% standard commission
+export const MEMBER_FEE_BPS = 700; // 7% for active Pro members
 export const DUES_BLOCK_Paisa = 50000; // ₹500 unsettled commission blocks new accepts
 export const MEMBER_DUES_BLOCK_Paisa = 200000; // Members get ₹2,000 of room before new accepts pause
+export const MEMBER_FREE_JOBS_PER_MONTH = 1; // First booking row of each calendar month bills at 0%
 // Plus client economics: a small engineer-consultation discount funded out of
 // the platform commission (the pro keeps their full share), and speed-SLA
 // penalties that post to the pro's dues when a Plus booking runs slow.

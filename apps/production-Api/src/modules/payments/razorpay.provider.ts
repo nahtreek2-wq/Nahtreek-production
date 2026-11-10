@@ -26,6 +26,25 @@ export class RazorpayProvider {
     return process.env.RAZORPAY_KEY_ID ?? '';
   }
 
+  // Razorpay key prefixes are the only reliable test/live signal. Production
+  // must never run on test keys (no real money moves) and preview must never
+  // run on live keys (real charges from a demo build).
+  get keyMode(): 'test' | 'live' | 'missing' {
+    const id = process.env.RAZORPAY_KEY_ID ?? '';
+    if (!id || !process.env.RAZORPAY_KEY_SECRET) return 'missing';
+    return id.startsWith('rzp_live_') ? 'live' : 'test';
+  }
+
+  assertKeyMode() {
+    const mode = this.keyMode;
+    if (mode === 'missing') return; // requireEnabled() reports this per-call.
+    const env = process.env.APP_ENV ?? '';
+    if (env === 'production' && mode === 'test')
+      throw new Error('FATAL: production is configured with Razorpay TEST keys — real payments cannot move');
+    if ((env === 'preview' || env === 'development') && mode === 'live')
+      throw new Error(`FATAL: ${env} is configured with Razorpay LIVE keys — demo builds must never charge real money`);
+  }
+
   private auth() {
     const id = process.env.RAZORPAY_KEY_ID;
     const secret = process.env.RAZORPAY_KEY_SECRET;
@@ -105,6 +124,14 @@ export class RazorpayProvider {
     const data = await this.call('POST', `/payments/${encodeURIComponent(paymentId)}/refund`, {amount: amountPaisa});
     if (!data?.id) throw new RazorpayError('Razorpay returned no refund id', 502, true);
     return data as RazorpayRefund;
+  }
+
+  // Retry guard: list existing refunds before creating another, so a retried
+  // REFUND_PENDING never double-refunds a payment Razorpay already refunded.
+  async fetchRefunds(paymentId: string) {
+    const data = await this.call('GET', `/payments/${encodeURIComponent(paymentId)}/refunds`);
+    const items = (data?.items ?? []) as {id: string; status: string; amount: number}[];
+    return items;
   }
 
   async fetchPlan(planId: string) {

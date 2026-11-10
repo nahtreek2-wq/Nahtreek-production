@@ -18,6 +18,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Spacing} from '@nahtreek/design-system';
 import {Avatar, BottomSheet, Icon, ICONS} from '../components/ui';
 import {CATEGORY_SERVICE_IDS, CategoryGrid} from '../components/home/CategoryGrid';
+import {ActiveBookingBar} from '../components/home/ActiveBookingBar';
 import {BookAgainStrip} from '../components/home/BookAgainStrip';
 import {TrustStrip} from '../components/home/TrustStrip';
 import {LocationPicker} from '../components/LocationPicker';
@@ -197,6 +198,7 @@ export function HomeScreen() {
             </Pressable>
           </Animated.View>
       </LinearGradient>
+        {user ? <ActiveBookingBar /> : null}
         <View style={styles.body}>
           <View style={styles.planCard}>
             <ImageBackground
@@ -207,7 +209,8 @@ export function HomeScreen() {
                 colors={['rgba(7,31,61,0.25)', 'rgba(7,31,61,0.88)']}
                 style={styles.planOverlay}>
                 <Text style={styles.planEyebrow}>{hero.eyebrow}</Text>
-                <Text style={styles.planTitle}>Plan your project</Text>
+                <Text style={styles.planTitle}>{hero.title}</Text>
+                <Text style={styles.planSubtitle}>{hero.subtitle}</Text>
               </LinearGradient>
             </ImageBackground>
             <View style={styles.planActions}>
@@ -521,6 +524,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFF',
   },
+  planSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#E2E8F0',
+    marginTop: 2,
+  },
   planActions: {
     flexDirection: 'row',
     gap: 10,
@@ -593,8 +602,7 @@ const styles = StyleSheet.create({
   sectionTitle: {fontSize: 20, lineHeight: 26, fontWeight: '800', color: TEXT, flex: 1},
   seeAll: {minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 1},
   seeAllText: {fontSize: 14, fontWeight: '800', color: NAVY},
-  needRow: {flexDirection: 'row', gap: 12, paddingTop: 12, paddingBottom: 2},
-  needRowStacked: {flexDirection: 'column'},
+
   needCard: {
     flex: 1,
     minHeight: 132,

@@ -491,6 +491,97 @@ export class PaymentsService {
     return this.viewOf(await this.hold(payment.id));
   }
 
+  // Reconciliation for lost checkout callbacks: the SDK promise can hang or
+  // report failure for a payment Razorpay actually captured (error banner with
+  // success behind it, retry-inside-checkout, bridge restart). The app calls
+  // this before opening a checkout and after any checkout error, so captured
+  // money confirms instead of inviting a second charge for the same order.
+  // Settles through the same atomic claim + hold path as verify; a
+  // signature is unnecessary because the facts come server-to-server from
+  // Razorpay itself. Idempotent: settled rows return their view untouched.
+  async sync(userId: string, dto: {serviceRequestId?: string; engineerRequestId?: string}) {
+    this.requireEnabled();
+    this.checkExactlyOne(dto);
+    if (dto.engineerRequestId) return this.syncEngineer(userId, dto.engineerRequestId);
+    const request = await this.partyRequest(dto.serviceRequestId!);
+    if (request.client.userId !== userId) throw new NotFoundException('Booking not found');
+    const payment = await this.db.payment.findUnique({where: {serviceRequestId: dto.serviceRequestId}});
+    if (!payment) throw new NotFoundException('No payment for this booking');
+    if (payment.status !== PaymentStatus.ORDER_CREATED || !payment.providerOrderId) return this.viewOf(payment);
+    if (['COMPLETED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(request.journey!.stage))
+      throw new ConflictException('This booking is closed and can no longer be paid');
+    const remote = await this.capturedForOrder(payment.providerOrderId);
+    if (!remote) return this.viewOf(payment);
+    if (remote.amount !== payment.amountPaisa) {
+      await this.db.payment.update({where: {id: payment.id}, data: {status: PaymentStatus.DISPUTED}});
+      await this.tell([request.client.userId, request.provider.userId], {serviceRequestId: request.id, requestId: request.id},
+        'Payment needs review', 'The received payment did not match the approved quote. Support will review it.', 'PAYMENT_DISPUTED');
+      throw new ConflictException('Payment amount mismatch. Support will review it.');
+    }
+    const claimed = await this.db.payment.updateMany({where: {id: payment.id, status: PaymentStatus.ORDER_CREATED,
+        providerOrderId: payment.providerOrderId, providerPaymentId: null},
+      data: {providerPaymentId: remote.id, status: PaymentStatus.PAID, paidAt: new Date()}});
+    if (!claimed.count) {
+      const current = await this.db.payment.findUnique({where: {id: payment.id}});
+      if (current && current.providerPaymentId && current.status !== PaymentStatus.ORDER_CREATED)
+        return this.viewOf(current);
+      throw new ConflictException('This payment was already processed');
+    }
+    await this.tell([request.client.userId, request.provider.userId], {serviceRequestId: request.id, requestId: request.id},
+      'Payment received', 'The approved quote is paid. The professional share releases on completion.', 'PAYMENT_PAID');
+    const serviceReceipt = this.bookingReceipt({title: request.description || 'Home service', ref: request.id,
+      amountPaisa: payment.amountPaisa, proName: request.provider.fullName, online: true,
+      paymentRef: remote.id, held: true});
+    await this.receipt(request.client.userId, serviceReceipt.subject, serviceReceipt.lines);
+    return this.viewOf(await this.hold(payment.id));
+  }
+
+  private async syncEngineer(userId: string, engineerRequestId: string) {
+    const request = await this.engineerPartyRequest(engineerRequestId);
+    if (request.client.userId !== userId) throw new NotFoundException('Booking not found');
+    const payment = await this.db.payment.findUnique({where: {engineerRequestId}});
+    if (!payment) throw new NotFoundException('No payment for this booking');
+    if (payment.status !== PaymentStatus.ORDER_CREATED || !payment.providerOrderId) return this.viewOf(payment);
+    if (ENGINEER_CLOSED_STATUSES.includes(request.status))
+      throw new ConflictException('This booking is closed and can no longer be paid');
+    const remote = await this.capturedForOrder(payment.providerOrderId);
+    if (!remote) return this.viewOf(payment);
+    if (remote.amount !== payment.amountPaisa) {
+      await this.db.payment.update({where: {id: payment.id}, data: {status: PaymentStatus.DISPUTED}});
+      await this.tell([request.client.userId, request.engineer.profile.userId],
+        {engineerRequestId: request.id, requestId: request.id},
+        'Payment needs review', 'The received payment did not match the consultation fee. Support will review it.', 'PAYMENT_DISPUTED');
+      throw new ConflictException('Payment amount mismatch. Support will review it.');
+    }
+    const claimed = await this.db.payment.updateMany({where: {id: payment.id, status: PaymentStatus.ORDER_CREATED,
+        providerOrderId: payment.providerOrderId, providerPaymentId: null},
+      data: {providerPaymentId: remote.id, status: PaymentStatus.PAID, paidAt: new Date()}});
+    if (!claimed.count) {
+      const current = await this.db.payment.findUnique({where: {id: payment.id}});
+      if (current && current.providerPaymentId && current.status !== PaymentStatus.ORDER_CREATED)
+        return this.viewOf(current);
+      throw new ConflictException('This payment was already processed');
+    }
+    await this.tell([request.client.userId, request.engineer.profile.userId],
+      {engineerRequestId: request.id, requestId: request.id},
+      'Payment received', 'The consultation fee is paid. The engineer share releases after review.', 'PAYMENT_PAID');
+    const engineerReceipt = this.bookingReceipt({title: request.projectTitle, ref: request.id,
+      amountPaisa: payment.amountPaisa, proName: request.engineer.profile.fullName, online: true,
+      paymentRef: remote.id, held: true});
+    await this.receipt(request.client.userId, engineerReceipt.subject, engineerReceipt.lines);
+    return this.viewOf(await this.hold(payment.id));
+  }
+
+  private async capturedForOrder(providerOrderId: string) {
+    let items: {id: string; status: string; amount: number}[];
+    try {
+      items = await this.provider.fetchOrderPayments(providerOrderId);
+    } catch (error) {
+      this.toProviderError(error);
+    }
+    return items!.find(item => item.status === 'captured') ?? null;
+  }
+
   // Best-effort Route hold right after capture. The row lock means concurrent
   // verify/webhook attempts create exactly one hold. A provider failure leaves
   // PAID; the release step creates a direct transfer instead. Never throws.
@@ -739,6 +830,54 @@ export class PaymentsService {
     await this.db.auditLog.create({data: {userId: adminUserId, entity: 'PayoutAccount', entityId: account.id,
       action: 'PAYOUT_ACCOUNT_LINKED', metadata: {professionalProfileId: dto.professionalProfileId}}});
     return {id: account.id, status: account.status};
+  }
+
+  // ---- Pro payout-account self-service ----
+  // Professionals submit where their share should land (bank account + IFSC
+  // for NEFT/IMPS, UPI id for instant payouts). The full account number is
+  // write-only through this API: owners only ever read back the masked form,
+  // and every admin link is audit-logged. Actual money movement still needs
+  // the Razorpay Route onboarding (linked account + KYC) — these details are
+  // what that onboarding verifies against.
+  private payoutAccountViewOf(account: {status: string; accountHolderName: string; bankName: string | null;
+    accountLast4: string | null; ifsc: string | null; upiId: string | null; rejectionReason: string | null;
+    updatedAt: Date} | null) {
+    if (!account) return {status: 'NOT_SUBMITTED', accountHolderName: null, bankName: null,
+      accountLast4: null, maskedAccountNumber: null, ifsc: null, upiId: null,
+      rejectionReason: null, updatedAt: null};
+    return {status: account.status, accountHolderName: account.accountHolderName, bankName: account.bankName,
+      accountLast4: account.accountLast4,
+      maskedAccountNumber: account.accountLast4 ? `\u2022\u2022\u2022\u2022${account.accountLast4}` : null,
+      ifsc: account.ifsc, upiId: account.upiId, rejectionReason: account.rejectionReason, updatedAt: account.updatedAt};
+  }
+
+  async myPayoutAccount(userId: string) {
+    const profile = await this.ownProfile(userId);
+    const account = await this.db.payoutAccount.findUnique({where: {professionalProfileId: profile.id}});
+    return this.payoutAccountViewOf(account);
+  }
+
+  async submitPayoutAccount(userId: string, dto: {accountHolderName: string; accountNumber: string; ifsc: string;
+    bankName?: string; upiId?: string}) {
+    const profile = await this.ownProfile(userId);
+    const ifsc = dto.ifsc.toUpperCase();
+    const accountLast4 = dto.accountNumber.slice(-4);
+    const existing = await this.db.payoutAccount.findUnique({where: {professionalProfileId: profile.id}});
+    // An admin-linked Route account stays ACTIVE: bank edits supplement it
+    // and go through verification without pausing payouts.
+    const status = existing?.providerAccountRef && existing.status === PayoutAccountStatus.ACTIVE
+      ? PayoutAccountStatus.ACTIVE : PayoutAccountStatus.PENDING;
+    const account = await this.db.payoutAccount.upsert({where: {professionalProfileId: profile.id},
+      create: {professionalProfileId: profile.id, provider: 'RAZORPAY_ROUTE',
+        accountHolderName: dto.accountHolderName.trim(), accountNumber: dto.accountNumber,
+        ifsc, bankName: dto.bankName?.trim() || null, upiId: dto.upiId?.trim() || null,
+        accountLast4, status: PayoutAccountStatus.PENDING},
+      update: {accountHolderName: dto.accountHolderName.trim(), accountNumber: dto.accountNumber,
+        ifsc, bankName: dto.bankName?.trim() || null, upiId: dto.upiId?.trim() || null,
+        accountLast4, status, rejectionReason: null}});
+    await this.db.auditLog.create({data: {userId, entity: 'PayoutAccount', entityId: account.id,
+      action: 'PAYOUT_ACCOUNT_SUBMITTED', metadata: {professionalProfileId: profile.id}}});
+    return this.payoutAccountViewOf(account);
   }
 
   // ---- At-home collection ----

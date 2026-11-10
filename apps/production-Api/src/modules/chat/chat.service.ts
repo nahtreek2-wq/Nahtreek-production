@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { RequestStatus } from '@prisma/client';
+import { Prisma, RequestStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -98,24 +98,35 @@ export class ChatService {
     });
     if (existing) return this.serializeConversation(existing, requestingUserId ?? request.client.userId);
 
-    const conversation = await this.prisma.conversation.create({
-      data: {
-        engineerRequestId: request.id,
-        participants: {
-          create: [
-            { userId: request.client.userId },
-            { userId: request.engineer.profile.userId },
-          ],
+    const include = {
+      participants: { include: { user: { include: { clientProfile: true, professionalProfile: true } } } },
+      messages: { orderBy: { createdAt: 'desc' as const }, take: 1 },
+      engineerRequest: { include: { engineer: { include: { profile: true } } } },
+      serviceRequest: { include: { category: true, provider: true } },
+    };
+    try {
+      const conversation = await this.prisma.conversation.create({
+        data: {
+          engineerRequestId: request.id,
+          participants: {
+            create: [
+              { userId: request.client.userId },
+              { userId: request.engineer.profile.userId },
+            ],
+          },
         },
-      },
-      include: {
-        participants: { include: { user: { include: { clientProfile: true, professionalProfile: true } } } },
-        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
-        engineerRequest: { include: { engineer: { include: { profile: true } } } },
-        serviceRequest: { include: { category: true, provider: true } },
-      },
-    });
-    return this.serializeConversation(conversation, requestingUserId ?? request.client.userId);
+        include,
+      });
+      return this.serializeConversation(conversation, requestingUserId ?? request.client.userId);
+    } catch (error) {
+      // Double-tap / retry race: the unique request id makes one winner. The
+      // loser returns the winner instead of a duplicate chat row.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const winner = await this.prisma.conversation.findFirst({where: {engineerRequestId: request.id}, include});
+        if (winner) return this.serializeConversation(winner, requestingUserId ?? request.client.userId);
+      }
+      throw error;
+    }
   }
 
   async openForServiceRequest(serviceRequestId: string, requestingUserId?: string) {
@@ -146,22 +157,32 @@ export class ChatService {
         requestingUserId ?? request.client.userId,
       );
     }
-    const conversation = await this.prisma.conversation.create({
-      data: {
-        serviceRequestId: request.id,
-        participants: {
-          create: [
-            { userId: request.client.userId },
-            { userId: request.provider.userId },
-          ],
+    try {
+      const conversation = await this.prisma.conversation.create({
+        data: {
+          serviceRequestId: request.id,
+          participants: {
+            create: [
+              { userId: request.client.userId },
+              { userId: request.provider.userId },
+            ],
+          },
         },
-      },
-      include,
-    });
-    return this.serializeConversation(
-      conversation,
-      requestingUserId ?? request.client.userId,
-    );
+        include,
+      });
+      return this.serializeConversation(
+        conversation,
+        requestingUserId ?? request.client.userId,
+      );
+    } catch (error) {
+      // Double-tap / retry race: the unique request id makes one winner. The
+      // loser returns the winner instead of a duplicate chat row.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const winner = await this.prisma.conversation.findFirst({where: {serviceRequestId: request.id}, include});
+        if (winner) return this.serializeConversation(winner, requestingUserId ?? request.client.userId);
+      }
+      throw error;
+    }
   }
 
   async getMessages(id: string, userId: string) {
@@ -279,8 +300,8 @@ export class ChatService {
       serviceRequestId: string | null;
       participants: { userId: string; user: { clientProfile: { fullName: string; avatarUrl: string | null } | null; professionalProfile: { fullName: string; avatarUrl: string | null } | null } }[];
       messages: { content: string; createdAt: Date }[];
-      engineerRequest: { projectTitle: string; engineer: { profile: { fullName: string } } } | null;
-      serviceRequest: { category: { title: string }; provider: { fullName: string } } | null;
+      engineerRequest: { projectTitle: string; status: RequestStatus; engineer: { profile: { fullName: string } } } | null;
+      serviceRequest: { status: RequestStatus; category: { title: string }; provider: { fullName: string } } | null;
     },
     viewerUserId: string,
     unread = 0,
@@ -309,6 +330,7 @@ export class ChatService {
       serviceRequestId: conversation.serviceRequestId ?? undefined,
       requestKind: conversation.serviceRequestId ? 'service' : 'engineering',
       requestId: conversation.serviceRequestId ?? conversation.engineerRequestId ?? undefined,
+      requestStatus: conversation.engineerRequest?.status ?? conversation.serviceRequest?.status ?? undefined,
       lastMessage: latest?.content ?? 'Conversation opened',
       lastAt: latest?.createdAt ?? new Date(),
       unread,

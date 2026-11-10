@@ -89,6 +89,7 @@ export interface EngineerRequestDto {
   clientProfileId: string;
   engineerProfileId: string;
   engineerName: string;
+  engineerAvatarUrl?: string;
   consultationFee?: number;
   completionCode?: string;
   projectTitle: string;
@@ -132,6 +133,7 @@ export interface ConversationDto {
   subtitle: string;
   professionalName: string;
   otherAvatarUrl?: string;
+  requestStatus?: string;
   engineerRequestId?: string;
   serviceRequestId?: string;
   lastMessage: string;

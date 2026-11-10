@@ -166,6 +166,7 @@ export function RequestDetailScreen() {
         api
           .get<PaymentStatusView | null>(`/payments/engineer-requests/${id}`)
           .catch((error: any) => (error?.status === 404 ? null : Promise.reject(error))),
+      sync: () => api.post<PaymentStatusView>('/payments/sync', {engineerRequestId: id}),
       checkout: openCheckout,
     };
   }, [request?.id]);

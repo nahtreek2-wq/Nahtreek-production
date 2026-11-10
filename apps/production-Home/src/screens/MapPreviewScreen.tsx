@@ -11,7 +11,15 @@ import {headerStyles} from '../../../../packages/mobile-ui/headerStyles';
 
 type Route = RouteProp<RootStackParamList, 'MapPreview'>;
 const mapBridge = NativeModules.NahtreekRuntimeConfig as {getStaticMapUrl?: (latitude: number, longitude: number) => Promise<string>};
-const GeoapifyMapView = requireNativeComponent<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}>('GeoapifyMapView');
+// The interactive view exists only where the native manager is linked —
+// require it lazily so a missing view degrades to the static map instead of
+// crashing the screen at import.
+let GeoapifyMapView: React.ComponentType<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}> | null = null;
+try {
+  GeoapifyMapView = requireNativeComponent<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}>('GeoapifyMapView');
+} catch {
+  GeoapifyMapView = null;
+}
 
 export function MapPreviewScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -25,23 +33,30 @@ export function MapPreviewScreen() {
   const [mapError, setMapError] = useState('');
   const [mapLoading, setMapLoading] = useState(true);
   const [interactive, setInteractive] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
+    // Android sometimes never calls back for a failed map image — without a
+    // watchdog the spinner runs forever and the map "never opens".
+    const watchdog = setTimeout(() => {
+      if (active) {setMapLoading(false); setMapError(mapError => mapError || 'Map is taking too long. Check your connection and retry.');}
+    }, 15000);
     setMapUrl(null);
     setMapError('');
     setMapLoading(true);
     setInteractive(false);
     if (!hasCoordinates || !mapBridge?.getStaticMapUrl) {
+      clearTimeout(watchdog);
       setMapLoading(false);
       if (hasCoordinates) setMapError('Map view is unavailable in this build. Use directions below.');
       return () => {active = false;};
     }
     mapBridge.getStaticMapUrl(params.latitude!, params.longitude!)
-      .then(url => {if (active) setMapUrl(url);})
-      .catch(error => {if (active) {setMapLoading(false); setMapError(error instanceof Error ? error.message : 'Map is unavailable.');}});
-    return () => {active = false;};
-  }, [hasCoordinates, params.latitude, params.longitude]);
+      .then(url => {if (active) {clearTimeout(watchdog); setMapUrl(url);}})
+      .catch(error => {if (active) {clearTimeout(watchdog); setMapLoading(false); setMapError(error instanceof Error ? error.message : 'Map is unavailable.');}});
+    return () => {active = false; clearTimeout(watchdog);};
+  }, [hasCoordinates, params.latitude, params.longitude, attempt]);
 
   const openDirections = () => {
     void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`)
@@ -69,9 +84,15 @@ export function MapPreviewScreen() {
           onLoad={() => setMapLoading(false)} onError={() => {setMapLoading(false); setMapError('Map image could not load. Use directions below.');}} />
           {!mapLoading ? <View style={styles.pin} accessibilityLabel="Pinned location" /> : null}</> : null}
         {mapLoading && !mapError && !interactive ? <ActivityIndicator size="large" color={ClientColors.accentIcon} /> : null}
-        {!interactive && (mapError || !hasCoordinates) ? <Text style={styles.emptyText}>
-          {mapError || 'A map pin is not available for this address yet.'}
-        </Text> : null}
+        {!interactive && (mapError || !hasCoordinates) ? <View style={styles.emptyWrap}>
+          <Text style={styles.emptyText}>
+            {mapError || 'A map pin is not available for this address yet.'}
+          </Text>
+          {mapError && hasCoordinates ? <Pressable accessibilityRole="button" accessibilityLabel="Retry loading the map"
+            onPress={() => setAttempt(value => value + 1)} style={styles.mapMode}>
+            <Text style={styles.mapModeText}>Retry map</Text>
+          </Pressable> : null}
+        </View> : null}
       </View>
       <View style={styles.footer}>
         {hasCoordinates && GeoapifyMapView ? (
@@ -100,6 +121,7 @@ const styles = StyleSheet.create({
   mapImage: {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0},
   pin: {width: 24, height: 24, borderRadius: 12, borderWidth: 4, borderColor: Colors.navyDeep, backgroundColor: ClientColors.accent},
   emptyText: {fontSize: 16, color: '#516376', textAlign: 'center'},
+  emptyWrap: {gap: 12, alignItems: 'center', paddingHorizontal: 24},
   footer: {padding: 16, backgroundColor: '#FFFFFF', gap: 10},
   mapMode: {minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: 1, borderColor: Colors.slate200, backgroundColor: Colors.white},
   mapModeText: {fontSize: 15, fontWeight: '700', color: Colors.navyDeep},

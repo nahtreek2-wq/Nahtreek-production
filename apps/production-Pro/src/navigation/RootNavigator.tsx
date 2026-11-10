@@ -34,6 +34,7 @@ import {VerificationDocumentsScreen} from '../screens/VerificationDocumentsScree
 import {ReviewsScreen} from '../screens/ReviewsScreen';
 import {MembershipScreen} from '../screens/MembershipScreen';
 import {DuesScreen} from '../screens/DuesScreen';
+import {PayoutScreen} from '../screens/PayoutScreen';
 import {MyQrScreen} from '../screens/MyQrScreen';
 import {SupportScreen} from '../screens/SupportScreen';
 
@@ -161,6 +162,10 @@ function ProfileNavigator() {
       <ProfileStack.Screen
         name="Dues"
         component={DuesScreen}
+      />
+      <ProfileStack.Screen
+        name="Payout"
+        component={PayoutScreen}
       />
       <ProfileStack.Screen
         name="MyQr"

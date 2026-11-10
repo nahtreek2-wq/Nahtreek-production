@@ -82,6 +82,17 @@ export function ChatScreen() {
   const accessToken = useSessionStore(state => state.accessToken);
   const {conversationId, title, subtitle, avatarUrl, requestId, requestKind, threads} = route.params;
   const jobLabel = (value?: string) => (value ?? 'Job').replace(/^Re:\s*/, '');
+  // Two jobs can share a title ("Wall crack" twice) — the status suffix keeps
+  // the thread chips distinguishable.
+  const SHORT_STATUS: Record<string, string> = {COMPLETED: 'Done', IN_PROGRESS: 'Live',
+    ACCEPTED: 'Accepted', PENDING: 'Pending', ARRIVED: 'Arrived', EN_ROUTE: 'On the way'};
+  const threadLabel = (thread: NonNullable<typeof threads>[number]) => {
+    const job = jobLabel(thread.subtitle);
+    const raw = thread.requestStatus;
+    if (!raw) return job;
+    const short = SHORT_STATUS[raw] ?? raw.replace(/_/g, ' ').toLowerCase().replace(/^./, (c: string) => c.toUpperCase());
+    return `${job} \u00B7 ${short}`;
+  };
   const switchThread = (thread: NonNullable<typeof threads>[number]) => {
     if (thread.conversationId === conversationId || sending.current) return;
     // Never carry a half-typed message into another job's thread.
@@ -264,7 +275,7 @@ export function ChatScreen() {
       lastSender = message.senderUserId;
       items.push({kind: 'message', key: message.id, message, mine, showSender});
     }
-    return items.reverse();
+    return items;
   }, [messages.data, currentUser?.id]);
 
   return (
@@ -275,18 +286,18 @@ export function ChatScreen() {
         avatarUrl={avatarUrl}
         onBack={() => navigation.goBack()}
       />
-      {threads && threads.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.threadRow}>
+      {threads && threads.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.threadScroller} contentContainerStyle={styles.threadRow}>
         {threads.map(thread => {
           const selected = thread.conversationId === conversationId;
           return (
             <Pressable
               key={thread.conversationId}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${jobLabel(thread.subtitle)} chat`}
+              accessibilityLabel={`Open ${threadLabel(thread)} chat`}
               accessibilityState={{selected}}
               onPress={() => switchThread(thread)}
               style={[styles.threadChip, selected && styles.threadChipOn]}>
-              <Text style={[styles.threadText, selected && styles.threadTextOn]} numberOfLines={1}>{jobLabel(thread.subtitle)}</Text>
+              <Text style={[styles.threadText, selected && styles.threadTextOn]} numberOfLines={1}>{threadLabel(thread)}</Text>
             </Pressable>
           );
         })}
@@ -318,14 +329,17 @@ export function ChatScreen() {
           <View style={styles.flex}>
             <FlatList
               ref={listRef}
-              inverted
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
               data={feed}
               keyExtractor={item => item.key}
               contentContainerStyle={styles.list}
-              ListHeaderComponent={<View style={{height: barClearance}} />}
-              onScroll={event => setShowJumpPill(event.nativeEvent.contentOffset.y > 300)}
+              ListFooterComponent={<View style={{height: barClearance}} />}
+              onContentSizeChange={() => listRef.current?.scrollToEnd({animated: false})}
+              onScroll={event => {
+                const {contentOffset, layoutMeasurement, contentSize} = event.nativeEvent;
+                setShowJumpPill(contentSize.height - contentOffset.y - layoutMeasurement.height > 300);
+              }}
               scrollEventThrottle={200}
               renderItem={({item}) => {
                 if (item.kind === 'day') {
@@ -384,7 +398,7 @@ export function ChatScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Jump to latest messages"
-                onPress={() => listRef.current?.scrollToOffset({offset: 0, animated: true})}
+                onPress={() => listRef.current?.scrollToEnd({animated: true})}
                 style={styles.jumpPill}>
                 <MaterialCommunityIcons name="chevron-down" size={20} color={Colors.white} />
               </Pressable>
@@ -448,12 +462,13 @@ export function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
+  threadScroller: {flexGrow: 0, flexShrink: 0},
   threadRow: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.slate200},
   threadChip: {maxWidth: 180, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: Colors.offWhite, borderWidth: 1, borderColor: Colors.slate200},
   threadChipOn: {backgroundColor: Colors.navyDeep, borderColor: Colors.navyDeep},
   threadText: {...Typography.caption, fontWeight: '700', color: Colors.navyMid},
   threadTextOn: {color: Colors.white},
-  jobContext: {minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.slate200, backgroundColor: Colors.white},
+  jobContext: {flexShrink: 0, minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.slate200, backgroundColor: Colors.white},
   jobContextText: {...Typography.caption, color: Colors.slate800, flex: 1},
   jobContextAction: {...Typography.caption, fontWeight: '700', color: Colors.navyMid},
   offlineBar: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 7, backgroundColor: Colors.navyDeep},

@@ -45,7 +45,7 @@ export function ActiveBookingBar() {
       {pickService ? (
         <Avatar name={service!.provider.fullName} uri={service!.provider.avatarUrl} size={40} />
       ) : (
-        <Avatar name={engineer!.engineerName} size={40} />
+        <Avatar name={engineer!.engineerName} uri={engineer!.engineerAvatarUrl} size={40} />
       )}
       <View style={styles.copy}>
         <Text style={styles.stage} numberOfLines={1}>{STAGE_LABELS[stage] ?? stage.replace(/_/g, ' ')}</Text>

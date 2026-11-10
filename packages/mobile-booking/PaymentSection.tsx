@@ -14,6 +14,10 @@ export type PaymentHooks = {
   loadStatus: () => Promise<PaymentStatusView | null>;
   checkout?: (input: CheckoutInput) => Promise<CheckoutResult>;
   dispute?: (reason: string) => Promise<PaymentStatusView>;
+  // Server-to-Razorpay reconciliation for lost checkout callbacks (SDK
+  // error-with-success-behind, hung bridge promise). Optional so older
+  // callers keep working; when present it runs before every checkout.
+  sync?: () => Promise<unknown>;
 };
 
 export type PlusDiscount = {percent: number; capPaisa: number};
@@ -51,6 +55,7 @@ export function PaymentSection({requestId, requestKind = 'service', quoteAmount,
   const [failed, setFailed] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
   const [emailDraft, setEmailDraft] = useState('');
@@ -82,6 +87,19 @@ export function PaymentSection({requestId, requestKind = 'service', quoteAmount,
     setConfirming(false);
     void status.refetch();
     refresh();
+  };
+  // Ask the server what Razorpay actually captured before trusting local
+  // state: a checkout that errored (or hung) may still have moved money.
+  // Returns the fresh status (null when unknown).
+  const reconcile = async (): Promise<PaymentStatusView | null> => {
+    try {
+      await hooks.sync?.();
+    } catch {
+      // Sync failing must never block the checkout — the refetch below
+      // decides from the last known server truth instead.
+    }
+    const fresh = await status.refetch();
+    return fresh.data ?? null;
   };
   // Razorpay capture can lag the checkout success by seconds. A 409 'not
   // captured yet' means money left the account but the capture is pending —
@@ -147,9 +165,17 @@ export function PaymentSection({requestId, requestKind = 'service', quoteAmount,
       void status.refetch();
       return;
     }
-    setCancelled(false);
-    setFailed(messageFor(error));
-    void status.refetch();
+    // A checkout error with money behind it (Razorpay error banner over a
+    // successful capture) must confirm, not invite a second charge.
+    void (async () => {
+      const synced = await reconcile();
+      if (synced && SETTLED.includes(synced.status)) {
+        settlePaid();
+        return;
+      }
+      setCancelled(false);
+      setFailed(messageFor(error));
+    })();
   }});
 
   const busy = pay.isPending || status.isFetching || confirming;
@@ -169,10 +195,10 @@ export function PaymentSection({requestId, requestKind = 'service', quoteAmount,
       }
     }
     // Verify-before-recreate: the order may have settled since this screen
-    // loaded (webhook, another device). Never open a second checkout for
-    // money that already moved.
-    const fresh = await status.refetch();
-    if (fresh.data && SETTLED.includes(fresh.data.status)) {
+    // loaded (webhook, another device, or a checkout whose callback was
+    // lost). Never open a second checkout for money that already moved.
+    const synced = await reconcile();
+    if (synced && SETTLED.includes(synced.status)) {
       settlePaid();
       return;
     }
@@ -253,8 +279,23 @@ export function PaymentSection({requestId, requestKind = 'service', quoteAmount,
         : payAgain(`Pay ${rupees(Math.round(quoteAmount * 100))} securely`,
             `Pay ${rupees(Math.round(quoteAmount * 100))} for the approved scope. The money is held safely and reaches the professional only after you confirm the work.`);
     } else if (view.status === 'ORDER_CREATED') {
-      body = payAgain(`Continue payment of ${rupees(view.amountPaisa)}`,
-        `A payment of ${rupees(view.amountPaisa)} was started but not finished. We check its latest status before opening checkout, so you never pay twice.`);
+      const checkStatus = async () => {
+        setChecking(true);
+        try {
+          const synced = await reconcile();
+          if (synced && SETTLED.includes(synced.status)) settlePaid();
+        } finally {
+          setChecking(false);
+        }
+      };
+      body = <>
+        {payAgain(`Continue payment of ${rupees(view.amountPaisa)}`,
+          `A payment of ${rupees(view.amountPaisa)} was started but not finished. We check its latest status before opening checkout, so you never pay twice.`)}
+        {hooks.sync ? <Pressable accessibilityRole="button" accessibilityLabel="Check payment status"
+          disabled={busy || checking} onPress={() => void checkStatus()}>
+          <Text style={s.retryText}>{checking ? 'Checking…' : 'Already paid? Check status'}</Text>
+        </Pressable> : null}
+      </>;
     } else if (view.status === 'PAID' || view.status === 'HELD') {
       body = <View style={s.ok}><Text style={s.okTitle}>Paid {rupees(view.amountPaisa)}</Text>
         <Text style={s.text}>{engineer

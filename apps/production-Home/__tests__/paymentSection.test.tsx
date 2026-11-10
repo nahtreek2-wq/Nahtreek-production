@@ -54,6 +54,66 @@ it('pays an approved quote through order, checkout and verify', async () => {
   t.done();
 });
 
+const flush = async () => {
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+};
+
+it('syncs before checkout and confirms without a second checkout when money already moved', async () => {
+  const hooks: PaymentHooks = {
+    createOrder: jest.fn().mockResolvedValue(order),
+    verify: jest.fn(),
+    loadStatus: jest.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({status: 'HELD', amountPaisa: 200000, currency: 'INR'}),
+    checkout: jest.fn().mockResolvedValue(checkoutResult),
+    sync: jest.fn().mockResolvedValue({status: 'HELD'}),
+  };
+  const t = setup(hooks);
+  await t.render();
+  await t.pressPay();
+  await flush();
+  expect(hooks.sync).toHaveBeenCalled();
+  expect(hooks.checkout).not.toHaveBeenCalled();
+  expect(t.texts()).toContain('Paid \u20B92,000');
+  t.done();
+});
+
+it('confirms after a checkout error when sync finds the capture behind it', async () => {
+  const hooks: PaymentHooks = {
+    createOrder: jest.fn().mockResolvedValue(order),
+    verify: jest.fn(),
+    loadStatus: jest.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({status: 'HELD', amountPaisa: 200000, currency: 'INR'}),
+    checkout: jest.fn().mockRejectedValue(new Error('bank failed')),
+    sync: jest.fn().mockResolvedValue({status: 'HELD'}),
+  };
+  const t = setup(hooks);
+  await t.render();
+  await t.pressPay();
+  await flush();
+  expect(t.texts()).toContain('Paid \u20B92,000');
+  expect(t.texts()).not.toContain('could not be completed');
+  t.done();
+});
+
+it('offers Check status on unfinished orders', async () => {
+  const hooks: PaymentHooks = {
+    createOrder: jest.fn(), verify: jest.fn(),
+    loadStatus: jest.fn().mockResolvedValue({status: 'ORDER_CREATED', amountPaisa: 200000, currency: 'INR'}),
+    checkout: jest.fn(),
+    sync: jest.fn().mockResolvedValue({status: 'ORDER_CREATED'}),
+  };
+  const t = setup(hooks);
+  await t.render();
+  const button = t.findButton('Check payment status');
+  await renderer.act(async () => { button.props.onPress(); });
+  await flush();
+  expect(hooks.sync).toHaveBeenCalled();
+  expect(t.texts()).toContain('Continue payment of \u20B92,000');
+  t.done();
+});
+
 it('shows the held state with a release note and no pay button', async () => {
   const hooks: PaymentHooks = {
     createOrder: jest.fn(), verify: jest.fn(),

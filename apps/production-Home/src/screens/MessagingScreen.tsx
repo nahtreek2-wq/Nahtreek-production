@@ -13,6 +13,13 @@ import type {RootStackParamList} from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+// Two jobs with the same pro share a name and photo — the status pill tells
+// the rows apart (old servers omit requestStatus, so rows stay pill-less).
+const statusLabel = (status: string) => {
+  const words = status.replace(/_/g, ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
 export function MessagingScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<Nav>();
@@ -64,6 +71,7 @@ export function MessagingScreen() {
                 <View style={styles.body}>
                   <View style={styles.topRow}>
                     <Text style={styles.name} numberOfLines={1}>{item.title}</Text>
+                    {item.requestStatus ? <Text style={styles.statusPill} numberOfLines={1}>{statusLabel(item.requestStatus)}</Text> : null}
                     <Text style={styles.time}>{item.lastAt}</Text>
                   </View>
                   <Text style={styles.subtitle} numberOfLines={2}>{item.subtitle}</Text>
@@ -154,6 +162,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.sm,
+  },
+  statusPill: {
+    ...Typography.badge,
+    lineHeight: 16,
+    flexShrink: 0,
+    color: Colors.navyMid,
+    backgroundColor: Colors.softBlue,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    overflow: 'hidden',
   },
   name: {
     ...Typography.subtitle,

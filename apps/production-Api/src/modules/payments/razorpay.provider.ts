@@ -99,6 +99,15 @@ export class RazorpayProvider {
     return data as RazorpayPayment;
   }
 
+  // Reconciliation: when the checkout callback is lost (dismissed, retried
+  // inside the SDK, bridge promise hung), the app can still ask what Razorpay
+  // actually captured for our order instead of risking a double charge.
+  async fetchOrderPayments(orderId: string) {
+    const data = await this.call('GET', `/orders/${encodeURIComponent(orderId)}/payments`);
+    const items = (Array.isArray(data?.items) ? data.items : []) as RazorpayPayment[];
+    return items.filter(item => item && typeof item.id === 'string');
+  }
+
   // Route transfer held from settlement until released after completion.
   async createOnHoldTransfer(paymentId: string, linkedAccountId: string, amountPaisa: number, currency: string) {
     const data = await this.call('POST', `/payments/${encodeURIComponent(paymentId)}/transfers`,
@@ -141,9 +150,10 @@ export class RazorpayProvider {
     return {id: data.id, amount, currency: data?.item?.currency ?? data?.currency, period: data?.period} as RazorpayPlan;
   }
 
-  async createSubscription(input: {planId: string; totalCount: number; notes: Record<string, string>}) {
+  async createSubscription(input: {planId: string; totalCount: number; notes: Record<string, string>; startAt?: number}) {
     const data = await this.call('POST', '/subscriptions', {plan_id: input.planId, quantity: 1,
-      total_count: input.totalCount, customer_notify: 1, notes: input.notes});
+      total_count: input.totalCount, customer_notify: 1, notes: input.notes,
+      ...(input.startAt ? {start_at: input.startAt} : {})});
     if (!data?.id) throw new RazorpayError('Razorpay returned no subscription id', 502, true);
     return data as RazorpaySubscription;
   }

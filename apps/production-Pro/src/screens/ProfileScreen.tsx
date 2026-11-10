@@ -487,8 +487,14 @@ export function ProfileScreen() {
               icon="crown-outline"
               title="Pro membership"
               description="7% commission, top discovery, member badge"
-              last
               onPress={() => navigation.navigate('Membership')}
+            />
+            <ProfileActionRow
+              icon="bank-outline"
+              title="Payout account"
+              description="Where your earnings land after commission"
+              last
+              onPress={() => navigation.navigate('Payout')}
             />
           </View>
         </MotionReveal>

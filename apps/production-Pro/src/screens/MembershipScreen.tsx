@@ -17,7 +17,11 @@ export type MembershipTerms = {memberFeeBps: number; standardFeeBps: number; mem
   standardDuesBlockPaisa: number; freeJobsPerMonth: number};
 export type MembershipView = {status: string; effective: boolean; currentPeriodStart: string | null;
   currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean; feePaisa: number; currency: string;
-  terms: MembershipTerms; lifetimeSavingsPaisa?: number; jobsAtMemberRate?: number};
+  terms?: MembershipTerms; lifetimeSavingsPaisa?: number; jobsAtMemberRate?: number};
+// Last-resort figures when the backend predates server terms (old deploy):
+// the screen must never crash on version skew. Mirrors commission.ts.
+const FALLBACK_TERMS: MembershipTerms = {memberFeeBps: 700, standardFeeBps: 1000,
+  memberDuesBlockPaisa: 200000, standardDuesBlockPaisa: 50000, freeJobsPerMonth: 1};
 export type MembershipHooks = {
   load: () => Promise<MembershipView>;
   subscribe: () => Promise<MembershipView & {keyId: string; subscriptionId: string | null; shortUrl: string | null}>;
@@ -163,6 +167,7 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
 
   const busy = subscribe.isPending || cancel.isPending || activating;
   const view = query.data;
+  const terms = view?.terms ?? FALLBACK_TERMS;
   const endDate = view?.currentPeriodEnd ? new Date(view.currentPeriodEnd).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric'}) : null;
 
   return <View style={styles.root}>
@@ -182,7 +187,7 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
           <Text style={styles.price}>{inr(view.feePaisa)}<Text style={styles.perMonth}>/month</Text></Text>
         </View>
         {view.status === 'PAST_DUE' ? <Text style={styles.warning}>Your last membership payment failed. Subscribe again to restore benefits with a fresh month.</Text> : null}
-        {benefitsFor(view.terms).map(benefit => <View key={benefit.title} style={styles.benefit}>
+        {benefitsFor(terms).map(benefit => <View key={benefit.title} style={styles.benefit}>
           <ProIconChip name={benefit.icon} size={44} iconSize={23} />
           <View style={styles.benefitCopy}>
             <Text style={styles.benefitTitle}>{benefit.title}</Text>
@@ -208,19 +213,19 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
           <ProIconChip name="check-decagram" tone="green" size={52} iconSize={28} />
           <Text style={[styles.heading, styles.flex]}>Your Pro benefits are active</Text>
         </View>
-        <Text style={styles.text}>First job each month free, {pct(view.terms.memberFeeBps)} commission after that, {inr(view.terms.memberDuesBlockPaisa)} dues room, top discovery placement and the member badge{endDate ? ` through ${endDate}` : ''}.</Text>
+        <Text style={styles.text}>First job each month free, {pct(terms.memberFeeBps)} commission after that, {inr(terms.memberDuesBlockPaisa)} dues room, top discovery placement and the member badge{endDate ? ` through ${endDate}` : ''}.</Text>
         {(view.lifetimeSavingsPaisa ?? 0) > 0 ? <View style={styles.savings}>
           <Text style={styles.savingsTitle}>You have saved {inr(view.lifetimeSavingsPaisa ?? 0)} so far</Text>
-          <Text style={styles.savingsBody}>{view.jobsAtMemberRate ?? 0} {(view.jobsAtMemberRate ?? 0) === 1 ? 'job' : 'jobs'} billed below the {pct(view.terms.standardFeeBps)} standard rate.</Text>
+          <Text style={styles.savingsBody}>{view.jobsAtMemberRate ?? 0} {(view.jobsAtMemberRate ?? 0) === 1 ? 'job' : 'jobs'} billed below the {pct(terms.standardFeeBps)} standard rate.</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="View commission dues" onPress={() => (navigation as {navigate: (route: string) => void}).navigate('Dues')} style={styles.savingsLink}>
             <Text style={styles.savingsLinkText}>View commission dues</Text>
           </Pressable>
         </View> : null}
         {view.cancelAtPeriodEnd ? <>
-          <Text style={styles.text}>You cancelled renewal. Benefits end {endDate ?? 'at the period end'}; resubscribe anytime after.</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="View commission dues" disabled={busy}
-            onPress={() => (navigation as {navigate: (route: string) => void}).navigate('Dues')} style={[styles.secondaryButton, busy && {opacity: 0.5}]}>
-            <Text style={styles.secondaryButtonText}>View commission dues</Text>
+          <Text style={styles.text}>You cancelled renewal. Benefits end {endDate ?? 'at the period end'}. Resubscribing starts the new cycle then — no double charge.</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Resubscribe to Pro membership" disabled={busy}
+            onPress={() => subscribe.mutate()} style={[styles.secondaryButton, busy && {opacity: 0.5}]}>
+            <Text style={styles.secondaryButtonText}>{subscribe.isPending ? 'Opening secure checkout…' : `Resubscribe for ${inr(view.feePaisa)}/month`}</Text>
           </Pressable>
         </>
         : <Pressable accessibilityRole="button" accessibilityLabel="Cancel membership" disabled={busy}

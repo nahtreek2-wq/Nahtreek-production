@@ -372,7 +372,7 @@ export class RequestsService {
       status: RequestStatus;
       createdAt: Date;
       completionCode?: string | null;
-      engineer: { profile: { fullName: string }; consultationFee?: number | null };
+      engineer: { profile: { fullName: string; avatarUrl?: string | null }; consultationFee?: number | null };
       client?: { fullName: string };
       statusHistory?: unknown[];
       reviews?: { rating: number; comment: string; createdAt: Date }[];
@@ -388,6 +388,7 @@ export class RequestsService {
       clientProfileId: request.clientProfileId,
       engineerProfileId: request.engineerProfileId,
       engineerName: request.engineer.profile.fullName,
+      engineerAvatarUrl: request.engineer.profile.avatarUrl ?? undefined,
       consultationFee: request.engineer.consultationFee ?? undefined,
       clientName: request.client?.fullName,
       projectTitle: request.projectTitle,

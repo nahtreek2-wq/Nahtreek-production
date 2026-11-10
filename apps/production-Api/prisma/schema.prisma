@@ -446,8 +446,8 @@ model Review {
 
 model Conversation {
   id                String   @id @default(uuid())
-  engineerRequestId String?
-  serviceRequestId  String?
+  engineerRequestId String?  @unique
+  serviceRequestId  String?  @unique
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -455,9 +455,6 @@ model Conversation {
   serviceRequest  ServiceRequest?           @relation(fields: [serviceRequestId], references: [id])
   participants    ConversationParticipant[]
   messages        Message[]
-
-  @@index([engineerRequestId])
-  @@index([serviceRequestId])
 }
 
 model ConversationParticipant {
@@ -510,6 +507,9 @@ model PayoutAccount {
   providerAccountRef    String?             @unique
   accountHolderName     String
   bankName              String?
+  accountNumber         String?
+  ifsc                  String?
+  upiId                 String?
   accountLast4          String?
   status                PayoutAccountStatus @default(NOT_SUBMITTED)
   rejectionReason       String?

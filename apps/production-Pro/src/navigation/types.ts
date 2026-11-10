@@ -15,7 +15,7 @@ export type MainTabParamList = {
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
-export type ChatThread = {conversationId: string; title: string; subtitle?: string; avatarUrl?: string; requestId?: string; requestKind?: 'engineering' | 'service'};
+export type ChatThread = {conversationId: string; title: string; subtitle?: string; avatarUrl?: string; requestId?: string; requestKind?: 'engineering' | 'service'; requestStatus?: string};
 
 export type MessagesStackParamList = {
   Conversations: undefined;
@@ -38,6 +38,7 @@ export type ProfileStackParamList = {
   NotificationSettings: undefined;
   Membership: undefined;
   Dues: undefined;
+  Payout: undefined;
   MyQr: undefined;
   Support: undefined;
 };

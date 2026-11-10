@@ -6,7 +6,7 @@ import {Roles} from '../../common/decorators/roles.decorator';
 import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {JwtPayload} from '../../common/strategies/jwt.strategy';
-import {CreatePaymentOrderDto, DeclareEngineerCollectionDto, RefundPaymentDto, RegisterPayoutAccountDto, ReleasePaymentDto, ReportDisputeDto, ResolveDisputeDto, VerifyPaymentDto, VerifySettlementDto} from './payments.dto';
+import {CreatePaymentOrderDto, DeclareEngineerCollectionDto, RefundPaymentDto, RegisterPayoutAccountDto, ReleasePaymentDto, ReportDisputeDto, ResolveDisputeDto, SubmitPayoutAccountDto, SyncPaymentDto, VerifyPaymentDto, VerifySettlementDto} from './payments.dto';
 import {PaymentsService} from './payments.service';
 
 @Controller('payments')
@@ -23,6 +23,11 @@ export class PaymentsController {
   @Post('verify') @Roles(Role.CLIENT)
   verify(@CurrentUser() user: JwtPayload, @Body() dto: VerifyPaymentDto) {
     return this.service.verify(user.sub, dto);
+  }
+
+  @Post('sync') @Roles(Role.CLIENT)
+  sync(@CurrentUser() user: JwtPayload, @Body() dto: SyncPaymentDto) {
+    return this.service.sync(user.sub, dto);
   }
 
   @Get('requests/:serviceRequestId') @Roles(Role.CLIENT, Role.SERVICE_PROVIDER, Role.ADMIN)
@@ -64,6 +69,16 @@ export class PaymentsController {
   @Post('payout-accounts') @Roles(Role.ADMIN)
   registerPayoutAccount(@CurrentUser() user: JwtPayload, @Body() dto: RegisterPayoutAccountDto) {
     return this.service.registerPayoutAccount(user.sub, dto);
+  }
+
+  @Get('payout-accounts/me') @Roles(Role.SERVICE_PROVIDER, Role.ENGINEER)
+  myPayoutAccount(@CurrentUser() user: JwtPayload) {
+    return this.service.myPayoutAccount(user.sub);
+  }
+
+  @Post('payout-accounts/me') @Roles(Role.SERVICE_PROVIDER, Role.ENGINEER)
+  submitPayoutAccount(@CurrentUser() user: JwtPayload, @Body() dto: SubmitPayoutAccountDto) {
+    return this.service.submitPayoutAccount(user.sub, dto);
   }
 
   @Get('dues') @Roles(Role.SERVICE_PROVIDER, Role.ENGINEER)

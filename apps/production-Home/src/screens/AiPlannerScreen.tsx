@@ -750,7 +750,13 @@ export function AiPlannerScreen() {
           <View style={styles.billingRow}>
             <Text style={styles.billingActive}>NAHTREEK Plus active</Text>
             {billing.cancelAtPeriodEnd ? (
-              <Text style={styles.billingQuota}>Plus ends{plusEndDate ? ` ${plusEndDate}` : ''} — resubscribe anytime after</Text>
+              <>
+                <Text style={styles.billingQuota}>Plus ends{plusEndDate ? ` ${plusEndDate}` : ''} — new cycle starts then</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Resubscribe to Plus"
+                  onPress={() => void subscribe()} hitSlop={8} disabled={subscribing}>
+                  <Text style={styles.billingCancel}>{subscribing ? 'Opening…' : 'Resubscribe'}</Text>
+                </Pressable>
+              </>
             ) : (
               <Pressable accessibilityRole="button" accessibilityLabel="Cancel AI subscription" onPress={cancel} hitSlop={8}>
                 <Text style={styles.billingCancel}>Cancel</Text>

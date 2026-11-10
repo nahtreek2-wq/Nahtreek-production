@@ -61,6 +61,29 @@ it('subscribes through checkout and confirm', async () => {
   t.done();
 });
 
+it('renders fallback terms when an old backend omits them', async () => {
+  const {terms: _drop, ...legacy} = none;
+  const hooks: MembershipHooks = {load: jest.fn().mockResolvedValue(legacy),
+    subscribe: jest.fn(), confirm: jest.fn(), cancel: jest.fn(), checkout: jest.fn()};
+  const t = setup(hooks);
+  await t.render();
+  expect(t.texts()).toContain('7% commission, not 10%');
+  await t.done();
+});
+
+it('offers resubscribe during the cancelled paid tail', async () => {
+  const tail: MembershipView = {...active, status: 'CANCELLED', cancelAtPeriodEnd: true};
+  const hooks: MembershipHooks = {load: jest.fn().mockResolvedValue(tail),
+    subscribe: jest.fn().mockResolvedValue(tail), confirm: jest.fn().mockResolvedValue(tail),
+    cancel: jest.fn(), checkout: jest.fn()};
+  const t = setup(hooks);
+  await t.render();
+  expect(t.texts()).toContain('no double charge');
+  await t.press('Resubscribe to Pro membership');
+  expect(hooks.subscribe).toHaveBeenCalled();
+  await t.done();
+});
+
 it('renders price and rates from server terms, not hardcoded figures', async () => {
   const custom = {...none, feePaisa: 49900,
     terms: {...terms, memberFeeBps: 500, memberDuesBlockPaisa: 300000}};

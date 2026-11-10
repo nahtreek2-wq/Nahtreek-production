@@ -1,5 +1,5 @@
 import {Type} from 'class-transformer';
-import {IsIn, IsNumber, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf} from 'class-validator';
+import {IsIn, IsNumber, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf, IsOptional} from 'class-validator';
 
 // Every money DTO addresses exactly one booking: a service request or an
 // engineer (consultation) request. At least one id is required; the service
@@ -15,6 +15,11 @@ export class VerifyPaymentDto {
   @IsString() @MinLength(1) @MaxLength(64) razorpayOrderId: string;
   @IsString() @MinLength(1) @MaxLength(64) razorpayPaymentId: string;
   @IsString() @Matches(/^[0-9a-f]{64}$/i) razorpaySignature: string;
+}
+
+export class SyncPaymentDto {
+  @ValidateIf(o => !o.engineerRequestId) @IsUUID() serviceRequestId?: string;
+  @ValidateIf(o => !o.serviceRequestId) @IsUUID() engineerRequestId?: string;
 }
 
 export class RefundPaymentDto {
@@ -52,6 +57,14 @@ export class ReportDisputeDto {
   @ValidateIf(o => !o.engineerRequestId) @IsUUID() serviceRequestId?: string;
   @ValidateIf(o => !o.serviceRequestId) @IsUUID() engineerRequestId?: string;
   @IsString() @MinLength(10) @MaxLength(500) reason: string;
+}
+
+export class SubmitPayoutAccountDto {
+  @IsString() @MinLength(1) @MaxLength(120) accountHolderName: string;
+  @IsString() @Matches(/^[0-9]{9,18}$/) accountNumber: string;
+  @IsString() @Matches(/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/) ifsc: string;
+  @IsOptional() @IsString() @MaxLength(120) bankName?: string;
+  @IsOptional() @IsString() @MaxLength(80) @Matches(/^[\w.\-]{2,64}@[A-Za-z]{2,32}$/) upiId?: string;
 }
 
 export class RegisterPayoutAccountDto {

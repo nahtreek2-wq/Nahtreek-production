@@ -30,14 +30,17 @@ type Route = RouteProp<RequestsStackParamList, 'MapPreview'>;
 const mapBridge = NativeModules.NahtreekRuntimeConfig as {
   getStaticMapUrl?: (latitude: number, longitude: number) => Promise<string>;
 };
-const GeoapifyMapView =
-  Platform.OS === 'android'
-    ? requireNativeComponent<{
-        latitude: number;
-        longitude: number;
-        style: StyleProp<ViewStyle>;
-      }>('GeoapifyMapView')
-    : null;
+// The interactive view exists only where the native manager is linked —
+// require it lazily so a missing view degrades to the static map instead of
+// crashing the screen at import.
+let GeoapifyMapView: React.ComponentType<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}> | null = null;
+if (Platform.OS === 'android') {
+  try {
+    GeoapifyMapView = requireNativeComponent<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}>('GeoapifyMapView');
+  } catch {
+    GeoapifyMapView = null;
+  }
+}
 
 export function MapPreviewScreen() {
   const navigation =
@@ -58,9 +61,15 @@ export function MapPreviewScreen() {
   const [mapError, setMapError] = useState('');
   const [mapLoading, setMapLoading] = useState(true);
   const [interactive, setInteractive] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
+    // Android sometimes never calls back for a failed map image — without a
+    // watchdog the spinner runs forever and the map "never opens".
+    const watchdog = setTimeout(() => {
+      if (active) {setMapLoading(false); setMapError(known => known || 'Map is taking too long. Check your connection and retry.');}
+    }, 15000);
     setMapUrl(null);
     setMapError('');
     setMapLoading(true);
@@ -70,6 +79,7 @@ export function MapPreviewScreen() {
       Platform.OS !== 'android' ||
       !mapBridge?.getStaticMapUrl
     ) {
+      clearTimeout(watchdog);
       setMapLoading(false);
       if (hasCoordinates && Platform.OS === 'android')
         setMapError(
@@ -82,10 +92,11 @@ export function MapPreviewScreen() {
     mapBridge
       .getStaticMapUrl(params.latitude!, params.longitude!)
       .then(url => {
-        if (active) setMapUrl(url);
+        if (active) {clearTimeout(watchdog); setMapUrl(url);}
       })
       .catch(error => {
         if (active) {
+          clearTimeout(watchdog);
           setMapLoading(false);
           setMapError(
             error instanceof Error ? error.message : 'Map is unavailable.',
@@ -94,8 +105,9 @@ export function MapPreviewScreen() {
       });
     return () => {
       active = false;
+      clearTimeout(watchdog);
     };
-  }, [hasCoordinates, params.latitude, params.longitude]);
+  }, [hasCoordinates, params.latitude, params.longitude, attempt]);
 
   const openDirections = () => {
     void Linking.openURL(
@@ -146,12 +158,18 @@ export function MapPreviewScreen() {
         ) : null}
         {!interactive &&
         (mapError || !hasCoordinates || Platform.OS !== 'android') ? (
-          <Text style={styles.emptyText}>
-            {mapError ||
-              (!hasCoordinates
-                ? 'A map pin is not available for this address yet.'
-                : 'In-app map is currently available on Android.')}
-          </Text>
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyText}>
+              {mapError ||
+                (!hasCoordinates
+                  ? 'A map pin is not available for this address yet.'
+                  : 'In-app map is currently available on Android.')}
+            </Text>
+            {mapError && hasCoordinates ? <Pressable accessibilityRole="button" accessibilityLabel="Retry loading the map"
+              onPress={() => setAttempt(value => value + 1)} style={styles.mapMode}>
+              <Text style={styles.mapModeText}>Retry map</Text>
+            </Pressable> : null}
+          </View>
         ) : null}
       </View>
       <View style={styles.footer}>
@@ -216,6 +234,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.navyDeep,
     backgroundColor: Colors.amber,
   },
+  emptyWrap: {gap: 12, alignItems: 'center', paddingHorizontal: 24},
   emptyText: {
     fontSize: 16,
     lineHeight: 24,

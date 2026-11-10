@@ -42,6 +42,7 @@ type Conversation = {
   unread: number;
   requestId?: string;
   requestKind?: 'engineering' | 'service';
+  requestStatus?: string;
 };
 type ConversationPage = {data: Conversation[]; meta: {total: number}};
 
@@ -238,6 +239,7 @@ export function MessagesScreen() {
                     avatarUrl: item.avatarUrl,
                     requestId: thread.requestId,
                     requestKind: thread.requestKind,
+                    requestStatus: thread.requestStatus,
                   })),
                 })
               }

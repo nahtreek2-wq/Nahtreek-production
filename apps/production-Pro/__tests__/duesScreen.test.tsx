@@ -51,6 +51,16 @@ function setup(hooks: DuesHooks) {
 const order = {settlementId: 'stl', keyId: 'k', orderId: 'o', amountPaisa: 25000, currency: 'INR'};
 const checkoutResult = {razorpayOrderId: 'o', razorpayPaymentId: 'pay', razorpaySignature: 's'};
 
+it('renders fallback figures when an old backend omits terms', async () => {
+  const {terms: _drop, ...legacy} = owed;
+  const hooks: DuesHooks = {load: jest.fn().mockResolvedValue(legacy),
+    order: jest.fn(), verify: jest.fn(), checkout: jest.fn()};
+  const t = setup(hooks);
+  await t.render();
+  expect(t.texts()).toContain('10% of each pay-at-home job');
+  await t.done();
+});
+
 it('shows empty dues with no pay button', async () => {
   const hooks: DuesHooks = {load: jest.fn().mockResolvedValue(empty),
     order: jest.fn(), verify: jest.fn(), checkout: jest.fn()};

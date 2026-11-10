@@ -19,7 +19,11 @@ export type DuesJob = {id: string; serviceRequestId: string | null; engineerRequ
 export type DuesPenalty = {id: string; serviceRequestId: string; amountPaisa: number; reason: string; createdAt: string};
 export type DuesTerms = {memberFeeBps: number; standardFeeBps: number; memberDuesBlockPaisa: number;
   standardDuesBlockPaisa: number; freeJobsPerMonth: number};
-export type DuesView = {duesPaisa: number; blocked: boolean; blockThresholdPaisa: number; jobs: DuesJob[]; penalties?: DuesPenalty[]; isMember?: boolean; memberSavingsPaisa?: number; terms: DuesTerms};
+export type DuesView = {duesPaisa: number; blocked: boolean; blockThresholdPaisa: number; jobs: DuesJob[]; penalties?: DuesPenalty[]; isMember?: boolean; memberSavingsPaisa?: number; terms?: DuesTerms};
+// Last-resort figures when the backend predates server terms (old deploy):
+// the screen must never crash on version skew. Mirrors commission.ts.
+const FALLBACK_TERMS: DuesTerms = {memberFeeBps: 700, standardFeeBps: 1000,
+  memberDuesBlockPaisa: 200000, standardDuesBlockPaisa: 50000, freeJobsPerMonth: 1};
 
 const penaltyLabel = (reason: string) => reason === 'LATE_ACCEPT'
   ? 'Slow acceptance of a Plus request while online'
@@ -139,6 +143,7 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
     [{text: 'Not now', style: 'cancel'}, {text: `Pay ${rupees(total)}`, onPress: () => pay.mutate()}]);
 
   const view = query.data;
+  const terms = view?.terms ?? FALLBACK_TERMS;
   const goToJobs = () => navigation.getParent<BottomTabNavigationProp<MainTabParamList>>()?.navigate('Requests', {screen: 'RequestInbox'});
 
   return <View style={styles.root}>
@@ -161,11 +166,11 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
               backgroundColor: view.blocked ? ProColors.error : ProColors.primary}]} />
           </View>
           <Text style={styles.hint}>{rupees(view.duesPaisa)} of {rupees(view.blockThresholdPaisa)} limit{view.blocked ? ' — over the limit, new jobs paused' : ' — new jobs pause above the limit'}.</Text>
-          <Text style={styles.hint}>{view.terms.standardFeeBps / 100}% of each pay-at-home job. Pro members pay {view.terms.memberFeeBps / 100}%, get the first job each month free, and are blocked only above {rupees(view.terms.memberDuesBlockPaisa)}. You collected the full amount from the customer; this is NAHTREEK&apos;s share.</Text>
+          <Text style={styles.hint}>{terms.standardFeeBps / 100}% of each pay-at-home job. Pro members pay {terms.memberFeeBps / 100}%, get the first job each month free, and are blocked only above {rupees(terms.memberDuesBlockPaisa)}. You collected the full amount from the customer; this is NAHTREEK&apos;s share.</Text>
           {view.isMember && (view.memberSavingsPaisa ?? 0) > 0 ? (
             <View style={styles.savings}>
               <Text style={styles.savingsTitle}>Membership saved you {rupees(view.memberSavingsPaisa ?? 0)}</Text>
-              <Text style={styles.savingsBody}>These jobs were billed below the {view.terms.standardFeeBps / 100}% standard rate.</Text>
+              <Text style={styles.savingsBody}>These jobs were billed below the {terms.standardFeeBps / 100}% standard rate.</Text>
             </View>
           ) : null}
           {!view.isMember && view.jobs.length > 0 ? (

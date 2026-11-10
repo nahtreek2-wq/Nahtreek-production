@@ -608,6 +608,18 @@ export function useCancelRequest() {
   });
 }
 
+export function useRescheduleRequest() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({id, scheduledAt}: {id: string; scheduledAt: string}) =>
+      api.patch<EngineerRequestDto>(`/engineer-requests/${id}/reschedule`, {scheduledAt}),
+    onSettled: () => {
+      void client.invalidateQueries({queryKey: queryKeys.requests});
+      void client.invalidateQueries({queryKey: ['request-detail']});
+    },
+  });
+}
+
 export function usePostReview() {
   return useMutation({
     mutationFn: ({

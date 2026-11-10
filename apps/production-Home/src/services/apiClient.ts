@@ -162,5 +162,5 @@ export const api = {
   get: <T>(path: string, signal?: AbortSignal) => request<T>(path, {signal}),
   post: <T>(path: string, payload?: unknown) => request<T>(path, {method: 'POST', body: JSON.stringify(payload ?? {})}),
   patch: <T>(path: string, payload?: unknown) => request<T>(path, {method: 'PATCH', body: JSON.stringify(payload ?? {})}),
-  delete: <T>(path: string) => request<T>(path, {method: 'DELETE'}),
+  delete: <T>(path: string, payload?: unknown) => request<T>(path, payload === undefined ? {method: 'DELETE'} : {method: 'DELETE', body: JSON.stringify(payload)}),
 };

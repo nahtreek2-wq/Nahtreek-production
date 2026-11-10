@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../../common/strategies/jwt.strategy";
@@ -88,5 +88,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async me(@CurrentUser() user: JwtPayload) {
     return this.authService.me(user.sub);
+  }
+
+  @Delete("me")
+  @UseGuards(JwtAuthGuard)
+  async deleteMe(@CurrentUser() user: JwtPayload, @Body() body: {password?: string}) {
+    return this.authService.deleteAccount(user.sub, body?.password);
   }
 }

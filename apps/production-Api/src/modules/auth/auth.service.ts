@@ -687,6 +687,33 @@ export class AuthService {
     return this.serializeUser(user);
   }
 
+  // Account deletion (App Store / Play requirement for any app with
+  // accounts). Soft-delete: the row stays for booking/money history, but
+  // login, refresh and sessions stop working immediately (deletedAt +
+  // authVersion guards already enforce this everywhere). Password re-entry
+  // proves presence; pros with unsettled commission dues must settle first
+  // so deletion cannot dodge money owed.
+  async deleteAccount(userId: string, password?: string) {
+    const user = await this.prisma.user.findUnique({where: {id: userId},
+      include: {professionalProfile: {select: {id: true}}}});
+    if (!user || user.deletedAt) throw new UnauthorizedException("Unknown user");
+    if (!password || !(await bcrypt.compare(password, user.passwordHash)))
+      throw new UnauthorizedException("Password did not match");
+    if (user.professionalProfile) {
+      const dues = await this.prisma.payment.aggregate({where: {professionalProfileId: user.professionalProfile.id,
+          status: 'COLLECTED_UNSETTLED'}, _sum: {platformFeePaisa: true}}).catch(() => null);
+      const penalties = await this.prisma.professionalPenalty.aggregate({where: {professionalProfileId: user.professionalProfile.id,
+          status: 'PENDING'}, _sum: {amountPaisa: true}}).catch(() => null);
+      const owed = (dues?._sum?.platformFeePaisa ?? 0) + (penalties?._sum?.amountPaisa ?? 0);
+      if (owed > 0) throw new ConflictException(
+        `Settle your \u20B9${(owed / 100).toLocaleString('en-IN')} commission dues before deleting your account`);
+    }
+    await this.prisma.user.update({where: {id: userId}, data: {deletedAt: new Date(), authVersion: {increment: 1}}});
+    await this.prisma.auditLog.create({data: {userId, entity: 'User', entityId: userId,
+      action: 'ACCOUNT_DELETED', metadata: {}}}).catch(() => undefined);
+    return {deleted: true};
+  }
+
   private async issueTokens(user: AuthUser, preserveCreatedAt?: Date) {
     const sessionSecret = randomBytes(48).toString("base64url");
     const session = await this.prisma.session.create({

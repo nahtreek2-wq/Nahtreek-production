@@ -10,6 +10,10 @@ describe('service journey rules',()=>{
   expect(actionStage('PENDING','CANCEL',false)).toBeNull();
   expect(actionStage('PENDING','CANCEL',true)).toBe('CANCELLED');
  });
+ it('lets the client confirm from a resolved dispute',()=>{
+  expect(actionStage('DISPUTED','CONFIRM',true)).toBe('COMPLETED');
+  expect(actionStage('DISPUTED','CONFIRM',false)).toBeNull();
+ });
  it('lets only the client reschedule before work starts',()=>{
   expect(actionStage('PENDING','RESCHEDULE',true)).toBe('PENDING');
   expect(actionStage('ACCEPTED','RESCHEDULE',true)).toBe('ACCEPTED');

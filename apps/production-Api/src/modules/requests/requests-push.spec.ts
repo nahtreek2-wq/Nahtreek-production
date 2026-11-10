@@ -109,6 +109,7 @@ describe('engineering request push fan-out', () => {
     const prisma = {
       engineerRequest: {findFirst: jest.fn().mockResolvedValue({
         ...baseRequest, id: 'req-1', status: 'PENDING',
+        client: {userId: 'client-user', fullName: 'Asha'},
         engineer: {profile: {userId: 'eng-user'}},
         statusHistory: [],
       })},

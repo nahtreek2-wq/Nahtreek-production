@@ -19,7 +19,7 @@ export function actionStage(stage: string, action: string, client: boolean) {
     DEPART: [['ACCEPTED'], 'EN_ROUTE', false], ARRIVE: [['EN_ROUTE'], 'ARRIVED', false],
     QUOTE: [['ARRIVED', 'IN_PROGRESS'], stage, false], APPROVE_QUOTE: [['ARRIVED', 'IN_PROGRESS'], stage, true],
     START: [['ARRIVED'], 'IN_PROGRESS', false], FINISH: [['IN_PROGRESS'], 'AWAITING_CONFIRMATION', false],
-    CONFIRM: [['AWAITING_CONFIRMATION'], 'COMPLETED', true], ISSUE: [['IN_PROGRESS', 'AWAITING_CONFIRMATION'], 'DISPUTED', true],
+    CONFIRM: [['AWAITING_CONFIRMATION', 'DISPUTED'], 'COMPLETED', true], ISSUE: [['IN_PROGRESS', 'AWAITING_CONFIRMATION'], 'DISPUTED', true],
     CANCEL: [['PENDING', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED'], 'CANCELLED', true],
     RESCHEDULE: [['PENDING', 'ACCEPTED'], stage, true],
   };

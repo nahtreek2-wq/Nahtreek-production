@@ -1,6 +1,7 @@
 import React, {useMemo, useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {KeyboardAwareView} from '../../../../packages/mobile-ui/KeyboardAwareView';
+import {DateTimeField} from '../../../../packages/mobile-ui/DateTimeField';
 import {PaymentSection} from '../../../../packages/mobile-booking/PaymentSection';
 import type {CreatedOrder, PaymentStatusView} from '../../../../packages/mobile-booking/PaymentSection';
 import {openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
@@ -37,6 +38,7 @@ import {
   useCreateConversation,
   usePostReview,
   useRequestDetail,
+  useRescheduleRequest,
   useUpdateClientProfile,
 } from '../services/queries';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
@@ -149,6 +151,8 @@ export function RequestDetailScreen() {
   const conversations = useConversationsList();
   const createConversation = useCreateConversation();
   const cancelRequest = useCancelRequest();
+  const rescheduleRequest = useRescheduleRequest();
+  const [newDate, setNewDate] = useState<Date | null>(null);
   const profile = useClientProfile();
   const updateProfile = useUpdateClientProfile();
   const billing = useQuery({queryKey: ['ai-billing'], queryFn: fetchAiSubscription, staleTime: 60000, retry: 1});
@@ -477,6 +481,30 @@ export function RequestDetailScreen() {
               onPress={openChat}
               style={styles.action}
             />
+          ) : null}
+          {canCancel ? (
+            <Card style={styles.summaryCard}>
+              <Text style={styles.eyebrow}>CONSULTATION TIME</Text>
+              <Text style={styles.created}>
+                {request.preferredStartDate ? new Date(request.preferredStartDate).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'}) : 'Not scheduled yet'}
+              </Text>
+              <DateTimeField label="Pick a new time" accessibilityLabel="New consultation time"
+                value={newDate} onChange={setNewDate}
+                minimumDate={new Date(Date.now() + 30 * 60000)} maximumDate={new Date(Date.now() + 30 * 86400000)} />
+              <Button
+                label={rescheduleRequest.isPending ? 'Saving…' : 'Save new time'}
+                onPress={() => {
+                  if (!newDate) return;
+                  rescheduleRequest.mutate(
+                    {id: request.id, scheduledAt: newDate.toISOString()},
+                    {onSuccess: () => {setNewDate(null); toast('Consultation time updated', 'success');},
+                     onError: (error: unknown) => toast(error instanceof Error ? error.message : 'Could not reschedule', 'error')},
+                  );
+                }}
+                disabled={!newDate || rescheduleRequest.isPending}
+                style={styles.action}
+              />
+            </Card>
           ) : null}
           {canCancel ? (
             <Button

@@ -135,7 +135,10 @@ export class RequestsService {
   }
 
   async cancel(id: string, userId: string) {
-    const request = await this.findOwnedByClient(id, userId);
+    const request = await this.findByEitherParty(id, userId);
+    // Engineers cancel too (emergency, overbooked): same early stages as the
+    // client, the other side notified, paid fees refunded by the shared path.
+    const byClient = request.client.userId === userId;
     if (!CLIENT_CANCELLABLE_STATUSES.has(request.status)) {
       throw new BadRequestException(`Cannot cancel from status ${request.status}`);
     }
@@ -157,14 +160,18 @@ export class RequestsService {
       });
       await tx.notification.create({
         data: {
-          userId: request.engineer.profile.userId,
+          userId: byClient ? request.engineer.profile.userId : request.client.userId,
           kind: 'request',
-          title: 'Client cancelled a request',
-          body: `${request.projectTitle} was cancelled by the client.`,
-          data: { destination: 'pro-request', requestId: request.id, engineerRequestId: request.id },
+          title: byClient ? 'Client cancelled a request' : 'Engineer cancelled a request',
+          body: byClient
+            ? `${request.projectTitle} was cancelled by the client.`
+            : `${request.projectTitle} was cancelled by the engineer. Book again whenever you are ready.`,
+          data: byClient
+            ? { destination: 'pro-request', requestId: request.id, engineerRequestId: request.id }
+            : { destination: 'request', requestId: request.id, engineerRequestId: request.id },
         },
       });
-      await tx.auditLog.createMany({ data: [userId, request.engineer.profile.userId].map(owner => ({ userId: owner, action: 'REQUEST_CANCELLED', entity: 'EngineerRequest', entityId: request.id, metadata: { title: request.projectTitle } })) });
+      await tx.auditLog.createMany({ data: [request.client.userId, request.engineer.profile.userId].map(owner => ({ userId: owner, action: 'REQUEST_CANCELLED', entity: 'EngineerRequest', entityId: request.id, metadata: { title: request.projectTitle } })) });
       return this.serialize(updated);
     });
     this.realtime.emitUserUpdate(userId, 'requests');
@@ -176,6 +183,34 @@ export class RequestsService {
     // are voided, captured fees are refunded. Never throws.
     await this.payments?.cancelUnpaidOrRefundEngineer(request.id, userId).catch(() => undefined);
     return cancelled;
+  }
+
+  // Consultation reschedule, mirroring the service-visit flow: the client
+  // picks a new preferred date on an upcoming request, the engineer is
+  // notified to review it. Same 30-minute / 30-day window as visits.
+  async reschedule(id: string, userId: string, scheduledAt: string) {
+    const request = await this.findOwnedByClient(id, userId);
+    if (!([RequestStatus.PENDING, RequestStatus.ACCEPTED] as RequestStatus[]).includes(request.status))
+      throw new BadRequestException('Only upcoming requests can be rescheduled');
+    const when = new Date(scheduledAt);
+    if (!Number.isFinite(when.getTime()) || when.getTime() < Date.now() + 30 * 60000 || when.getTime() > Date.now() + 30 * 86400000)
+      throw new BadRequestException('Choose a visit between 30 minutes and 30 days from now');
+    const updated = await this.prisma.$transaction(async tx => {
+      const next = await tx.engineerRequest.update({where: {id: request.id},
+        data: {preferredStartDate: when},
+        include: {client: true, engineer: {include: {profile: true}}}});
+      await tx.requestStatusHistory.create({data: {engineerRequestId: request.id,
+        fromStatus: request.status, toStatus: request.status, changedByUserId: userId}});
+      await tx.notification.create({data: {userId: request.engineer.profile.userId, kind: 'request',
+        title: 'Consultation time changed',
+        body: `The client picked a new time for ${request.projectTitle}. Tap to review it.`,
+        data: {destination: 'pro-request', requestId: request.id, engineerRequestId: request.id}}});
+      return this.serialize(next);
+    });
+    this.realtime.emitUserUpdate(userId, 'requests');
+    this.realtime.emitUserUpdate(request.engineer.profile.userId, 'requests');
+    void this.push.dispatch().catch(() => undefined);
+    return updated;
   }
 
   async addReview(id: string, userId: string, review: CreateReviewDto) {
@@ -350,6 +385,19 @@ export class RequestsService {
     return request;
   }
 
+  private async findByEitherParty(id: string, userId: string) {
+    const request = await this.prisma.engineerRequest.findFirst({
+      where: { id, OR: [{ client: { userId } }, { engineer: { profile: { userId } } }] },
+      include: {
+        client: true,
+        engineer: { include: { profile: true } },
+        statusHistory: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+    if (!request) throw new NotFoundException('Request not found');
+    return request;
+  }
+
   private parseStatus(value: string): RequestStatus {
     if (!Object.values(RequestStatus).includes(value as RequestStatus)) {
       throw new BadRequestException('Invalid request status');
@@ -366,6 +414,7 @@ export class RequestsService {
       projectDescription: string;
       propertyType: string;
       projectSizeSqFt: number | null;
+      preferredStartDate?: Date | string | null;
       locationAddress: string;
       latitude: number;
       longitude: number;
@@ -390,6 +439,9 @@ export class RequestsService {
       engineerName: request.engineer.profile.fullName,
       engineerAvatarUrl: request.engineer.profile.avatarUrl ?? undefined,
       consultationFee: request.engineer.consultationFee ?? undefined,
+      preferredStartDate: request.preferredStartDate
+        ? (request.preferredStartDate instanceof Date ? request.preferredStartDate.toISOString() : request.preferredStartDate)
+        : undefined,
       clientName: request.client?.fullName,
       projectTitle: request.projectTitle,
       projectDescription: request.projectDescription,

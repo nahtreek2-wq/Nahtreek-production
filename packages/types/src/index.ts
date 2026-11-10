@@ -90,6 +90,7 @@ export interface EngineerRequestDto {
   engineerProfileId: string;
   engineerName: string;
   engineerAvatarUrl?: string;
+  preferredStartDate?: string;
   consultationFee?: number;
   completionCode?: string;
   projectTitle: string;

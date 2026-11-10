@@ -8,6 +8,7 @@ import { JwtPayload } from '../../common/strategies/jwt.strategy';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { EngineerTransitionDto } from './dto/engineer-transition.dto';
+import { RescheduleRequestDto } from './dto/reschedule-request.dto';
 import { RequestsService } from './requests.service';
 
 @Controller('engineer-requests')
@@ -38,9 +39,15 @@ export class RequestsController {
   }
 
   @Patch(':id/cancel')
-  @Roles(Role.CLIENT)
+  @Roles(Role.CLIENT, Role.ENGINEER)
   async cancel(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.requestsService.cancel(id, user.sub);
+  }
+
+  @Patch(':id/reschedule')
+  @Roles(Role.CLIENT)
+  async reschedule(@Param('id') id: string, @CurrentUser() user: JwtPayload, @Body() dto: RescheduleRequestDto) {
+    return this.requestsService.reschedule(id, user.sub, dto.scheduledAt);
   }
 
   @Post(':id/reviews')

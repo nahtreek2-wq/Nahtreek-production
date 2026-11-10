@@ -26,6 +26,7 @@ function journeyNotification(action: string, stage: string) {
     CONFIRM: ['Customer confirmed, job closed', 'This request is marked complete. Payment is handled separately.'],
     ISSUE: ['A customer flagged a concern', 'Open the request to review it. It stays open for support.'],
     CANCEL: ['This visit was cancelled', 'The customer cancelled. It stays in your request history.'],
+    PRO_CANCEL: ['Visit cancelled by your pro', 'Your professional cancelled this visit. Book again whenever you are ready.'],
   };
   const message = messages[action];
   if (message) return {title: message[0], body: message[1]};
@@ -198,7 +199,11 @@ export class JourneyService {
     const snapshot = await this.db.serviceJourney.findFirst({where: {requestId: id, request: {OR: [{client: {userId}}, {provider: {userId}}]}}, include: {request: {include: {provider: {include: {presence: true}}, client: true}}}});
     if (!snapshot) throw new NotFoundException('Booking not found');
     const isClient = snapshot.request.client.userId === userId;
-    if (!actionStage(snapshot.stage, dto.action, isClient)) throw new BadRequestException('That action is not available at this stage');
+    // Pros cancel too (emergency, overbooked): same CANCEL action before
+    // travel starts; the client is notified and the shared money path below
+    // voids unpaid orders / refunds captured fees.
+    const proCancel = !isClient && dto.action === 'CANCEL' && ['PENDING', 'ACCEPTED'].includes(snapshot.stage);
+    if (!proCancel && !actionStage(snapshot.stage, dto.action, isClient)) throw new BadRequestException('That action is not available at this stage');
     let eta: number | undefined;
     if (['ACCEPT','DEPART'].includes(dto.action)) {
       const presence = snapshot.request.provider.presence;
@@ -227,7 +232,8 @@ export class JourneyService {
       const j = await tx.serviceJourney.findUniqueOrThrow({where: {requestId: id}});
       if (dto.action === 'ARRIVE') arrivalTarget = j.arrivalTarget;
       if (j.revision !== dto.revision) throw new ConflictException('Booking changed. Refresh before trying again.');
-      const stage = actionStage(j.stage, dto.action, isClient);
+      let stage = actionStage(j.stage, dto.action, isClient);
+      if (!stage && proCancel && ['PENDING', 'ACCEPTED'].includes(j.stage)) stage = 'CANCELLED';
       if (!stage || (j.stage === 'PENDING' && j.expiresAt.getTime() <= Date.now())) throw new ConflictException('This request is no longer available');
       const patch: Prisma.ServiceJourneyUpdateInput = {stage, revision: {increment: 1}};
       if (dto.action === 'ACCEPT') {
@@ -301,7 +307,7 @@ export class JourneyService {
       const status: RequestStatus = stage === 'COMPLETED' ? 'COMPLETED' : stage === 'CANCELLED' ? 'CANCELLED' : stage === 'DECLINED' ? 'DECLINED' :
         ['IN_PROGRESS','AWAITING_CONFIRMATION','DISPUTED'].includes(stage) ? 'IN_PROGRESS' : 'ACCEPTED';
       await tx.serviceRequest.update({where: {id}, data: {status, statusHistory: {create: {toStatus: status, changedByUserId: userId, reason: `${dto.action}: ${stage}`}}}});
-      const notice = journeyNotification(dto.action, stage);
+      const notice = journeyNotification(proCancel ? 'PRO_CANCEL' : dto.action, stage);
       await this.notify(tx, isClient ? snapshot.request.provider.userId : snapshot.request.client.userId, id, notice.title, notice.body, stage);
       await tx.auditLog.createMany({data: [snapshot.request.client.userId, snapshot.request.provider.userId].map(owner => ({userId: owner, entity: 'ServiceRequest', entityId: id, action: `SERVICE_${dto.action}`, metadata: {stage}}))});
       return {error: null};
@@ -311,7 +317,13 @@ export class JourneyService {
     // the action; each lands the payment in an explicit, retryable state.
     if (this.payments) {
       if (dto.action === 'FINISH') await this.payments.ensureAtHomeCollection(id).catch(() => undefined);
-      if (dto.action === 'CONFIRM') await this.payments.releaseForRequest(id, userId).catch(() => undefined);
+      if (dto.action === 'CONFIRM') {
+        // Confirming from DISPUTED means the issue was resolved (in chat or
+        // with support): un-freeze the payment back to HELD so the release
+        // below pays the pro instead of stranding the money in DISPUTED.
+        if (snapshot.stage === 'DISPUTED') await this.payments?.resolveDisputeForRequest(id, userId).catch(() => undefined);
+        await this.payments.releaseForRequest(id, userId).catch(() => undefined);
+      }
       if (dto.action === 'ISSUE') await this.payments.markDisputed(id, userId).catch(() => undefined);
       if (dto.action === 'CANCEL') await this.payments.cancelUnpaidOrRefund(id, userId).catch(() => undefined);
       // Plus enforcement: arriving past the target + grace on a Plus booking

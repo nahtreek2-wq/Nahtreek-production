@@ -789,6 +789,17 @@ export class PaymentsService {
     }
   }
 
+  // The client confirmed from DISPUTED: the issue was resolved, so the
+  // frozen payment goes back to HELD for the normal release path. Only
+  // DISPUTED rows move; anything else is already where it belongs.
+  async resolveDisputeForRequest(serviceRequestId: string, actorUserId: string) {
+    const payment = await this.db.payment.findUnique({where: {serviceRequestId}}).catch(() => null);
+    if (!payment || payment.status !== PaymentStatus.DISPUTED) return;
+    await this.db.payment.update({where: {id: payment.id}, data: {status: PaymentStatus.HELD}}).catch(() => undefined);
+    await this.db.auditLog.create({data: {userId: actorUserId, entity: 'Payment', entityId: payment.id,
+      action: 'PAYMENT_DISPUTE_RESOLVED', metadata: {serviceRequestId}}}).catch(() => undefined);
+  }
+
   async cancelUnpaidOrRefund(serviceRequestId: string, actorUserId: string) {
     const payment = await this.db.payment.findUnique({where: {serviceRequestId}}).catch(() => null);
     if (!payment) return;

@@ -255,6 +255,27 @@ export function RequestDetailScreen() {
       toast(error instanceof Error ? error.message : 'Could not update this job.', 'error');
     },
   });
+  const cancelJob = useMutation({
+    mutationFn: () => api.patch(`/engineer-requests/${id}/cancel`, {}),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: ['professional-request-detail', kind, id]}),
+        queryClient.invalidateQueries({queryKey: ['professional-requests']}),
+        queryClient.invalidateQueries({queryKey: ['professional-request-summary']}),
+      ]);
+      toast('Request cancelled. Customer notified.', 'success');
+      navigation.goBack();
+    },
+    onError: error => {
+      toast(error instanceof Error ? error.message : 'Could not cancel this job.', 'error');
+    },
+  });
+  const onCancelJob = () => {
+    Alert.alert('Cancel request', 'Cancel this job? The customer will be notified and any payment is refunded automatically.', [
+      {text: 'Keep job', style: 'cancel'},
+      {text: 'Cancel request', style: 'destructive', onPress: () => cancelJob.mutate()},
+    ]);
+  };
   const conversation = useMutation({
     mutationFn: () =>
       api.post<{id: string; title: string; subtitle: string; otherAvatarUrl?: string}>(
@@ -365,6 +386,8 @@ export function RequestDetailScreen() {
           onMap={() => openMap(detail.data)}
           onMessage={() => conversation.mutate()}
           onTransition={changeStatus}
+          onCancelJob={onCancelJob}
+          cancelling={cancelJob.isPending}
           serviceProvider={Boolean(serviceProvider && kind === 'service')}
           kind={kind}
           onViewDues={() =>
@@ -400,6 +423,8 @@ function RequestContent({
   onMap,
   onMessage,
   onTransition,
+  onCancelJob,
+  cancelling,
   serviceProvider,
   kind,
   onViewDues,
@@ -418,6 +443,8 @@ function RequestContent({
   onMap: () => void;
   onMessage: () => void;
   onTransition: (status: Status, label: string) => void;
+  onCancelJob: () => void;
+  cancelling: boolean;
   serviceProvider: boolean;
   kind: 'engineering' | 'service';
   onViewDues: () => void;
@@ -629,6 +656,16 @@ function RequestContent({
                 onPress={() => onTransition('DECLINED', 'I cannot do this job')}
                 style={styles.decline}>
                 <Text style={styles.declineText}>I cannot do this job</Text>
+              </Pressable>
+            ) : null}
+            {kind === 'engineering' && request.status === 'ACCEPTED' ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel this job"
+                disabled={busy || cancelling}
+                onPress={onCancelJob}
+                style={styles.decline}>
+                <Text style={styles.declineText}>{cancelling ? 'Cancelling…' : 'Cancel this job'}</Text>
               </Pressable>
             ) : null}
           </View>

@@ -1,6 +1,6 @@
 import React from 'react';
 import {View, Text, StyleSheet} from 'react-native';
-import {Colors, Typography, BorderRadius, Spacing} from '@nahtreek/design-system';
+import {Typography, BorderRadius, Spacing} from '@nahtreek/design-system';
 import {ClientColors} from '../../design-system/tokens';
 import {Icon, ICONS} from './Icon';
 

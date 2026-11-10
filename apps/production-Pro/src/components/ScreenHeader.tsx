@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {Image, Pressable, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {Colors, Spacing, Typography} from '@nahtreek/design-system';
+import {Colors} from '@nahtreek/design-system';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {mediaUrl} from '../services/media';
 import {headerStyles} from '../../../../packages/mobile-ui/headerStyles';

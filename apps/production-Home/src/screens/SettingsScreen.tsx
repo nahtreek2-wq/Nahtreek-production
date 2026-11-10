@@ -9,7 +9,6 @@ import {
   Spacing,
   Typography,
 } from '@nahtreek/design-system';
-import {ClientColors} from '../design-system/tokens';
 import {AppHeader, Button, Card, Icon, ICONS} from '../components/ui';
 import type {RootStackParamList} from '../navigation/types';
 

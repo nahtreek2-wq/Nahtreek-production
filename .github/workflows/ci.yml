@@ -10,6 +10,19 @@ on:
 jobs:
   production-api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nahtreek_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,6 +32,12 @@ jobs:
       - run: npm ci
       - run: npm run test:api
       - run: npm run build:api
+      - run: npm run lint --workspace=apps/production-Api
+      - name: Validate migration chain on a scratch database
+        run: npx prisma migrate deploy
+        working-directory: apps/production-Api
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nahtreek_test
 
   production-admin:
     runs-on: ubuntu-latest
@@ -44,6 +63,8 @@ jobs:
         working-directory: apps/production-Home
       - run: npx tsc --noEmit -p tsconfig.json
         working-directory: apps/production-Home
+      - run: npx eslint src __tests__
+        working-directory: apps/production-Home
 
   production-pro:
     runs-on: ubuntu-latest
@@ -58,3 +79,46 @@ jobs:
         working-directory: apps/production-Pro
       - run: npx tsc --noEmit -p tsconfig.json
         working-directory: apps/production-Pro
+      - run: npx eslint src __tests__
+        working-directory: apps/production-Pro
+
+  # Device smoke on pull requests only (emulator + APK builds are slow for
+  # every push). Guest assertions always run; login assertions run only when
+  # the E2E_* repository secrets exist, otherwise they skip green.
+  e2e-android:
+    if: github.event_name == 'pull_request'
+    needs: [production-api, production-home, production-pro]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Build internal APKs
+        run: |
+          (cd apps/production-Home && ./android/gradlew -p android app:assembleInternal)
+          (cd apps/production-Pro && ./android/gradlew -p android app:assembleInternal)
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: aosp_atd
+          arch: x86_64
+          script: ./e2e/run-all.sh
+        env:
+          APK_HOME: apps/production-Home/android/app/build/outputs/apk/internal/app-internal.apk
+          APK_PRO: apps/production-Pro/android/app/build/outputs/apk/internal/app-internal.apk
+          E2E_PRO_EMAIL: ${{ secrets.E2E_PRO_EMAIL }}
+          E2E_PRO_PASSWORD: ${{ secrets.E2E_PRO_PASSWORD }}
+          E2E_CLIENT_EMAIL: ${{ secrets.E2E_CLIENT_EMAIL }}
+          E2E_CLIENT_PASSWORD: ${{ secrets.E2E_CLIENT_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: e2e/e2e-out/

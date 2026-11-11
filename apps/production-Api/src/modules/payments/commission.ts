@@ -20,9 +20,9 @@ export function plusDiscountPaisa(amountPaisa: number) {
 }
 
 type DuesReader = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   payment: {aggregate: (...args: any[]) => Promise<{_sum: {platformFeePaisa?: number | null}}>};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   professionalPenalty: {aggregate: (...args: any[]) => Promise<{_sum: {amountPaisa?: number | null}}>};
 };
 
@@ -49,7 +49,7 @@ export async function unsettledDuesPaisa(db: DuesReader, professionalProfileId: 
 }
 
 type MembershipReader = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   membership: {findUnique: (...args: any[]) => Promise<{status: string; currentPeriodEnd: Date | null} | null>};
 };
 

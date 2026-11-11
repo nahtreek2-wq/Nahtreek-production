@@ -1,7 +1,7 @@
 // Dependency-free membership reads for services that cannot import
 // MembershipsService without a module cycle. Read-only, fail-closed.
 type PlusReader = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   aiSubscription: {findUnique: (...args: any[]) => Promise<{status: string; currentPeriodEnd: Date | null} | null>};
 };
 
@@ -18,7 +18,7 @@ export async function isPlusClient(db: PlusReader, userId: string): Promise<bool
 }
 
 type PlusBatchReader = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   aiSubscription: {findMany: (...args: any[]) => Promise<{userId: string; status: string; currentPeriodEnd: Date | null}[]>};
 };
 

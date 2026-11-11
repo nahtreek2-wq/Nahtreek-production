@@ -23,3 +23,4 @@ node_modules/
 **/.android-signing/
 .gradle/
 .cxx/
+e2e/e2e-out/

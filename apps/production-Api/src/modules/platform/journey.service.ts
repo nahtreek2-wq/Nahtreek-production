@@ -182,7 +182,7 @@ export class JourneyService {
     if (!j) throw new NotFoundException('Booking workflow not found');
     const client = j.request.client.userId === userId;
     const p = j.request.provider.presence;
-    const {request, payloadHash, idempotencyKey, startCode, ...safe} = j;
+    const {request: _request, payloadHash: _payloadHash, idempotencyKey: _idempotencyKey, startCode, ...safe} = j;
     // Plus terms travel with the booking so neither app hardcodes penalty or
     // window figures — the values below are the same constants enforcement
     // uses, and null for non-Plus bookings.

@@ -28,7 +28,7 @@ function setup(over: {membership?: any; ai?: any; subs?: Record<string, any>; pl
       if (where.id) return row.id === where.id ? row : null;
       return null;
     }),
-    findUniqueOrThrow: jest.fn(async ({where}: any) => {
+    findUniqueOrThrow: jest.fn(async (_args: any) => {
       const row = get();
       if (!row) throw new Error('not found');
       return row;

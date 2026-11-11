@@ -385,7 +385,7 @@ export class PlatformService {
     if (!profile) throw new NotFoundException("Complete your profile first");
     // This screen needs review status, not signed file URLs. Admin signs documents
     // only when reviewing them; avoid a storage round-trip per proof on every visit.
-    return profile.verificationDocuments.map(({documentUrl, ...document}) => document);
+    return profile.verificationDocuments.map(({documentUrl: _documentUrl, ...document}) => document);
   }
 
   async uploadVerificationDocument(

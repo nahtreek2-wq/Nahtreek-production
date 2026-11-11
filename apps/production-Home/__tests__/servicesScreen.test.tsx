@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, Text} from 'react-native';
+import {Pressable} from 'react-native';
 import renderer from 'react-test-renderer';
 
 let mockRouteParams: {serviceId?: string} = {};

@@ -1,6 +1,6 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import {Text, TextInput} from 'react-native';
+import {Text} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {PayoutScreen} from '../src/screens/PayoutScreen';

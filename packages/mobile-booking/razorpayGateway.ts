@@ -39,6 +39,25 @@ export function isGatewayAvailable() {
   }
 }
 
+// Normalize an account phone number for Razorpay contact prefill: the
+// 10-digit subscriber number (Razorpay adds the +91 country selector
+// itself — a prefixed 12-digit value is rejected and the contact screen
+// stays). Returns undefined when there is nothing usable — the checkout
+// then asks for contact details as before.
+export function checkoutContact(phoneNumber?: string): string | undefined {
+  const digits = (phoneNumber ?? '').replace(/\D/g, '');
+  if (digits.length === 10) return digits;
+  if (digits.length > 10) return digits.slice(-10);
+  return undefined;
+}
+
+// Email for the same prefill: Razorpay skips its contact screen only when
+// BOTH contact and email arrive valid. Anything else falls back to asking.
+export function checkoutEmail(email?: string): string | undefined {
+  const value = (email ?? '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? value : undefined;
+}
+
 export async function openCheckout(input: CheckoutInput): Promise<CheckoutResult> {
   if (!input.orderId && !input.subscriptionId) throw new Error('Checkout needs an order or a subscription.');
   let result: any;
@@ -46,6 +65,10 @@ export async function openCheckout(input: CheckoutInput): Promise<CheckoutResult
     result = await sdk().open({key: input.keyId,
       ...(input.orderId ? {order_id: input.orderId, amount: input.amountPaisa} : {subscription_id: input.subscriptionId}),
       currency: input.currency, name: input.name, description: input.description, image: CHECKOUT_LOGO_URL,
+      // UPI + cards only: netbanking, wallets, EMI and pay-later add choice
+      // overload and support load without meaningful conversion. One place —
+      // every membership, dues and booking checkout inherits it.
+      method: {upi: true, card: true, netbanking: false, wallet: false, emi: false, paylater: false},
       prefill: input.prefill ?? {}, theme: {color: '#111F35'}});
   } catch (error: any) {
     if (error instanceof GatewayUnavailableError) throw error;

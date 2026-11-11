@@ -24,7 +24,10 @@ class MainActivity : ReactActivity() {
     super.onCreate(null)
   }
 
-  // singleTask: notification taps while the app is open arrive here.
+  // singleTop (never singleTask/singleInstance): notification taps while the app is
+  // open arrive here, and the Razorpay checkout activity result returns to the
+  // caller. singleTask mangles that result, which hangs the checkout promise
+  // and freezes the payment screen with its buttons disabled.
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)

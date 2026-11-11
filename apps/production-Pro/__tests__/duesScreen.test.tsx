@@ -44,8 +44,13 @@ function setup(hooks: DuesHooks) {
     await renderer.act(async () => { button.props.onPress(); });
     await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
   };
+  const press = async (label: string) => {
+    const button = screen.root.findByProps({accessibilityLabel: label});
+    await renderer.act(async () => { button.props.onPress(); });
+    await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  };
   const done = () => renderer.act(() => screen.unmount());
-  return {render, texts, pressPay, done};
+  return {render, texts, pressPay, press, done};
 }
 
 const order = {settlementId: 'stl', keyId: 'k', orderId: 'o', amountPaisa: 25000, currency: 'INR'};
@@ -199,6 +204,24 @@ it('polls verify while Razorpay capture lags instead of failing', async () => {
   }
 });
 
+it('lets the user check now during capture lag instead of watching the poll', async () => {
+  const notCaptured = Object.assign(new Error('Payment not captured yet at Razorpay'), {status: 409});
+  const hooks: DuesHooks = {load: jest.fn().mockResolvedValue(owed),
+    order: jest.fn().mockResolvedValue(order),
+    verify: jest.fn()
+      .mockRejectedValueOnce(notCaptured)
+      .mockResolvedValue({settled: true}),
+    checkout: jest.fn().mockResolvedValue(checkoutResult)};
+  const t = setup(hooks);
+  await t.render();
+  await t.pressPay();
+  expect(t.texts()).toContain('Payment received — confirming with Razorpay');
+  await t.press('Check settlement now');
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+  expect(hooks.verify).toHaveBeenCalledTimes(2);
+  t.done();
+});
+
 it('shows non-lag 409s as errors without polling', async () => {
   const mismatch = Object.assign(new Error('Signature mismatch for this settlement'), {status: 409});
   const hooks: DuesHooks = {load: jest.fn().mockResolvedValue(owed),
@@ -210,6 +233,49 @@ it('shows non-lag 409s as errors without polling', async () => {
   expect(hooks.verify).toHaveBeenCalledTimes(1);
   expect(t.texts()).toContain('Signature mismatch for this settlement');
   expect(t.texts()).toContain('Settle ₹250');
+  t.done();
+});
+
+it('quotes the fresh order total in confirm, not a stale screen total', async () => {
+  const fresh: DuesView = {...owed, duesPaisa: 30000};
+  const load = jest.fn()
+    .mockResolvedValueOnce(owed)
+    .mockResolvedValue(fresh);
+  const order300 = {...order, amountPaisa: 30000};
+  const hooks: DuesHooks = {load,
+    order: jest.fn().mockResolvedValue(order300), verify: jest.fn(),
+    checkout: jest.fn().mockRejectedValue(new CheckoutCancelledError())};
+  const t = setup(hooks);
+  await t.render();
+  expect(t.texts()).toContain('Settle ₹250');
+  // The Alert mock is file-scoped: only calls from this test count.
+  const alertsBefore = (Alert.alert as unknown as jest.Mock).mock.calls.length;
+  await t.pressPay();
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+  const settle = (Alert.alert as unknown as jest.Mock).mock.calls
+    .slice(alertsBefore)
+    .find(call => call[0] === 'Settle commission dues?');
+  expect(settle[1]).toContain('₹300');
+  expect(settle[2].find((b: {text: string}) => b.text.startsWith('Pay')).text).toBe('Pay ₹300');
+  expect(hooks.checkout).toHaveBeenCalledWith(expect.objectContaining({amountPaisa: 30000}));
+  expect(t.texts()).toContain('Nothing was charged');
+  t.done();
+});
+
+it('settles instead of failing when a checkout error hides cleared dues', async () => {
+  const load = jest.fn()
+    .mockResolvedValueOnce(owed)
+    .mockResolvedValue(empty);
+  const hooks: DuesHooks = {load,
+    order: jest.fn().mockResolvedValue(order), verify: jest.fn(),
+    checkout: jest.fn().mockRejectedValue(new Error('Bridge result lost'))};
+  const t = setup(hooks);
+  await t.render();
+  await t.pressPay();
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+  expect(hooks.verify).not.toHaveBeenCalled();
+  expect(t.texts()).toContain('No dues');
+  expect(t.texts()).not.toContain('Bridge result lost');
   t.done();
 });
 

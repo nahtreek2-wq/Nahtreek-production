@@ -25,7 +25,7 @@ export class PaymentsController {
     return this.service.verify(user.sub, dto);
   }
 
-  @Post('sync') @Roles(Role.CLIENT)
+  @Post('sync') @Roles(Role.CLIENT, Role.ENGINEER, Role.SERVICE_PROVIDER)
   sync(@CurrentUser() user: JwtPayload, @Body() dto: SyncPaymentDto) {
     return this.service.sync(user.sub, dto);
   }

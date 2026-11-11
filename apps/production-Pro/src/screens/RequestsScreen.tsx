@@ -1,6 +1,5 @@
 import React, {useMemo, useState} from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Pressable,
   RefreshControl,
@@ -18,6 +17,7 @@ import {
   Typography,
 } from '@nahtreek/design-system';
 import {ScreenHeader} from '../components/ScreenHeader';
+import {ProLoader} from '../components/ProLoader';
 import {EmptyState} from '../components/EmptyState';
 import {VerificationGate} from '../components/VerificationGate';
 import {api} from '../services/apiClient';
@@ -30,8 +30,8 @@ import type {MainTabParamList, RequestsStackParamList} from '../navigation/types
 import {ScreenLoading} from '../components/ScreenLoading';
 import {MotionReveal} from '../components/MotionReveal';
 import {ScrollMotionBar, useScrollMotion} from '../components/ScrollMotionBar';
-import {JobContextVisual} from '../components/JobContextVisual';
-import {ProColors, ProRadius, ProSpacing, ProType} from '../theme/professionalTheme';
+import {ClientAvatar} from '../components/ClientAvatar';
+import {ProColors, ProRadius, ProSpacing} from '../theme/professionalTheme';
 import {nextCombinedPage, type PageMeta} from '../services/pagination';
 
 type RequestStatus =
@@ -46,6 +46,7 @@ type WorkRequest = {
   title: string;
   description: string;
   clientName?: string;
+  clientAvatarUrl?: string;
   clientPlus?: boolean;
   location: string;
   status: RequestStatus;
@@ -58,6 +59,7 @@ type EngineerResponse = {
   projectTitle: string;
   projectDescription: string;
   clientName?: string;
+  clientAvatarUrl?: string;
   clientPlus?: boolean;
   locationAddress: string;
   status: RequestStatus;
@@ -71,7 +73,7 @@ type ServiceResponse = {
   createdAt: string;
   category: {title: string};
   clientPlus?: boolean;
-  client: {fullName: string};
+  client: {fullName: string; avatarUrl?: string | null};
 };
 type Filter = 'ALL' | 'NEW' | 'ACTIVE' | 'COMPLETED';
 
@@ -112,10 +114,13 @@ function matchesFilter(request: WorkRequest, filter: Filter) {
 }
 
 function statusDetails(status: RequestStatus, service = false) {
+  // label/action stay verbose for screen readers; pill is the short tagline
+  // chip so the job title keeps its room on narrow phones.
   switch (status) {
     case 'PENDING':
       return {
         label: 'Reply needed',
+        pill: 'REPLY',
         action: service ? 'See work and reply' : 'Check and reply',
         icon: 'bell-ring-outline',
         background: Colors.warningBg,
@@ -124,6 +129,7 @@ function statusDetails(status: RequestStatus, service = false) {
     case 'ACCEPTED':
       return {
         label: 'Job accepted',
+        pill: 'ACCEPTED',
         action: service ? 'Continue job' : 'See accepted job',
         icon: 'handshake-outline',
         background: Colors.softBlue,
@@ -132,6 +138,7 @@ function statusDetails(status: RequestStatus, service = false) {
     case 'IN_PROGRESS':
       return {
         label: 'Work started',
+        pill: 'ACTIVE',
         action: service ? 'Continue service work' : 'Continue this job',
         icon: 'progress-wrench',
         background: Colors.softBlue,
@@ -140,6 +147,7 @@ function statusDetails(status: RequestStatus, service = false) {
     case 'COMPLETED':
       return {
         label: 'Finished',
+        pill: 'DONE',
         action: 'View completed job',
         icon: 'check-circle-outline',
         background: Colors.successBg,
@@ -148,6 +156,7 @@ function statusDetails(status: RequestStatus, service = false) {
     default:
       return {
         label: 'Closed',
+        pill: 'CLOSED',
         action: 'View job details',
         icon: 'archive-outline',
         background: Colors.slate100,
@@ -188,6 +197,7 @@ export function RequestsScreen() {
           title: item.projectTitle,
           description: item.projectDescription,
           clientName: item.clientName,
+          clientAvatarUrl: item.clientAvatarUrl,
           clientPlus: item.clientPlus,
           location: item.locationAddress,
           status: item.status,
@@ -200,6 +210,7 @@ export function RequestsScreen() {
         title: item.category.title,
         description: item.description,
         clientName: item.client.fullName,
+        clientAvatarUrl: item.client.avatarUrl ?? undefined,
         clientPlus: item.clientPlus,
         location: item.locationAddress,
         status: item.status,
@@ -334,7 +345,7 @@ export function RequestsScreen() {
           onScroll={scrollMotion.onScroll}
           scrollEventThrottle={16}
           data={visible}
-          keyExtractor={item => item.id}
+          keyExtractor={item => `${item.kind}:${item.id}`}
           contentContainerStyle={[styles.list, {paddingBottom: tabBarHeight + ProSpacing.xxl}]}
           refreshControl={
             <RefreshControl
@@ -379,7 +390,7 @@ export function RequestsScreen() {
               disabled={requests.isFetchingNextPage}
               onPress={() => {requests.fetchNextPage().catch(() => undefined);}}
               style={[styles.loadMore, requests.isFetchingNextPage && styles.pressed]}>
-              {requests.isFetchingNextPage ? <ActivityIndicator color={Colors.navyMid} /> : null}
+              {requests.isFetchingNextPage ? <ProLoader size={26} /> : null}
               <Text style={styles.loadMoreText}>{requests.isFetchingNextPage ? 'Loading older jobs…' : 'Load older jobs'}</Text>
             </Pressable>
           ) : null}
@@ -415,62 +426,51 @@ function RequestCard({
   const formattedDate = Number.isNaN(date.getTime())
     ? ''
     : date.toLocaleDateString('en-IN', {day: 'numeric', month: 'short'});
+  // Compact tagline row: the full description, map and actions live on the
+  // detail screen, so a long inbox stays scannable.
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${request.title}. ${status.label}. ${status.action}`}
       onPress={onPress}
       style={({pressed}) => [styles.card, pressed && styles.pressed]}>
-      <View style={styles.cardTop}>
-        <JobContextVisual kind={request.kind} title={request.title} seed={request.id} size={46} />
-        <View style={styles.flex}>
-          <Text style={styles.kindLabel}>{request.kind === 'engineering' ? 'ENGINEERING' : 'HOME SERVICE'}</Text>
+      <ClientAvatar name={request.clientName} avatarUrl={request.clientAvatarUrl} size={48} />
+      <View style={styles.cardBody}>
+        <View style={styles.cardTopRow}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {request.title}
+          </Text>
           {request.clientPlus ? (
             <View style={styles.plusPill}>
-              <Text style={styles.plusPillText}>PLUS · PRIORITY</Text>
+              <Text style={styles.plusPillText}>PLUS</Text>
             </View>
           ) : null}
-          <Text style={styles.cardTitle}>{request.title}</Text>
-          <View style={styles.personRow}>
-            <MaterialCommunityIcons
-              name="account-outline"
-              size={16}
-              color={Colors.slate500}
-            />
-            <Text style={styles.meta}>
-              {request.clientName || 'Customer'}
-              {formattedDate ? `  ·  Requested ${formattedDate}` : ''}
+          <View style={[styles.statusPill, {backgroundColor: status.background}]}>
+            <Text style={[styles.statusPillText, {color: status.color}]} numberOfLines={1}>
+              {status.pill}
             </Text>
           </View>
         </View>
-      </View>
-      <View style={[styles.status, {backgroundColor: status.background}]}>
-        <MaterialCommunityIcons
-          name={status.icon}
-          size={18}
-          color={status.color}
-        />
-        <Text style={[styles.statusText, {color: status.color}]}>
-          {status.label}
+        <Text style={styles.metaLine} numberOfLines={1}>
+          {request.clientName || 'Customer'}
+          {formattedDate ? `  ·  ${formattedDate}` : ''}
         </Text>
+        <View style={styles.locationRow}>
+          <MaterialCommunityIcons
+            name="map-marker-outline"
+            size={14}
+            color={Colors.slate500}
+          />
+          <Text style={styles.locationText} numberOfLines={1}>
+            {request.location || 'Location not provided'}
+          </Text>
+        </View>
       </View>
-      {request.description ? <Text style={styles.description} numberOfLines={2}>{request.description}</Text> : null}
-      <View style={styles.location}>
-        <MaterialCommunityIcons
-          name="map-marker-outline"
-          size={19}
-          color={Colors.navyMid}
-        />
-        <Text style={styles.locationText} numberOfLines={2}>{request.location}</Text>
-      </View>
-      <View style={styles.cardAction}>
-        <Text style={styles.cardActionText}>{status.action}</Text>
-        <MaterialCommunityIcons
-          name="arrow-right"
-          size={22}
-          color={Colors.navyDeep}
-        />
-      </View>
+      <MaterialCommunityIcons
+        name="chevron-right"
+        size={22}
+        color={ProColors.muted}
+      />
     </Pressable>
   );
 }
@@ -548,67 +548,40 @@ const styles = StyleSheet.create({
   loadMore: {minHeight: 48, marginTop: Spacing.sm, marginBottom: Spacing.md, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.slate200, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: Spacing.sm},
   loadMoreText: {...Typography.button, color: Colors.navyMid},
   card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ProSpacing.md,
     backgroundColor: ProColors.surface,
     borderWidth: 1,
     borderColor: ProColors.border,
     borderRadius: BorderRadius.lg,
-    padding: ProSpacing.lg,
+    paddingVertical: ProSpacing.md,
+    paddingLeft: ProSpacing.md,
+    paddingRight: ProSpacing.sm,
   },
   pressed: {opacity: 0.78},
-  cardTop: {flexDirection: 'row', gap: ProSpacing.md, alignItems: 'flex-start'},
-  cardTitle: {...ProType.card, color: ProColors.text},
-  kindLabel: {...Typography.badge, color: Colors.navyMid, marginBottom: 3},
-  plusPill: {alignSelf: 'flex-start', backgroundColor: ProColors.accentSoft, borderRadius: ProRadius.pill,
-    paddingHorizontal: 10, paddingVertical: 4, marginBottom: 4},
-  plusPillText: {fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: ProColors.accentText},
-  personRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    marginTop: Spacing.xs,
-  },
-  meta: {...Typography.caption, color: Colors.slate500, flex: 1},
-  status: {
-    alignSelf: 'flex-start',
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  cardBody: {flex: 1, minWidth: 0, gap: 2},
+  cardTopRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
+  cardTitle: {flex: 1, minWidth: 0, fontSize: 16, lineHeight: 22, fontWeight: '700', color: ProColors.text},
+  plusPill: {backgroundColor: ProColors.accentSoft, borderRadius: ProRadius.pill,
+    paddingHorizontal: 8, paddingVertical: 3},
+  plusPillText: {fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: ProColors.accentText},
+  statusPill: {
     borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.sm,
-    marginTop: Spacing.md,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    maxWidth: 128,
   },
-  statusText: {...Typography.caption, fontWeight: '700'},
-  description: {
-    ...ProType.body,
-    color: Colors.slate700,
-    marginTop: ProSpacing.sm,
-  },
-  location: {
+  statusPillText: {fontSize: 11, lineHeight: 15, fontWeight: '700'},
+  metaLine: {fontSize: 13, lineHeight: 18, fontWeight: '400', color: ProColors.secondary},
+  locationRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.xs,
-    marginTop: Spacing.sm,
+    alignItems: 'center',
+    gap: 3,
   },
   locationText: {
     ...Typography.caption,
-    color: Colors.slate600,
-    flex: 1,
-  },
-  cardAction: {
-    minHeight: 42,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: ProSpacing.md,
-    paddingHorizontal: ProSpacing.md,
-    borderRadius: BorderRadius.md,
-    backgroundColor: ProColors.accentSoft,
-  },
-  cardActionText: {
-    ...Typography.button,
-    lineHeight: 22,
-    color: ProColors.primary,
+    color: Colors.slate500,
     flex: 1,
   },
 });

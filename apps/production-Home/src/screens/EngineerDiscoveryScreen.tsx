@@ -12,7 +12,7 @@ import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
+import {useOptionalTabBarHeight} from '../hooks/useOptionalTabBarHeight';
 import {
   Colors,
   Typography,
@@ -105,7 +105,7 @@ export function EngineerDiscoveryScreen() {
   const requestPlanQuotes = usePlanQuoteRequest();
   const isTabScreen = (navigation.getState() as {type: string}).type === 'tab';
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useOptionalTabBarHeight();
   const city = useCity(state => state.city);
   const selectedState = useCity(state => state.state);
   const setCity = useCity(state => state.setCity);

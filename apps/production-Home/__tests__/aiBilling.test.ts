@@ -2,6 +2,7 @@ import {ApiError} from '../src/services/apiClient';
 import {activateDemoAi, cancelAiSubscription, confirmAiSubscription, fetchAiSubscription, isConfirmingError, isPaywallError, quotaLabel, subscribeAi} from '../src/services/aiBilling';
 import {api} from '../src/services/apiClient';
 import RazorpayCheckout from 'react-native-razorpay';
+import {CheckoutCancelledError} from '../../../packages/mobile-booking/razorpayGateway';
 
 jest.mock('../src/services/apiClient', () => ({
   ApiError: class ApiError extends Error {
@@ -62,6 +63,22 @@ it('does not confirm when checkout is dismissed', async () => {
   mockedCheckout.open.mockRejectedValue(new Error('dismissed'));
   await expect(subscribeAi()).rejects.toThrow('dismissed');
   expect(mockedApi.post).toHaveBeenCalledTimes(1);
+});
+
+it('maps a user-cancelled checkout to a neutral cancellation', async () => {
+  mockedApi.post.mockResolvedValueOnce({keyId: 'rzp_test', subscriptionId: 'sub_ai'});
+  mockedCheckout.open.mockRejectedValue({code: 0, description: 'Payment cancelled by user'});
+  await expect(subscribeAi()).rejects.toBeInstanceOf(CheckoutCancelledError);
+  expect(mockedApi.post).toHaveBeenCalledTimes(1);
+});
+
+it('forwards valid prefill and drops blanks', async () => {
+  mockedApi.post
+    .mockResolvedValueOnce({keyId: 'rzp_test', subscriptionId: 'sub_ai'})
+    .mockResolvedValueOnce({effective: true});
+  mockedCheckout.open.mockResolvedValue({razorpay_subscription_id: 'sub_ai'});
+  await subscribeAi({contact: '9999999999', email: undefined});
+  expect(mockedCheckout.open).toHaveBeenCalledWith(expect.objectContaining({prefill: {contact: '9999999999'}}));
 });
 
 it('activates preview access without opening checkout', async () => {

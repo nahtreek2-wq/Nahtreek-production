@@ -1,7 +1,7 @@
 import {ScreenHeader} from '../components/ScreenHeader';
+import {ProLoader} from '../components/ProLoader';
 import React, {useState} from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Pressable,
   RefreshControl,
@@ -221,7 +221,7 @@ export function NotificationsScreen() {
               disabled={notifications.isFetchingNextPage}
               onPress={() => {notifications.fetchNextPage().catch(() => undefined);}}
               style={[styles.loadMore, notifications.isFetchingNextPage && styles.unreadCard]}>
-              {notifications.isFetchingNextPage ? <ActivityIndicator color={Colors.navyMid} /> : null}
+              {notifications.isFetchingNextPage ? <ProLoader size={26} /> : null}
               <Text style={styles.loadMoreText}>{notifications.isFetchingNextPage ? 'Loading older updates…' : 'Load older updates'}</Text>
             </Pressable>
           ) : null}

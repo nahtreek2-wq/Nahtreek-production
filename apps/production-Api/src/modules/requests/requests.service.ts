@@ -422,7 +422,7 @@ export class RequestsService {
       createdAt: Date;
       completionCode?: string | null;
       engineer: { profile: { fullName: string; avatarUrl?: string | null }; consultationFee?: number | null };
-      client?: { fullName: string };
+      client?: { fullName: string; avatarUrl?: string | null };
       statusHistory?: unknown[];
       reviews?: { rating: number; comment: string; createdAt: Date }[];
     },
@@ -443,6 +443,7 @@ export class RequestsService {
         ? (request.preferredStartDate instanceof Date ? request.preferredStartDate.toISOString() : request.preferredStartDate)
         : undefined,
       clientName: request.client?.fullName,
+      clientAvatarUrl: request.client?.avatarUrl ?? undefined,
       projectTitle: request.projectTitle,
       projectDescription: request.projectDescription,
       propertyType: request.propertyType,

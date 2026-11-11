@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
@@ -12,8 +12,10 @@ import {EmptyState} from '../components/EmptyState';
 import {api} from '../services/apiClient';
 import {useProToast} from '../stores/proToast';
 import {ProColors, ProRadius, ProSpacing, ProType} from '../theme/professionalTheme';
-import {CheckoutCancelledError, GatewayUnavailableError, openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
+import {CheckoutCancelledError, GatewayUnavailableError, checkoutContact, checkoutEmail, openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
 import type {CheckoutInput, CheckoutResult} from '../../../../packages/mobile-booking/razorpayGateway';
+import {useCheckoutWatchdog} from '../../../../packages/mobile-booking/useCheckoutWatchdog';
+import {useSessionStore} from '../stores/session';
 
 export type DuesJob = {id: string; serviceRequestId: string | null; engineerRequestId?: string | null; amountPaisa: number; platformFeePaisa: number; createdAt: string};
 export type DuesPenalty = {id: string; serviceRequestId: string; amountPaisa: number; reason: string; createdAt: string};
@@ -60,6 +62,24 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
   const [failed, setFailed] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [confirmAttempt, setConfirmAttempt] = useState(0);
+  const [checkingNow, setCheckingNow] = useState(false);
+  const [confirmPayload, setConfirmPayload] = useState<({settlementId: string} & CheckoutResult) | null>(null);
+  const [checkoutStalled, setCheckoutStalled] = useState(false);
+  const [checkoutAttempt, setCheckoutAttempt] = useState(0);
+  const [preparing, setPreparing] = useState(false);
+  // The confirm poll must never outlive the screen or fight a manual check:
+  // the token invalidates stale loops, the mounted flag stops work after
+  // unmount (leaving and returning shows the fresh query state).
+  const pollToken = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      pollToken.current += 1;
+    };
+  }, []);
   const query = useQuery({queryKey: ['pro-dues'], queryFn: hooks.load, retry: 1});
   const refresh = () => {
     void cache.invalidateQueries({queryKey: ['pro-dues']});
@@ -82,14 +102,30 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
   // needs a fresh order, not a 40s futile poll.
   const notCaptured = (error: unknown) =>
     (error as {status?: number})?.status === 409 && error instanceof Error && /not captured yet/i.test(error.message);
+  const CONFIRM_CHECKS = 10;
+  const beginConfirming = (payload: {settlementId: string} & CheckoutResult) => {
+    pollToken.current += 1;
+    setConfirmPayload(payload);
+    setConfirmAttempt(0);
+    setFailed(null);
+    setCancelled(false);
+    setConfirming(true);
+    refresh();
+  };
   const pollSettlement = async (payload: {settlementId: string} & CheckoutResult) => {
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    const token = pollToken.current;
+    const alive = () => mounted.current && pollToken.current === token;
+    for (let attempt = 1; attempt <= CONFIRM_CHECKS; attempt += 1) {
       await new Promise(resolve => setTimeout(resolve, 4000));
+      if (!alive()) return;
+      setConfirmAttempt(attempt);
       try {
         await hooks.verify(payload);
+        if (!alive()) return;
         settlePaid();
         return;
       } catch (error) {
+        if (!alive()) return;
         if (!notCaptured(error)) {
           setConfirming(false);
           setCancelled(false);
@@ -99,8 +135,10 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
         }
       }
     }
+    if (!alive()) return;
     try {
       const view = await hooks.load();
+      if (!alive()) return;
       if (view.duesPaisa === 0) {
         settlePaid();
         return;
@@ -108,23 +146,51 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
     } catch {
       // Fall through to the wait-and-reopen message below.
     }
+    if (!alive()) return;
     setConfirming(false);
     setFailed('Payment is still confirming at Razorpay. Wait a minute, then reopen this screen — do not pay again.');
     refresh();
   };
+  // One extra verify right now, for users who won't watch a poll: a success
+  // settles immediately, anything else leaves the loop running. The tap can
+  // never double-charge — verify is idempotent per settlement.
+  const checkSettlementNow = (payload: {settlementId: string} & CheckoutResult) => {
+    if (checkingNow) return;
+    setCheckingNow(true);
+    void (async () => {
+      try {
+        await hooks.verify(payload);
+        if (!mounted.current) return;
+        pollToken.current += 1;
+        settlePaid();
+      } catch {
+        // Still lagging or unreachable: the background loop keeps going.
+      } finally {
+        if (mounted.current) setCheckingNow(false);
+      }
+    })();
+  };
 
-  const pay = useMutation({mutationFn: async () => {
-    const order = await hooks.order();
+  // The order is prepared BEFORE the confirm dialog (see startPay), so the
+  // dialog and the Razorpay screen always quote the order's exact amount —
+  // never the screen total, which can lag behind freshly posted dues.
+  const phoneNumber = useSessionStore(state => state.user?.phoneNumber);
+  const accountEmail = useSessionStore(state => state.user?.email);
+  const pay = useMutation({mutationFn: async (order: {settlementId: string; keyId: string; orderId: string; amountPaisa: number; currency: string}) => {
+    const contact = checkoutContact(phoneNumber);
+    const email = checkoutEmail(accountEmail);
+    const prefill = {...(contact ? {contact} : {}), ...(email ? {email} : {})};
     const result = await (hooks.checkout ?? openCheckout)({keyId: order.keyId, orderId: order.orderId,
       amountPaisa: order.amountPaisa, currency: order.currency,
-      name: 'NAHTREEK commission dues', description: 'Platform commission for pay-at-home jobs'});
+      name: 'NAHTREEK commission dues', description: 'Platform commission for pay-at-home jobs',
+      ...(Object.keys(prefill).length ? {prefill} : {})});
     return {settlementId: order.settlementId, ...result};
   }, onSuccess: payload => {
     // Verify inline so a capture-lag 409 can start polling instead of
     // surfacing as a payment failure with the pay button still showing.
     hooks.verify(payload).then(settlePaid, error => {
       if (notCaptured(error)) {
-        setFailed(null); setCancelled(false); setConfirming(true); refresh();
+        beginConfirming(payload);
         void pollSettlement(payload);
         return;
       }
@@ -133,14 +199,85 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
   },
   onError: error => {
     if (error instanceof CheckoutCancelledError) { setCancelled(true); setFailed(null); refresh(); return; }
-    setCancelled(false);
-    setFailed(messageFor(error));
-    refresh();
+    if (error instanceof GatewayUnavailableError) { setCancelled(false); setFailed(messageFor(error)); refresh(); return; }
+    // A checkout error with money behind it (an error banner over a
+    // successful capture, a lost bridge result) must confirm, not strand
+    // the user on a pay button for dues that already cleared.
+    void (async () => {
+      try {
+        const view = await hooks.load();
+        if (view.duesPaisa === 0) {
+          settlePaid();
+          return;
+        }
+      } catch {
+        // Fall through to the failure message below.
+      }
+      setCancelled(false);
+      setFailed(messageFor(error));
+      refresh();
+    })();
   }});
 
-  const startPay = (total: number) => Alert.alert('Settle commission dues?',
-    `${rupees(total)} will be charged securely to NAHTREEK for your pay-at-home jobs.`,
-    [{text: 'Not now', style: 'cancel'}, {text: `Pay ${rupees(total)}`, onPress: () => pay.mutate()}]);
+  // Last-resort recovery for a lost checkout result: if the user is back on
+  // this screen with the pay promise still pending, the result never
+  // arrived — reconcile instead of sitting disabled forever. A late real
+  // result still flows through the idempotent paths above, so this can
+  // never double-charge or swallow a success.
+  useCheckoutWatchdog(pay.isPending && !checkoutStalled, () => {
+    void (async () => {
+      try {
+        const current = await hooks.load();
+        if (!mounted.current) return;
+        if (current.duesPaisa === 0) {
+          settlePaid();
+          return;
+        }
+      } catch {
+        // Fall through to the retryable stall message below.
+      }
+      if (!mounted.current) return;
+      setCancelled(false);
+      setCheckoutStalled(true);
+    })();
+  }, checkoutAttempt);
+  const payBusy = pay.isPending && !checkoutStalled;
+
+  const startPay = () => {
+    if (preparing || payBusy) return;
+    setPreparing(true);
+    setFailed(null);
+    void (async () => {
+      try {
+        // Fresh total first: dues posted since this screen loaded must be
+        // included, or the gateway would charge a different amount than shown.
+        const fresh = await query.refetch();
+        if (!fresh.data || fresh.data.duesPaisa < 100) {
+          setPreparing(false);
+          refresh();
+          toast('No commission dues to settle.', 'success');
+          return;
+        }
+        const order = await hooks.order();
+        setPreparing(false);
+        // An abandoned confirm leaves an ORDER_CREATED settlement behind;
+        // the server reuses it when the total still matches, fails it
+        // otherwise — cancelling here is always safe.
+        Alert.alert('Settle commission dues?',
+          `${rupees(order.amountPaisa)} will be charged securely to NAHTREEK for your pay-at-home jobs.`,
+          [{text: 'Not now', style: 'cancel'}, {text: `Pay ${rupees(order.amountPaisa)}`, onPress: () => {
+            setCheckoutStalled(false);
+            setCheckoutAttempt(attempt => attempt + 1);
+            pay.mutate(order);
+          }}]);
+      } catch (error) {
+        setPreparing(false);
+        setCancelled(false);
+        setFailed(messageFor(error));
+        refresh();
+      }
+    })();
+  };
 
   const view = query.data;
   const terms = view?.terms ?? FALLBACK_TERMS;
@@ -196,7 +333,7 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
           <EmptyState title="No dues" message="Nothing to settle. Dues appear here after pay-at-home jobs." actionLabel="Browse jobs" onAction={goToJobs} />
         ) : view.jobs.map(job => (
           <View key={job.id} style={styles.job}>
-            <ProIconChip name={job.engineerRequestId ? 'hard-hat' : 'tools'} size={46} iconSize={24} />
+            <ProIconChip name={job.engineerRequestId ? 'hard-hat' : 'tools'} tone={job.engineerRequestId ? 'navy' : 'blue'} size={46} iconSize={24} />
             <View style={styles.jobCopy}>
               <View style={styles.jobRow}>
                 <Text style={styles.jobAmount}>{rupees(job.platformFeePaisa)}</Text>
@@ -220,14 +357,23 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
         ))}
         {failed ? <Text accessibilityRole="alert" style={styles.error}>{failed}</Text> : null}
         {cancelled ? <Text style={styles.hint}>Checkout cancelled. Nothing was charged — settle whenever you are ready.</Text> : null}
-        {confirming ? <Text style={styles.confirming}>Payment received — confirming with Razorpay. Keep this screen open; do not pay again.</Text> : null}
+        {checkoutStalled && view.duesPaisa > 0 ? <Text style={styles.stalled}>Checkout was interrupted — nothing was charged. Tap Settle below to try again.</Text> : null}
+        {confirming ? <View style={styles.confirmingBox}>
+          <Text style={styles.confirming}>Payment received — confirming with Razorpay. {confirmAttempt > 0 ? `Check ${confirmAttempt} of ${CONFIRM_CHECKS}…` : 'Starting the first check…'}</Text>
+          {confirmPayload ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Check settlement now"
+              disabled={checkingNow} onPress={() => checkSettlementNow(confirmPayload)} style={styles.checkNow}>
+              <Text style={styles.checkNowText}>{checkingNow ? 'Checking…' : 'Check now'}</Text>
+            </Pressable>
+          ) : null}
+        </View> : null}
       </ScrollView>
       {view.duesPaisa > 0 && !confirming ? (
         <View style={[styles.stickyBar, {paddingBottom: tabBarHeight + ProSpacing.md}]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Settle dues" disabled={pay.isPending} onPress={() => startPay(view.duesPaisa)}
-            style={[styles.pay, pay.isPending && {opacity: 0.6}]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Settle dues" disabled={payBusy || preparing} onPress={startPay}
+            style={[styles.pay, (payBusy || preparing) && {opacity: 0.6}]}>
             <MaterialCommunityIcons name="lock-check" size={20} color={ProColors.onAccent} />
-            <Text style={styles.payText}>{pay.isPending ? 'Opening secure checkout…' : `Settle ${rupees(view.duesPaisa)}`}</Text>
+            <Text style={styles.payText}>{preparing ? 'Preparing secure checkout…' : payBusy ? 'Opening secure checkout…' : `Settle ${rupees(view.duesPaisa)}`}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -264,7 +410,12 @@ const styles = StyleSheet.create({
   jobAmount: {fontSize: 18, fontWeight: '800', color: ProColors.text},
   jobDate: {...ProType.meta, color: ProColors.muted},
   error: {color: ProColors.error},
+  stalled: {fontSize: 14, lineHeight: 20, fontWeight: '700', color: ProColors.warning,
+    backgroundColor: ProColors.warningSoft, padding: 12, borderRadius: 12},
   confirming: {color: ProColors.primary, fontWeight: '700'},
+  confirmingBox: {gap: 2, backgroundColor: ProColors.successSoft, padding: 12, borderRadius: 12},
+  checkNow: {minHeight: 40, justifyContent: 'center', alignSelf: 'flex-start'},
+  checkNowText: {fontSize: 14, fontWeight: '800', color: ProColors.primary, textDecorationLine: 'underline'},
   stickyBar: {backgroundColor: ProColors.surface, borderTopWidth: 1, borderTopColor: ProColors.border, padding: ProSpacing.md},
   pay: {flexDirection: 'row', gap: 8, backgroundColor: ProColors.accent, borderRadius: ProRadius.input, minHeight: 52, alignItems: 'center', justifyContent: 'center'},
   payText: {fontSize: 16, fontWeight: '800', color: ProColors.onAccent},

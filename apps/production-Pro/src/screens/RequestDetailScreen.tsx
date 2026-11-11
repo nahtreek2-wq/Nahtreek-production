@@ -7,7 +7,6 @@ import {publishCurrentLocation, startJourneyLocationSharing, stopJourneyLocation
 import {currentLocation} from '../services/location';
 import {
   Animated,
-  ActivityIndicator,
   Alert,
   NativeModules,
   Platform,
@@ -42,6 +41,9 @@ import {useSessionStore} from '../stores/session';
 import {useProToast} from '../stores/proToast';
 import {ScrollMotionBar, useScrollMotion} from '../components/ScrollMotionBar';
 import {JobContextVisual} from '../components/JobContextVisual';
+import {ClientAvatar} from '../components/ClientAvatar';
+import {ProLoader} from '../components/ProLoader';
+import {TravelToJobCard} from '../components/TravelToJobCard';
 import {ProIconChip} from '../components/ProIconChip';
 import type {IconChipTone} from '../components/ProIconChip';
 import {ProColors, ProRadius, ProType} from '../theme/professionalTheme';
@@ -67,6 +69,7 @@ type Detail = {
   title: string;
   description: string;
   clientName?: string;
+  clientAvatarUrl?: string;
   clientPlus?: boolean;
   location: string;
   latitude?: number;
@@ -80,6 +83,7 @@ type EngineerRequestDetailResponse = {
   projectTitle: string;
   projectDescription: string;
   clientName?: string;
+  clientAvatarUrl?: string;
   clientPlus?: boolean;
   locationAddress: string;
   latitude: number;
@@ -94,7 +98,7 @@ type ServiceRequestDetailResponse = {
   category?: {title: string} | null;
   description: string;
   clientPlus?: boolean;
-  client?: {fullName: string} | null;
+  client?: {fullName: string; avatarUrl?: string | null} | null;
   locationAddress: string;
   latitude: number;
   longitude: number;
@@ -173,6 +177,7 @@ export function RequestDetailScreen() {
           title: item.projectTitle,
           description: item.projectDescription,
           clientName: item.clientName,
+          clientAvatarUrl: item.clientAvatarUrl,
           clientPlus: item.clientPlus,
           location: item.locationAddress,
           latitude: item.latitude,
@@ -189,6 +194,7 @@ export function RequestDetailScreen() {
         title: item.category?.title ?? 'Service request',
         description: item.description,
         clientName: item.client?.fullName,
+        clientAvatarUrl: item.client?.avatarUrl ?? undefined,
         clientPlus: item.clientPlus,
         location: item.locationAddress,
         latitude: item.latitude,
@@ -341,6 +347,8 @@ export function RequestDetailScreen() {
       latitude: request.latitude,
       longitude: request.longitude,
       address: request.location,
+      title: request.title,
+      clientName: request.clientName,
     });
   };
 
@@ -355,8 +363,7 @@ export function RequestDetailScreen() {
       />
       {detail.isPending ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors.navyMid} />
-          <Text style={styles.muted}>Loading request…</Text>
+          <ProLoader size={52} label="Loading request…" />
         </View>
       ) : null}
       {detail.isError ? (
@@ -481,6 +488,13 @@ function RequestContent({
   const status = serviceProvider
     ? serviceStatusCopy(request.status)
     : statusCopy(request.status);
+  // Travel mode: the address must stay one glance away while going to the
+  // job. Accepted jobs always travel; engineering in-progress keeps the
+  // card (navigate back, second visit), while a service journey past
+  // arrival already has its own panel and map.
+  const showTravel =
+    request.status === 'ACCEPTED' ||
+    (request.status === 'IN_PROGRESS' && (kind === 'engineering' || !request.journey));
   return (
     <View style={styles.flex}>
     <ScrollMotionBar offset={scrollMotion.offset} reducedMotion={scrollMotion.reducedMotion} />
@@ -490,14 +504,29 @@ function RequestContent({
         <View style={styles.flex}>
           <Text style={styles.jobEyebrow}>{serviceProvider ? 'SERVICE JOB' : 'ENGINEERING REQUEST'}</Text>
           <Text style={styles.jobHeading}>{request.title}</Text>
-          <Text style={styles.jobMeta}>{request.clientName || 'Customer'} · {request.location || 'Location not provided'}</Text>
-          {request.clientPlus ? (
-            <View style={styles.plusPill}>
-              <Text style={styles.plusPillText}>PLUS CLIENT · PRIORITY</Text>
-            </View>
-          ) : null}
+          <View style={styles.jobClientRow}>
+            <ClientAvatar name={request.clientName} avatarUrl={request.clientAvatarUrl} size={22} />
+            <Text style={styles.jobMeta} numberOfLines={1}>{request.clientName || 'Customer'}</Text>
+            {request.clientPlus ? (
+              <View style={styles.plusPill}>
+                <Text style={styles.plusPillText}>PLUS</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.jobLocation} numberOfLines={2}>{request.location || 'Location not provided'}</Text>
         </View>
       </View>
+      {showTravel ? (
+        <TravelToJobCard
+          title={request.title}
+          clientName={request.clientName}
+          clientAvatarUrl={request.clientAvatarUrl}
+          address={request.location}
+          latitude={request.latitude}
+          longitude={request.longitude}
+          onMap={onMap}
+        />
+      ) : null}
       {request.journey ? (
         <JourneyPanel
           id={request.id}
@@ -559,10 +588,10 @@ function RequestContent({
       {serviceProvider && !request.journey ? (
         <ServiceProgress status={request.status} />
       ) : null}
-      <Section title="What the customer needs" icon="clipboard-text">
+      <Section title="What the customer needs" icon="clipboard-text" tone="blue">
         <Text style={styles.body}>{request.description}</Text>
       </Section>
-      <Section title="Where to go" icon="map-marker">
+      <Section title="Where to go" icon="map-marker" tone="navy">
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={`View ${request.location} on map`}
@@ -616,7 +645,7 @@ function RequestContent({
       {codeEntry ? (
         <View style={styles.codeCard}>
           <View style={styles.sectionHeading}>
-            <ProIconChip name="key-variant" size={42} iconSize={23} />
+            <ProIconChip name="key-variant" tone="amber" size={42} iconSize={23} />
             <Text style={styles.codeTitle}>Enter the completion code</Text>
           </View>
           <Text style={styles.codeHint}>
@@ -698,7 +727,7 @@ function RequestContent({
             )}
           </View>
         ))}
-      <Section title="Job updates" icon="timeline-text">
+      <Section title="Job updates" icon="timeline-text" tone="slate">
         <View style={styles.timeline}>
           {request.history.length ? (
             request.history.map((item, index) => (
@@ -844,7 +873,7 @@ function Section({title, icon, tone = 'navy', children}: React.PropsWithChildren
         <ProIconChip name={icon} tone={tone} size={38} iconSize={20} />
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
-      {children}
+      <View style={styles.sectionBody}>{children}</View>
     </View>
   );
 }
@@ -875,10 +904,12 @@ const styles = StyleSheet.create({
   jobOverview: {flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 16, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: ProColors.border},
   jobEyebrow: {...ProType.eyebrow, color: ProColors.secondary},
   jobHeading: {...ProType.section, color: ProColors.text, marginTop: 3},
-  jobMeta: {...ProType.meta, color: ProColors.secondary, marginTop: 5},
-  plusPill: {alignSelf: 'flex-start', backgroundColor: ProColors.accentSoft, borderRadius: ProRadius.pill,
-    paddingHorizontal: 10, paddingVertical: 4, marginTop: 6},
-  plusPillText: {fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: ProColors.accentText},
+  jobClientRow: {flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 7},
+  jobMeta: {...ProType.meta, color: ProColors.secondary, fontWeight: '600', flexShrink: 1},
+  jobLocation: {...ProType.meta, color: ProColors.secondary, marginTop: 4},
+  plusPill: {backgroundColor: ProColors.accentSoft, borderRadius: ProRadius.pill,
+    paddingHorizontal: 8, paddingVertical: 3},
+  plusPillText: {fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: ProColors.accentText},
   nextStep: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -960,8 +991,8 @@ const styles = StyleSheet.create({
     ...Typography.h3,
     color: Colors.slate900,
     flex: 1,
-    marginBottom: Spacing.sm,
   },
+  sectionBody: {marginTop: Spacing.md},
   body: {...Typography.body, color: Colors.slate700},
   mapRow: {
     flexDirection: 'row',
@@ -975,7 +1006,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: '600',
   },
-  mapHint: {...Typography.caption, color: Colors.slate500, marginLeft: 30},
+  mapHint: {...Typography.caption, color: Colors.slate500, marginLeft: 32},
   timeline: {gap: Spacing.xs},
   timelineRow: {flexDirection: 'row', gap: Spacing.sm, minHeight: 52},
   timelineMarker: {width: 16, alignItems: 'center'},

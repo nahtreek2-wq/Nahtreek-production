@@ -1,6 +1,6 @@
-import RazorpayCheckout from 'react-native-razorpay';
 import {IndiaLocale} from '@nahtreek/design-system';
 import {ApiError, api} from './apiClient';
+import {openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
 
 export type AiSubscriptionView = {
   status: string;
@@ -58,22 +58,23 @@ export function activateDemoAi() {
   return api.post<AiSubscriptionView>('/ai-billing/demo-activate', {});
 }
 
-// Runs the Razorpay subscription checkout, then confirms with our API so the
-// row only flips ACTIVE after the provider says the mandate is real. When the
-// server replays an already-effective subscription (no live checkout to run),
-// checkout is skipped and the fresh status is returned instead.
-export async function subscribeAi(): Promise<AiSubscriptionView> {
+// Runs the Razorpay subscription checkout through the shared gateway (UPI +
+// cards only, branded, cancellations mapped), then confirms with our API so
+// the row only flips ACTIVE after the provider says the mandate is real.
+// When the server replays an already-effective subscription (no live checkout
+// to run), checkout is skipped and the fresh status is returned instead.
+export async function subscribeAi(prefill?: {contact?: string; email?: string}): Promise<AiSubscriptionView> {
   const started = await api.post<{effective: boolean; keyId: string; subscriptionId: string | null; shortUrl: string | null}>('/ai-billing/subscribe', {});
   if ((started.effective && !started.shortUrl) || !started.subscriptionId) return fetchAiSubscription();
   const plan = await fetchAiPlan().catch(() => null);
   const price = plan ? `${IndiaLocale.formatCurrency(Math.round(plan.feePaisa / 100))}/month` : 'monthly plan';
-  await RazorpayCheckout.open({
-    key: started.keyId,
-    subscription_id: started.subscriptionId,
-    name: 'NAHTREEK AI',
+  const cleanPrefill: {contact?: string; email?: string} = Object.fromEntries(
+    Object.entries(prefill ?? {}).filter(([, value]) => !!value),
+  );
+  await openCheckout({keyId: started.keyId, subscriptionId: started.subscriptionId,
+    currency: 'INR', name: 'NAHTREEK AI',
     description: `Unlimited AI chats, plans, uploads + Plus booking perks — ${price}`,
-    theme: {color: '#FACC15'},
-  });
+    ...(Object.keys(cleanPrefill).length ? {prefill: cleanPrefill} : {})});
   return api.post<AiSubscriptionView>('/ai-billing/confirm', {});
 }
 

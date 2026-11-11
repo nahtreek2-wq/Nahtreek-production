@@ -44,6 +44,8 @@ import {
   type AiSubscriptionView,
 } from '../services/aiBilling';
 import {inr, inrMonth} from '../utils/format';
+import {CheckoutCancelledError, checkoutContact, checkoutEmail} from '../../../../packages/mobile-booking/razorpayGateway';
+import {useCheckoutWatchdog} from '../../../../packages/mobile-booking/useCheckoutWatchdog';
 import {setAiBookingPrefill} from '../services/aiBookingPrefill';
 import {isApiConfigured} from '../services/config';
 import {runtimeConfig} from '../config/runtime';
@@ -255,6 +257,9 @@ export function AiPlannerScreen() {
     : 'Consultation discounts on engineer bookings';
   const [paywalled, setPaywalled] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
+  const [checkoutStalled, setCheckoutStalled] = useState(false);
+  const [checkoutAttempt, setCheckoutAttempt] = useState(0);
+  const subscribeBusy = subscribing && !checkoutStalled;
   const [activating, setActivating] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const keyboardScroll = useFormKeyboardScroll(28);
@@ -403,17 +408,44 @@ export function AiPlannerScreen() {
     );
   };
 
+  // Last-resort recovery for a lost checkout result: if the user is back on
+  // this screen with the subscribe promise still pending, the result never
+  // arrived — reconcile instead of sitting disabled forever. A late real
+  // result still flows through confirm below, so this can never
+  // double-charge or swallow a success.
+  useCheckoutWatchdog(subscribing && !checkoutStalled, () => {
+    void (async () => {
+      try {
+        const current = await fetchAiSubscription();
+        if (current.effective) {
+          applyBilling(current);
+          setPaywalled(false);
+          return;
+        }
+      } catch {
+        // Fall through to the retryable stall message below.
+      }
+      setCheckoutStalled(true);
+    })();
+  }, checkoutAttempt);
   const subscribe = async () => {
+    setCheckoutStalled(false);
+    setCheckoutAttempt(attempt => attempt + 1);
     setSubscribing(true);
     setError('');
     try {
-      const view = await subscribeAi();
+      const view = await subscribeAi({contact: checkoutContact(user?.phoneNumber), email: checkoutEmail(user?.email)});
       applyBilling(view);
       setPaywalled(false);
     } catch (cause) {
       if (isConfirmingError(cause)) {
         setActivating(true);
         void pollActivation();
+        return;
+      }
+      // Backing out of checkout is neutral, not an error banner.
+      if (cause instanceof CheckoutCancelledError) {
+        setError('');
         return;
       }
       setError(
@@ -751,10 +783,10 @@ export function AiPlannerScreen() {
             <Text style={styles.billingActive}>NAHTREEK Plus active</Text>
             {billing.cancelAtPeriodEnd ? (
               <>
-                <Text style={styles.billingQuota}>Plus ends{plusEndDate ? ` ${plusEndDate}` : ''} — new cycle starts then</Text>
+                <Text style={styles.billingQuota} numberOfLines={2}>Plus cancelled — active until{plusEndDate ? ` ${plusEndDate}` : ' the period end'}</Text>
                 <Pressable accessibilityRole="button" accessibilityLabel="Resubscribe to Plus"
-                  onPress={() => void subscribe()} hitSlop={8} disabled={subscribing}>
-                  <Text style={styles.billingCancel}>{subscribing ? 'Opening…' : 'Resubscribe'}</Text>
+                  onPress={() => void subscribe()} hitSlop={8} disabled={subscribeBusy}>
+                  <Text style={styles.billingCancel}>{subscribeBusy ? 'Opening…' : 'Resubscribe'}</Text>
                 </Pressable>
               </>
             ) : (
@@ -786,12 +818,15 @@ export function AiPlannerScreen() {
               <Text style={styles.paywallBenefit}>✓ Faster home service — late pros pay penalties</Text>
               <Text style={styles.paywallBenefit}>✓ {consultPerk}</Text>
             </View>
+            {checkoutStalled ? (
+              <Text style={styles.stalledNote}>Checkout was interrupted — nothing was charged. Tap Subscribe to try again.</Text>
+            ) : null}
             <Button
               label={`Subscribe · ${plusPrice}`}
               loadingLabel="Opening checkout…"
               onPress={() => void subscribe()}
-              loading={subscribing || activating}
-              disabled={subscribing || activating}
+              loading={subscribeBusy || activating}
+              disabled={subscribeBusy || activating}
             />
             {runtimeConfig.environment !== 'production' ? (
               <Button
@@ -827,12 +862,15 @@ export function AiPlannerScreen() {
                     {quota ?? 'Free chats included'} — then unlimited chats, project plans, photo analysis, faster service with late penalties, engineer consult discounts and priority reviews.
                   </Text>
                 </View>
+                {checkoutStalled ? (
+                  <Text style={styles.stalledNote}>Checkout was interrupted — nothing was charged. Tap Subscribe to try again.</Text>
+                ) : null}
                 <Button
                   label="Subscribe"
                   loadingLabel="Opening checkout…"
                   onPress={() => void subscribe()}
-                  loading={subscribing || activating}
-                  disabled={subscribing || activating}
+                  loading={subscribeBusy || activating}
+                  disabled={subscribeBusy || activating}
                 />
                 {runtimeConfig.environment !== 'production' ? (
                   <Button
@@ -1281,9 +1319,10 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     paddingVertical: 2,
     marginBottom: Spacing.md,
+    gap: Spacing.sm,
   },
-  billingActive: {...Typography.caption, fontWeight: '700', color: Colors.success},
-  billingQuota: {...Typography.caption, color: Colors.slate600},
+  billingActive: {...Typography.caption, fontWeight: '700', color: Colors.success, flexShrink: 0},
+  billingQuota: {...Typography.caption, color: Colors.slate600, flex: 1},
   billingCancel: {...Typography.caption, fontWeight: '700', color: Colors.slate600, textDecorationLine: 'underline'},
   paywall: {
     backgroundColor: Colors.surface,
@@ -1296,6 +1335,8 @@ const styles = StyleSheet.create({
   },
   paywallTitle: {...Typography.subtitle, color: ClientColors.primaryNavy},
   paywallCopy: {...Typography.body, color: Colors.slate600, lineHeight: 21},
+  stalledNote: {fontSize: 14, lineHeight: 20, fontWeight: '700', color: Colors.warning,
+    backgroundColor: Colors.warningBg, padding: 12, borderRadius: 12},
   paywallBenefits: {gap: 6},
   paywallBenefit: {...Typography.body, color: Colors.slate800, lineHeight: 20, fontWeight: '600'},
   proCard: {backgroundColor: Colors.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: ClientColors.border, gap: 12, alignSelf: 'stretch'},

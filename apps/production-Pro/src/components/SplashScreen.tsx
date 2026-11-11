@@ -1,5 +1,6 @@
 import React, {useEffect, useRef} from 'react';
-import {ActivityIndicator, Animated, Image, StyleSheet, Text, View} from 'react-native';
+import {Animated, Image, StyleSheet, Text, View} from 'react-native';
+import {ProLoader} from './ProLoader';
 import {useReducedMotion} from '../../../../packages/mobile-ui/useReducedMotion';
 import {ProColors, ProType} from '../theme/professionalTheme';
 
@@ -44,7 +45,9 @@ export function SplashScreen({ready, onFinish, instant = false}: {ready: boolean
         <Text style={styles.product}>PROFESSIONALS</Text>
         <Text style={styles.tagline}>FROM PLOT TO HOME</Text>
       </View>
-      <ActivityIndicator style={styles.loader} size="small" color={ProColors.surface} accessibilityLabel="Loading workspace" />
+      <View style={styles.loader}>
+        <ProLoader size={34} tone="light" />
+      </View>
     </Animated.View>
   );
 }

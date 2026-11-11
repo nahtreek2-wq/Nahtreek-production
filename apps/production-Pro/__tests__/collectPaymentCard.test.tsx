@@ -116,3 +116,34 @@ it('shows an online payment as releasing after review', async () => {
   expect(t.texts()).toContain('releases after review');
   t.done();
 });
+
+it('reconciles before declaring and skips the declare when the client paid online', async () => {
+  const online: CollectStatusView = {...declared, status: 'PAID', collectionMode: 'ONLINE'};
+  const hooks: CollectHooks = {
+    loadStatus: jest.fn().mockResolvedValue(null),
+    declare: jest.fn(),
+    sync: jest.fn().mockResolvedValue(online),
+  };
+  const t = setup(hooks);
+  await t.render();
+  await t.press('I collected cash or UPI');
+  await t.typeAmount('3500');
+  await t.press('Declare collection');
+  expect(hooks.sync).toHaveBeenCalledTimes(1);
+  expect(hooks.declare).not.toHaveBeenCalled();
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(t.texts()).toContain('Paid online ₹3,500');
+  t.done();
+});
+
+it('shows the consultation fee as the declare reference', async () => {
+  const hooks: CollectHooks = {
+    loadStatus: jest.fn().mockResolvedValue({...declared, status: 'NOT_STARTED', collectionMode: 'ONLINE',
+      expectedAmountPaisa: 350000}),
+    declare: jest.fn(),
+  };
+  const t = setup(hooks);
+  await t.render();
+  expect(t.texts()).toContain('Consultation fee ₹3,500');
+  t.done();
+});

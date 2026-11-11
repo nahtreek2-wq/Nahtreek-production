@@ -30,7 +30,7 @@ import {MotionReveal} from '../components/MotionReveal';
 import {QuickActions} from '../components/QuickActions';
 import type {MainTabParamList} from '../navigation/types';
 import {ProColors, ProSpacing, ProType} from '../theme/professionalTheme';
-import {JobContextVisual} from '../components/JobContextVisual';
+import {ClientAvatar} from '../components/ClientAvatar';
 
 type ProfileState = {
   profile: null | {
@@ -47,12 +47,15 @@ type HomeRequest = {
   status: string;
   title: string;
   kind: 'engineering' | 'service';
+  clientName?: string;
+  clientAvatarUrl?: string;
+  clientPlus?: boolean;
   locationAddress?: string;
   createdAt: string;
 };
 type RequestPage<T> = {data: T[]; meta: {total: number}};
-type EngineerRequest = {id: string; status: string; projectTitle: string; locationAddress?: string; createdAt: string};
-type ServiceRequest = {id: string; status: string; category: {title: string}; locationAddress?: string; createdAt: string};
+type EngineerRequest = {id: string; status: string; projectTitle: string; clientName?: string; clientAvatarUrl?: string; clientPlus?: boolean; locationAddress?: string; createdAt: string};
+type ServiceRequest = {id: string; status: string; category: {title: string}; client?: {fullName: string; avatarUrl?: string | null}; clientPlus?: boolean; locationAddress?: string; createdAt: string};
 type Availability = {
   isAvailable: boolean;
   slots: {id: string; startsAt: string; endsAt: string; isAvailable: boolean}[];
@@ -104,6 +107,9 @@ export function HomeScreen() {
           status: item.status,
           title: item.projectTitle,
           kind: 'engineering' as const,
+          clientName: item.clientName,
+          clientAvatarUrl: item.clientAvatarUrl,
+          clientPlus: item.clientPlus,
           locationAddress: item.locationAddress,
           createdAt: item.createdAt,
         })),
@@ -112,6 +118,9 @@ export function HomeScreen() {
           status: item.status,
           title: item.category.title,
           kind: 'service' as const,
+          clientName: item.client?.fullName,
+          clientAvatarUrl: item.client?.avatarUrl ?? undefined,
+          clientPlus: item.clientPlus,
           locationAddress: item.locationAddress,
           createdAt: item.createdAt,
         })),
@@ -357,9 +366,9 @@ export function HomeScreen() {
             </View>
               <View style={styles.actions}>
                 {priorityJobs.map(job => (
-                  <Pressable
-                    key={job.id}
-                    accessibilityRole="button"
+                  <PriorityJobCard
+                    key={`${job.kind}:${job.id}`}
+                    job={job}
                     onPress={() =>
                       navigation.navigate('Requests', {
                         screen: 'RequestDetail',
@@ -369,34 +378,7 @@ export function HomeScreen() {
                         },
                       })
                     }
-                    style={({pressed}) => [
-                      styles.jobCard,
-                      pressed && styles.pressed,
-                    ]}>
-                    <JobContextVisual kind={job.kind === 'engineering' ? 'engineering' : 'service'} title={job.title} seed={job.id} size={56} />
-                    <View style={styles.flex}>
-                      <Text style={styles.eyebrow}>
-                        {job.status === 'PENDING'
-                          ? 'REPLY NEEDED'
-                          : job.status === 'IN_PROGRESS'
-                          ? 'IN PROGRESS'
-                          : 'ACCEPTED'}
-                      </Text>
-                      <Text style={styles.actionTitle}>
-                        {job.title || 'View job details'}
-                      </Text>
-                      {job.locationAddress ? (
-                        <Text style={styles.actionNote}>
-                          {job.locationAddress}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <MaterialCommunityIcons
-                      name="arrow-right"
-                      size={22}
-                      color={Colors.navyDeep}
-                    />
-                  </Pressable>
+                  />
                 ))}
               </View>
             </>
@@ -497,6 +479,69 @@ export function HomeScreen() {
   );
 }
 
+function priorityStatus(status: string): {label: string; pill: string; background: string; color: string} {
+  if (status === 'PENDING') {
+    return {label: 'REPLY NEEDED', pill: 'REPLY', background: Colors.warningBg, color: Colors.warning};
+  }
+  if (status === 'IN_PROGRESS') {
+    return {label: 'IN PROGRESS', pill: 'ACTIVE', background: Colors.softBlue, color: Colors.navyMid};
+  }
+  return {label: 'ACCEPTED', pill: 'ACCEPTED', background: Colors.softBlue, color: Colors.navyMid};
+}
+
+// Priority job tagline: the client's face plus the most-needed details at a
+// glance. Tapping opens the full job with map, chat and actions.
+function PriorityJobCard({job, onPress}: {job: HomeRequest; onPress: () => void}) {
+  const status = priorityStatus(job.status);
+  const date = new Date(job.createdAt);
+  const formattedDate = Number.isNaN(date.getTime())
+    ? ''
+    : date.toLocaleDateString('en-IN', {day: 'numeric', month: 'short'});
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${job.title || 'View job details'}. ${status.label}.`}
+      onPress={onPress}
+      style={({pressed}) => [styles.jobCard, pressed && styles.pressed]}>
+      <ClientAvatar name={job.clientName} avatarUrl={job.clientAvatarUrl} size={52} />
+      <View style={styles.jobBody}>
+        <View style={styles.jobTopRow}>
+          <Text style={styles.jobTitle} numberOfLines={1}>
+            {job.title || 'View job details'}
+          </Text>
+          {job.clientPlus ? (
+            <View style={styles.jobPlusPill}>
+              <Text style={styles.jobPlusPillText}>PLUS</Text>
+            </View>
+          ) : null}
+          <View style={[styles.jobStatusPill, {backgroundColor: status.background}]}>
+            <Text style={[styles.jobStatusText, {color: status.color}]} numberOfLines={1}>
+              {status.pill}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.jobClient} numberOfLines={1}>
+          {job.clientName || 'Customer'}
+          {formattedDate ? `  ·  ${formattedDate}` : ''}
+        </Text>
+        {job.locationAddress ? (
+          <View style={styles.jobLocationRow}>
+            <MaterialCommunityIcons name="map-marker-outline" size={13} color={Colors.slate500} />
+            <Text style={styles.jobLocation} numberOfLines={1}>
+              {job.locationAddress}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <MaterialCommunityIcons
+        name="chevron-right"
+        size={22}
+        color={ProColors.muted}
+      />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: Colors.offWhite},
   content: {padding: ProSpacing.xl, paddingBottom: Spacing.xxl},
@@ -537,13 +582,25 @@ const styles = StyleSheet.create({
   jobCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    padding: 20,
+    gap: 12,
+    paddingVertical: 14,
+    paddingLeft: 14,
+    paddingRight: 10,
     borderRadius: 16,
     backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.slate200,
   },
+  jobBody: {flex: 1, minWidth: 0, gap: 2},
+  jobTopRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
+  jobTitle: {flex: 1, minWidth: 0, fontSize: 16, lineHeight: 22, fontWeight: '700', color: ProColors.text},
+  jobPlusPill: {backgroundColor: ProColors.accentSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3},
+  jobPlusPillText: {fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: ProColors.accentText},
+  jobStatusPill: {borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 120},
+  jobStatusText: {fontSize: 11, lineHeight: 15, fontWeight: '700'},
+  jobClient: {fontSize: 13, lineHeight: 18, color: ProColors.secondary},
+  jobLocationRow: {flexDirection: 'row', alignItems: 'center', gap: 3},
+  jobLocation: {...Typography.caption, color: Colors.slate500, flex: 1},
   availabilityCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -572,22 +629,8 @@ const styles = StyleSheet.create({
   viewAllText: {...ProType.action, color: ProColors.primary},
   sectionTitleTop: {marginTop: 0},
   actions: {gap: Spacing.sm},
-  action: {
-    minHeight: 82,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: 20,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.slate200,
-  },
-  actionTitle: {...Typography.h3, color: Colors.slate900},
-  actionNote: {...Typography.caption, color: Colors.slate500, marginTop: 3},
   pressed: {opacity: 0.78},
   disabledButton: {opacity: 0.65},
-  eyebrow: {...Typography.badge, lineHeight: 16, color: Colors.navyMid},
   nextTitle: {...Typography.h3, color: Colors.slate900},
   nextText: {...Typography.caption, color: Colors.slate600, marginTop: 3},
   sectionRow: {

@@ -5,21 +5,22 @@ import {ProColors} from '../theme/professionalTheme';
 
 export type IconChipTone = 'navy' | 'amber' | 'green' | 'red' | 'blue' | 'slate';
 
-// One natural icon color across the Pro app: navy. Red and green survive only
-// for semantic states (blocked/error, success/active). The retired decorative
-// tones stay accepted for API compatibility but render as navy.
+// Soft-tint icon chips in the Home app's color language: a light tinted tile
+// with a saturated glyph, instead of a solid navy block. Blue marks primary
+// content, slate marks secondary/settings rows, amber marks membership and
+// highlights, and green/red stay reserved for success and error states.
 const TONES: Record<IconChipTone, {background: string; foreground: string}> = {
-  navy: {background: ProColors.primary, foreground: '#FFFFFF'},
-  amber: {background: ProColors.primary, foreground: '#FFFFFF'},
-  green: {background: ProColors.success, foreground: '#FFFFFF'},
-  red: {background: ProColors.error, foreground: '#FFFFFF'},
-  blue: {background: ProColors.primary, foreground: '#FFFFFF'},
-  slate: {background: ProColors.primary, foreground: '#FFFFFF'},
+  navy: {background: ProColors.blueSoft, foreground: ProColors.primary},
+  blue: {background: ProColors.blueSoft, foreground: '#2563EB'},
+  amber: {background: ProColors.accentSoft, foreground: ProColors.accentText},
+  green: {background: ProColors.successSoft, foreground: ProColors.success},
+  red: {background: ProColors.errorSoft, foreground: ProColors.error},
+  slate: {background: ProColors.slateSoft, foreground: '#52627A'},
 };
 
-// Filled icon chip: the visual-first language of the Pro app. Big recognizable
-// glyphs on solid navy blocks, so each row reads by picture first and words
-// second. All tone pairs are solid-on-solid for contrast.
+// Tinted icon chip: the visual-first language of the Pro app. Big recognizable
+// glyphs on soft tinted tiles, so each row reads by picture first and words
+// second. All tone pairs keep dark-on-light contrast.
 export function ProIconChip({name, tone = 'navy', size = 46, iconSize = 24}: {
   name: string;
   tone?: IconChipTone;

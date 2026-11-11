@@ -1,4 +1,4 @@
-import {CHECKOUT_LOGO_URL, CheckoutCancelledError, GatewayUnavailableError, isGatewayAvailable, openCheckout} from '../../../packages/mobile-booking/razorpayGateway';
+import {CHECKOUT_LOGO_URL, CheckoutCancelledError, GatewayUnavailableError, checkoutContact, checkoutEmail, isGatewayAvailable, openCheckout} from '../../../packages/mobile-booking/razorpayGateway';
 
 const mockOpen = jest.fn();
 const mockSdkModule: {current: any} = {current: {open: (...args: unknown[]) => (mockOpen as jest.Mock)(...args)}};
@@ -40,6 +40,35 @@ it('reports a missing native module plainly', async () => {
 it('rejects incomplete checkout responses', async () => {
   mockOpen.mockResolvedValue({razorpay_payment_id: 'pay'});
   await expect(openCheckout(input)).rejects.toThrow('incomplete');
+});
+
+it('limits every checkout to UPI and cards', async () => {
+  mockOpen.mockResolvedValue({razorpay_payment_id: 'pay', razorpay_order_id: 'o', razorpay_signature: 's'});
+  await openCheckout(input);
+  expect(mockOpen).toHaveBeenCalledWith(expect.objectContaining({
+    method: {upi: true, card: true, netbanking: false, wallet: false, emi: false, paylater: false},
+  }));
+  mockOpen.mockReset();
+  mockOpen.mockResolvedValue({razorpay_subscription_id: 'sub', razorpay_signature: 's'});
+  await openCheckout({keyId: 'k', subscriptionId: 'sub', currency: 'INR', name: 'NAHTREEK Pro', description: 'Pro membership (monthly)'});
+  expect(mockOpen).toHaveBeenCalledWith(expect.objectContaining({
+    method: expect.objectContaining({upi: true, card: true, netbanking: false}),
+  }));
+});
+
+it('normalizes account phones for contact prefill', () => {
+  expect(checkoutContact('+919876543210')).toBe('9876543210');
+  expect(checkoutContact('9876543210')).toBe('9876543210');
+  expect(checkoutContact('+91 98765 43210')).toBe('9876543210');
+  expect(checkoutContact(undefined)).toBeUndefined();
+  expect(checkoutContact('')).toBeUndefined();
+  expect(checkoutContact('12345')).toBeUndefined();
+});
+
+it('validates account emails for prefill', () => {
+  expect(checkoutEmail('Pro@Example.com ')).toBe('pro@example.com');
+  expect(checkoutEmail('not-an-email')).toBeUndefined();
+  expect(checkoutEmail(undefined)).toBeUndefined();
 });
 
 it('brands order and subscription checkouts with the Nahtreek logo', async () => {

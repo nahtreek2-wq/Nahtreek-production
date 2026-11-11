@@ -1,8 +1,8 @@
 import {ScreenHeader} from '../components/ScreenHeader';
+import {ProLoader} from '../components/ProLoader';
 import React, {useMemo, useState} from 'react';
 import {
   Animated,
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -177,8 +177,7 @@ export function VerificationDocumentsScreen() {
   if (profile.isPending || documents.isPending) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.navyMid} />
-        <Text style={styles.help}>Loading verification details…</Text>
+        <ProLoader size={52} label="Loading verification details…" />
       </View>
     );
   }
@@ -257,7 +256,7 @@ export function VerificationDocumentsScreen() {
                 onPress={() => chooseAndUpload(item.type)}
                 style={styles.uploadButton}>
                 {uploading === item.type ? (
-                  <ActivityIndicator color={Colors.navyDeep} />
+                  <ProLoader size={24} />
                 ) : (
                   <Text style={styles.uploadText}>
                     {uploaded?.status === 'APPROVED'

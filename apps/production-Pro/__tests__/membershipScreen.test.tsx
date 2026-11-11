@@ -205,6 +205,51 @@ it('explains a failed mandate instead of fake-activating', async () => {
   t.done();
 });
 
+it('confirms instead of failing when a checkout error hides an active membership', async () => {
+  const load = jest.fn()
+    .mockResolvedValueOnce(none)
+    .mockResolvedValue(active);
+  const hooks: MembershipHooks = {
+    load,
+    subscribe: jest.fn().mockResolvedValue({...none, status: 'PENDING', keyId: 'k', subscriptionId: 'sub', shortUrl: 'u'}),
+    confirm: jest.fn(),
+    cancel: jest.fn(),
+    checkout: jest.fn().mockRejectedValue(new Error('Bridge result lost')),
+  };
+  const t = setup(hooks);
+  await t.render();
+  await t.press('Subscribe to Pro membership');
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+  expect(t.texts()).toContain('Your Pro benefits are active');
+  expect(t.texts()).not.toContain('Bridge result lost');
+  t.done();
+});
+
+it('lets the user check now during activation instead of watching the poll', async () => {
+  const pending: MembershipView = {...none, status: 'PENDING'};
+  const hooks: MembershipHooks = {
+    load: jest.fn()
+      .mockResolvedValueOnce(none)
+      .mockResolvedValueOnce(none)
+      .mockResolvedValue(active),
+    subscribe: jest.fn().mockResolvedValue({...pending, keyId: 'k', subscriptionId: 'sub', shortUrl: 'u'}),
+    confirm: jest.fn()
+      .mockResolvedValueOnce(pending)
+      .mockResolvedValue(active),
+    cancel: jest.fn(),
+    checkout: jest.fn().mockResolvedValue({razorpaySubscriptionId: 'sub'}),
+  };
+  const t = setup(hooks);
+  await t.render();
+  await t.press('Subscribe to Pro membership');
+  expect(t.texts()).toContain('activating your membership');
+  await t.press('Check membership now');
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+  expect(hooks.confirm).toHaveBeenCalledTimes(2);
+  expect(t.texts()).toContain('Your Pro benefits are active');
+  t.done();
+});
+
 it('explains plainly when billing is not enabled yet', async () => {
   const hooks: MembershipHooks = {
     load: jest.fn().mockResolvedValue(none),

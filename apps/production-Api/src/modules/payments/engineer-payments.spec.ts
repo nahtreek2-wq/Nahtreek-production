@@ -337,6 +337,45 @@ describe('engineer direct collection', () => {
     const {service} = setup({pay: payment({status: 'COLLECTED_UNSETTLED'})});
     await expect(service.createEngineerOrder('client', 'eng-req')).rejects.toMatchObject({status: 409});
   });
+
+  it('reconciles an in-flight checkout before declaring, and proceeds when nothing was captured', async () => {
+    const fetchOrderPayments = jest.fn().mockResolvedValue([]);
+    const {db, provider, service} = setup({pay: payment(), provider: {fetchOrderPayments}});
+    const result = await service.declareEngineerCollection('eng-user',
+      {engineerRequestId: 'eng-req', amount: 3500, method: 'CASH'});
+    expect(provider.fetchOrderPayments).toHaveBeenCalledWith('order_1');
+    expect(result).toMatchObject({status: 'COLLECTED_UNSETTLED', amountPaisa: 350000});
+    expect(db.payment.update).toHaveBeenCalledWith(expect.objectContaining({data: expect.objectContaining({
+      collectionMode: 'AT_HOME', status: 'COLLECTED_UNSETTLED'})}));
+  });
+
+  it('claims a lagging capture instead of letting a declare wipe the order', async () => {
+    const fetchOrderPayments = jest.fn().mockResolvedValue([{id: 'pay_1', status: 'captured', amount: 350000}]);
+    const {db, service} = setup({pay: payment(), provider: {fetchOrderPayments}});
+    await expect(service.declareEngineerCollection('eng-user',
+      {engineerRequestId: 'eng-req', amount: 3500, method: 'CASH'}))
+      .rejects.toMatchObject({status: 409, message: 'This booking was already paid online'});
+    // The capture was claimed (PAID), never overwritten with AT_HOME data.
+    expect(db.payment.updateMany).toHaveBeenCalledWith(expect.objectContaining({data: expect.objectContaining({
+      providerPaymentId: 'pay_1', status: 'PAID'})}));
+    expect(db.payment.update).not.toHaveBeenCalledWith(expect.objectContaining({data: expect.objectContaining({
+      collectionMode: 'AT_HOME'})}));
+  });
+
+  it('lets the engineer sync an in-flight checkout like the client can', async () => {
+    const fetchOrderPayments = jest.fn().mockResolvedValue([]);
+    const {service} = setup({pay: payment(), provider: {fetchOrderPayments}});
+    const result = await service.sync('eng-user', {engineerRequestId: 'eng-req'});
+    expect(result).toMatchObject({status: 'ORDER_CREATED'});
+    await expect(service.sync('stranger', {engineerRequestId: 'eng-req'}))
+      .rejects.toMatchObject({status: 404});
+  });
+
+  it('exposes the consultation fee as the declare reference in the engineer view', async () => {
+    const {service} = setup({pay: payment({status: 'PAID', providerPaymentId: 'pay_1'})});
+    const result = await service.viewEngineer('eng-user', 'eng-req', false);
+    expect(result).toMatchObject({status: 'PAID', expectedAmountPaisa: 350000});
+  });
 });
 
 describe('client payment disputes', () => {

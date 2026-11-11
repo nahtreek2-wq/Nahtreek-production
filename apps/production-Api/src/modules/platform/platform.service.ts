@@ -48,7 +48,7 @@ const requestInclude = {
   journey: {select: {stage: true}},
   category: true,
   provider: { select: providerSelect },
-  client: { select: { fullName: true } },
+  client: { select: { fullName: true, avatarUrl: true } },
   statusHistory: { orderBy: { createdAt: "asc" as const } },
 } satisfies Prisma.ServiceRequestInclude;
 export const PROVIDER_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
@@ -806,7 +806,7 @@ export class PlatformService {
         where,
         include: {...requestInclude,
           provider: {select: {...providerSelect, userId: true}},
-          client: {select: {fullName: true, userId: true}}},
+          client: {select: {fullName: true, userId: true, avatarUrl: true}}},
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
@@ -830,7 +830,7 @@ export class PlatformService {
       include: {
         ...requestInclude,
         provider: {select: {...providerSelect, userId: true}},
-        client: {select: {fullName: true, userId: true}},
+        client: {select: {fullName: true, userId: true, avatarUrl: true}},
         reviews: {select: {id: true, rating: true, comment: true, createdAt: true}},
       },
     });

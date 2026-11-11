@@ -317,6 +317,18 @@ export class PaymentsService {
     if (existing?.providerPaymentId) throw new ConflictException('This booking was already paid online');
     if (existing && ([PaymentStatus.COLLECTED_UNSETTLED, PaymentStatus.SETTLED] as PaymentStatus[]).includes(existing.status as PaymentStatus))
       throw new ConflictException('Direct collection was already recorded for this booking');
+    if (existing && existing.status === PaymentStatus.ORDER_CREATED && existing.providerOrderId) {
+      // A client checkout is in flight: capture can lag the row by seconds.
+      // Reconcile with the provider before overwriting the order — a capture
+      // wiped here would strand the money (no order left to verify against)
+      // while the client was actually charged. Provider errors surface as
+      // 503 so the engineer retries instead of declaring blind.
+      const remote = await this.capturedForOrder(existing.providerOrderId);
+      if (remote) {
+        await this.claimEngineerCapture(request, existing, remote);
+        throw new ConflictException('This booking was already paid online');
+      }
+    }
     const amountPaisa = Math.round(dto.amount * 100);
     if (!Number.isFinite(amountPaisa) || amountPaisa < 100) throw new BadRequestException('Enter the amount received (minimum ₹1)');
     const member = (await this.memberships?.isEffectiveByProfile(request.engineer.professionalProfileId).catch(() => false)) ?? false;
@@ -504,7 +516,8 @@ export class PaymentsService {
     this.checkExactlyOne(dto);
     if (dto.engineerRequestId) return this.syncEngineer(userId, dto.engineerRequestId);
     const request = await this.partyRequest(dto.serviceRequestId!);
-    if (request.client.userId !== userId) throw new NotFoundException('Booking not found');
+    if (request.client.userId !== userId && request.provider.userId !== userId)
+      throw new NotFoundException('Booking not found');
     const payment = await this.db.payment.findUnique({where: {serviceRequestId: dto.serviceRequestId}});
     if (!payment) throw new NotFoundException('No payment for this booking');
     if (payment.status !== PaymentStatus.ORDER_CREATED || !payment.providerOrderId) return this.viewOf(payment);
@@ -538,7 +551,8 @@ export class PaymentsService {
 
   private async syncEngineer(userId: string, engineerRequestId: string) {
     const request = await this.engineerPartyRequest(engineerRequestId);
-    if (request.client.userId !== userId) throw new NotFoundException('Booking not found');
+    if (request.client.userId !== userId && request.engineer.profile.userId !== userId)
+      throw new NotFoundException('Booking not found');
     const payment = await this.db.payment.findUnique({where: {engineerRequestId}});
     if (!payment) throw new NotFoundException('No payment for this booking');
     if (payment.status !== PaymentStatus.ORDER_CREATED || !payment.providerOrderId) return this.viewOf(payment);
@@ -546,6 +560,18 @@ export class PaymentsService {
       throw new ConflictException('This booking is closed and can no longer be paid');
     const remote = await this.capturedForOrder(payment.providerOrderId);
     if (!remote) return this.viewOf(payment);
+    const claimed = await this.claimEngineerCapture(request, payment, remote);
+    return this.viewOf(await this.hold(claimed.id));
+  }
+
+  // Claims a captured Razorpay payment for an ORDER_CREATED engineer row:
+  // marks PAID, notifies both parties and receipts the client. Shared by
+  // sync and by declare-before-overwrite so a capture can never be wiped
+  // by an at-home declaration. Throws Conflict when the capture mismatches
+  // (row flagged DISPUTED for support) — callers must stop either way.
+  private async claimEngineerCapture(request: EngineerPartyRequest,
+      payment: {id: string; amountPaisa: number; providerOrderId: string | null},
+      remote: {id: string; amount: number}) {
     if (remote.amount !== payment.amountPaisa) {
       await this.db.payment.update({where: {id: payment.id}, data: {status: PaymentStatus.DISPUTED}});
       await this.tell([request.client.userId, request.engineer.profile.userId],
@@ -559,7 +585,7 @@ export class PaymentsService {
     if (!claimed.count) {
       const current = await this.db.payment.findUnique({where: {id: payment.id}});
       if (current && current.providerPaymentId && current.status !== PaymentStatus.ORDER_CREATED)
-        return this.viewOf(current);
+        return current;
       throw new ConflictException('This payment was already processed');
     }
     await this.tell([request.client.userId, request.engineer.profile.userId],
@@ -569,7 +595,7 @@ export class PaymentsService {
       amountPaisa: payment.amountPaisa, proName: request.engineer.profile.fullName, online: true,
       paymentRef: remote.id, held: true});
     await this.receipt(request.client.userId, engineerReceipt.subject, engineerReceipt.lines);
-    return this.viewOf(await this.hold(payment.id));
+    return this.db.payment.findUniqueOrThrow({where: {id: payment.id}});
   }
 
   private async capturedForOrder(providerOrderId: string) {
@@ -1096,7 +1122,11 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     const payment = await this.db.payment.findUnique({where: {engineerRequestId}});
     if (!payment) throw new NotFoundException('No payment for this booking');
-    return this.viewOf(payment);
+    // The engineer declares at-home cash/UPI against this reference: without
+    // it the declare form cannot show what the visit should cost.
+    const fee = request.engineer.consultationFee;
+    return {...this.viewOf(payment),
+      ...(fee === null || fee === undefined ? {} : {expectedAmountPaisa: Math.round(fee * 100)})};
   }
 
   async summary() {

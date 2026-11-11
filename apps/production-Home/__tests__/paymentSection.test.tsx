@@ -194,7 +194,7 @@ it('pays a consultation fee with engineer copy and checkout description', async 
   t.done();
 });
 
-it('tells Plus members their consultation discount applies at checkout', async () => {
+it('shows Plus members the exact discounted charge before checkout', async () => {
   const hooks: PaymentHooks = {
     createOrder: jest.fn(), verify: jest.fn(),
     loadStatus: jest.fn().mockResolvedValue(null),
@@ -203,7 +203,10 @@ it('tells Plus members their consultation discount applies at checkout', async (
   const plus = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500, isPlus: true,
     plusDiscount: {percent: 2, capPaisa: 10000}});
   await plus.render();
-  expect(plus.texts()).toContain('Your Plus 2% discount (up to ₹100) applies automatically at checkout.');
+  // 2% of ₹3,500 is ₹70, under the ₹100 cap: the button quotes ₹3,430, the
+  // same figure the server charges and the gateway will show.
+  expect(plus.texts()).toContain('Pay ₹3,430 consultation fee');
+  expect(plus.texts()).toContain('(₹3,500 fee minus your Plus discount)');
   plus.done();
   const noPlan = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500, isPlus: true});
   await noPlan.render();

@@ -1,6 +1,5 @@
 import React, {useEffect, useState} from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Image,
@@ -27,7 +26,8 @@ import type {ProfileStackParamList} from '../navigation/types';
 import {mediaUrl, saveProfessionalPhoto} from '../services/media';
 import {useQueryClient} from '@tanstack/react-query';
 import {MotionReveal} from '../components/MotionReveal';
-import {ProIconChip} from '../components/ProIconChip';
+import {ProIconChip, type IconChipTone} from '../components/ProIconChip';
+import {ProLoader} from '../components/ProLoader';
 import {WorkVisual} from '../components/WorkVisual';
 import {ProColors, ProSpacing, ProType} from '../theme/professionalTheme';
 import {useReducedMotion} from '../../../../packages/mobile-ui/useReducedMotion';
@@ -57,6 +57,7 @@ type ProfileActionRowProps = {
   title: string;
   description: string;
   last?: boolean;
+  tone?: IconChipTone;
   onPress: () => void;
 };
 
@@ -65,6 +66,7 @@ function ProfileActionRow({
   title,
   description,
   last = false,
+  tone = 'blue',
   onPress,
 }: ProfileActionRowProps) {
   const reducedMotion = useReducedMotion();
@@ -79,7 +81,7 @@ function ProfileActionRow({
         last && styles.actionRowLast,
         pressed && (reducedMotion ? styles.rowPressed : styles.actionRowPressed),
       ]}>
-      <ProIconChip name={icon} size={44} iconSize={23} />
+      <ProIconChip name={icon} tone={tone} size={44} iconSize={23} />
       <View style={styles.flex}>
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowText}>{description}</Text>
@@ -279,7 +281,7 @@ export function ProfileScreen() {
                 )}
                 {savingPhoto ? (
                   <View style={styles.photoBusy}>
-                    <ActivityIndicator color={ProColors.surface} />
+                    <ProLoader size={28} tone="light" />
                   </View>
                 ) : (
                   <View style={styles.camera}>
@@ -508,6 +510,7 @@ export function ProfileScreen() {
             />
             <ProfileActionRow
               icon="crown-outline"
+              tone="amber"
               title="Pro membership"
               description="7% commission, top discovery, member badge"
               onPress={() => navigation.navigate('Membership')}
@@ -527,18 +530,21 @@ export function ProfileScreen() {
           <View style={styles.settingsGroup}>
             <ProfileActionRow
               icon="bell-outline"
+              tone="slate"
               title="Notifications"
               description="Requests, messages, and work updates"
               onPress={() => navigation.navigate('Notifications')}
             />
             <ProfileActionRow
               icon="tune-variant"
+              tone="slate"
               title="Notification preferences"
               description="Choose the alerts you want to receive"
               onPress={() => navigation.navigate('NotificationSettings')}
             />
             <ProfileActionRow
               icon="lifebuoy"
+              tone="slate"
               title="Help & support"
               description="Payments, dues and account issues"
               last
@@ -582,7 +588,7 @@ export function ProfileScreen() {
             style={({pressed}) => [styles.deleteButton, (!canDelete || pressed) && {opacity: 0.6}]}>
             <Text style={styles.deleteButtonText}>{deleting ? 'Deleting…' : 'Delete my account'}</Text>
           </Pressable>
-          {deleting ? <ActivityIndicator color={ProColors.error} /> : null}
+          {deleting ? <ProLoader size={28} tone="red" /> : null}
         </View>
 
         <Pressable

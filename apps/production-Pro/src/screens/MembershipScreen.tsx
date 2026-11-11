@@ -1,17 +1,20 @@
-import React, {useState} from 'react';
-import {ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {ProIconChip} from '../components/ProIconChip';
+import {ProIconChip, type IconChipTone} from '../components/ProIconChip';
 import {ScreenHeader} from '../components/ScreenHeader';
+import {ProLoader} from '../components/ProLoader';
 import {ScreenLoading} from '../components/ScreenLoading';
 import {EmptyState} from '../components/EmptyState';
 import {api} from '../services/apiClient';
 import {useProToast} from '../stores/proToast';
 import {ProColors, ProRadius, ProSpacing, ProType} from '../theme/professionalTheme';
-import {CheckoutCancelledError, GatewayUnavailableError, openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
+import {CheckoutCancelledError, GatewayUnavailableError, checkoutContact, checkoutEmail, openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
 import type {CheckoutInput, CheckoutResult} from '../../../../packages/mobile-booking/razorpayGateway';
+import {useCheckoutWatchdog} from '../../../../packages/mobile-booking/useCheckoutWatchdog';
+import {useSessionStore} from '../stores/session';
 
 export type MembershipTerms = {memberFeeBps: number; standardFeeBps: number; memberDuesBlockPaisa: number;
   standardDuesBlockPaisa: number; freeJobsPerMonth: number};
@@ -42,17 +45,17 @@ const pct = (bps: number) => `${bps / 100}%`;
 
 // Every figure below renders from server terms — the plan price, rates and
 // dues room change on the backend without an app release.
-function benefitsFor(terms: MembershipTerms): {title: string; body: string; icon: string}[] {
+function benefitsFor(terms: MembershipTerms): {title: string; body: string; icon: string; tone: IconChipTone}[] {
   const free = terms.freeJobsPerMonth;
   return [
     {title: free === 1 ? 'First job every month at 0% commission' : `${free} jobs every month at 0% commission`,
-      body: 'Your first booking each calendar month keeps the full amount.', icon: 'gift'},
+      body: 'Your first booking each calendar month keeps the full amount.', icon: 'gift', tone: 'amber'},
     {title: `${pct(terms.memberFeeBps)} commission, not ${pct(terms.standardFeeBps)}`,
-      body: 'Keep more of every other job while your membership is active.', icon: 'percent'},
+      body: 'Keep more of every other job while your membership is active.', icon: 'percent', tone: 'green'},
     {title: `${inr(terms.memberDuesBlockPaisa)} dues room, not ${inr(terms.standardDuesBlockPaisa)}`,
-      body: `New jobs pause only after ${inr(terms.memberDuesBlockPaisa)} unsettled instead of ${inr(terms.standardDuesBlockPaisa)}.`, icon: 'cash-multiple'},
-    {title: 'Top of discovery', body: 'Members rank above non-members in client search results.', icon: 'arrow-up-bold-circle'},
-    {title: 'Pro member badge', body: 'A PRO badge on your profile and discovery cards, next to the Verified identity badge.', icon: 'medal'},
+      body: `New jobs pause only after ${inr(terms.memberDuesBlockPaisa)} unsettled instead of ${inr(terms.standardDuesBlockPaisa)}.`, icon: 'cash-multiple', tone: 'blue'},
+    {title: 'Top of discovery', body: 'Members rank above non-members in client search results.', icon: 'arrow-up-bold-circle', tone: 'navy'},
+    {title: 'Pro member badge', body: 'A PRO badge on your profile and discovery cards, next to the Verified identity badge.', icon: 'medal', tone: 'amber'},
   ];
 }
 
@@ -73,6 +76,22 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
   const [failed, setFailed] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [activationAttempt, setActivationAttempt] = useState(0);
+  const [checkingNow, setCheckingNow] = useState(false);
+  const [checkoutStalled, setCheckoutStalled] = useState(false);
+  const [checkoutAttempt, setCheckoutAttempt] = useState(0);
+  // The activation poll must never outlive the screen or fight a manual
+  // check/cancel: the token invalidates stale loops, the mounted flag stops
+  // work after unmount (leaving and returning shows the fresh query state).
+  const pollToken = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      pollToken.current += 1;
+    };
+  }, []);
   const query = useQuery({queryKey: ['membership'], queryFn: hooks.load, retry: 1});
   const refresh = () => {
     // Membership flips dues math (member rate/room from server terms), so the dues and
@@ -85,12 +104,20 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
 
   // After a successful GPay payment the first charge still needs seconds to
   // land at Razorpay. Poll confirm (then the plain status as a webhook may
-  // have flipped it) instead of stranding the user on an error.
+  // have flipped it) instead of stranding the user on an error. The loop
+  // reports live progress and yields to manual checks and cancels — a dead
+  // 40s wait with disabled buttons reads as a frozen screen.
+  const ACTIVATION_CHECKS = 10;
   const pollActivation = async () => {
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    const token = pollToken.current;
+    const alive = () => mounted.current && pollToken.current === token;
+    for (let attempt = 1; attempt <= ACTIVATION_CHECKS; attempt += 1) {
       await new Promise(resolve => setTimeout(resolve, 4000));
+      if (!alive()) return;
+      setActivationAttempt(attempt);
       try {
         const view = await hooks.confirm();
+        if (!alive()) return;
         if (view.effective) {
           setActivating(false); setFailed(null); setCancelled(false); refresh();
           toast('Pro membership is active.', 'success');
@@ -103,6 +130,7 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
           return;
         }
       } catch (error) {
+        if (!alive()) return;
         if (!(error instanceof Error) || !/still confirming/i.test(error.message)) {
           setActivating(false);
           setFailed(messageFor(error));
@@ -110,8 +138,10 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
         }
       }
     }
+    if (!alive()) return;
     try {
       const view = await hooks.load();
+      if (!alive()) return;
       if (view.effective) {
         setActivating(false); setFailed(null); setCancelled(false); refresh();
         toast('Pro membership is active.', 'success');
@@ -120,8 +150,47 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
     } catch {
       // Fall through to the wait-and-reopen message below.
     }
+    if (!alive()) return;
     setActivating(false);
     setFailed('Payment is still confirming at Razorpay. Wait a minute, then reopen this screen — do not pay again.');
+    refresh();
+  };
+  const beginActivation = () => {
+    pollToken.current += 1;
+    setActivationAttempt(0);
+    setFailed(null);
+    setActivating(true);
+    refresh();
+    void pollActivation();
+  };
+  // Impatient users get a real button instead of a dead wait: one extra
+  // confirm right now. A success stops the loop and settles; anything else
+  // leaves the loop running — the tap can never double-charge or break it.
+  const checkActivationNow = () => {
+    if (checkingNow) return;
+    setCheckingNow(true);
+    void (async () => {
+      try {
+        const view = await hooks.confirm();
+        if (!mounted.current) return;
+        if (view.effective) {
+          pollToken.current += 1;
+          setActivating(false); setFailed(null); setCancelled(false); refresh();
+          toast('Pro membership is active.', 'success');
+          return;
+        }
+        if (view.status === 'PAST_DUE') {
+          pollToken.current += 1;
+          setActivating(false);
+          setFailed('The membership payment failed at Razorpay. No money was taken — subscribe again to try with a fresh checkout.');
+          refresh();
+        }
+      } catch {
+        // Still confirming or unreachable: the background loop keeps going.
+      } finally {
+        if (mounted.current) setCheckingNow(false);
+      }
+    })();
   };
 
   const settleSubscribe = (view: MembershipView) => {
@@ -135,25 +204,47 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
       refresh();
       return;
     }
-    setFailed(null); setActivating(true); refresh();
-    void pollActivation();
+    beginActivation();
   };
 
+  const phoneNumber = useSessionStore(state => state.user?.phoneNumber);
+  const accountEmail = useSessionStore(state => state.user?.email);
   const subscribe = useMutation({mutationFn: async () => {
     const order = await hooks.subscribe();
     if ((order.effective && !order.shortUrl) || !order.subscriptionId) return hooks.confirm();
+    const contact = checkoutContact(phoneNumber);
+    const email = checkoutEmail(accountEmail);
+    const prefill = {...(contact ? {contact} : {}), ...(email ? {email} : {})};
     await (hooks.checkout ?? openCheckout)({keyId: order.keyId, subscriptionId: order.subscriptionId,
-      currency: order.currency, name: 'NAHTREEK Pro', description: 'Pro membership (monthly)'});
+      currency: order.currency, name: 'NAHTREEK Pro', description: 'Pro membership (monthly)',
+      ...(Object.keys(prefill).length ? {prefill} : {})});
     return hooks.confirm();
   }, onSuccess: settleSubscribe,
   onError: error => {
     if (error instanceof CheckoutCancelledError) { setCancelled(true); setFailed(null); refresh(); return; }
-    setCancelled(false);
-    setFailed(messageFor(error));
+    if (error instanceof GatewayUnavailableError) { setCancelled(false); setFailed(messageFor(error)); return; }
+    // A checkout error with money behind it (an error banner over a
+    // successful authorization, a lost bridge result) must confirm, not
+    // strand the user on a subscribe button for an active membership.
+    void (async () => {
+      try {
+        const view = await hooks.load();
+        if (view.effective) {
+          settleSubscribe(view);
+          return;
+        }
+      } catch {
+        // Fall through to the failure message below.
+      }
+      setCancelled(false);
+      setFailed(messageFor(error));
+    })();
   }});
 
   const cancel = useMutation({mutationFn: () => hooks.cancel(),
     onSuccess: view => {
+      // Cancelling a stuck checkout also stops its activation loop.
+      pollToken.current += 1;
       setFailed(null); setCancelled(false); setActivating(false); refresh();
       toast(view.status === 'NONE' ? 'Checkout cancelled. Nothing was charged.' : 'Membership cancelled. Benefits stay until the paid period ends.', 'success');
     },
@@ -165,7 +256,36 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
     pending ? [{text: 'Keep checkout', style: 'cancel'}, {text: 'Cancel checkout', style: 'destructive', onPress: () => cancel.mutate()}]
       : [{text: 'Keep membership', style: 'cancel'}, {text: 'Cancel membership', style: 'destructive', onPress: () => cancel.mutate()}]);
 
-  const busy = subscribe.isPending || cancel.isPending || activating;
+  // Last-resort recovery for a lost checkout result: if the user is back on
+  // this screen with the subscribe promise still pending, the result never
+  // arrived — reconcile instead of sitting disabled forever. A late real
+  // result still flows through the idempotent paths above, so this can
+  // never double-charge or swallow a success.
+  useCheckoutWatchdog(subscribe.isPending && !checkoutStalled, () => {
+    void (async () => {
+      try {
+        const current = await hooks.load();
+        if (!mounted.current) return;
+        if (current.effective) {
+          settleSubscribe(current);
+          return;
+        }
+      } catch {
+        // Fall through to the retryable stall message below.
+      }
+      if (!mounted.current) return;
+      setCancelled(false);
+      setCheckoutStalled(true);
+    })();
+  }, checkoutAttempt);
+  const startSubscribe = () => {
+    setCheckoutStalled(false);
+    setCheckoutAttempt(attempt => attempt + 1);
+    subscribe.mutate();
+  };
+
+  const busy = (subscribe.isPending && !checkoutStalled) || cancel.isPending || activating;
+  const subscribeBusy = subscribe.isPending && !checkoutStalled;
   const view = query.data;
   const terms = view?.terms ?? FALLBACK_TERMS;
   const endDate = view?.currentPeriodEnd ? new Date(view.currentPeriodEnd).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric'}) : null;
@@ -183,20 +303,37 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
       {view && !view.effective ? <View style={styles.card}>
         <Image source={require('../assets/professionals/engineer-work-banner-v1.png')} style={styles.heroImage} resizeMode="cover" accessibilityLabel="Professional at work on a home site" />
         <View style={styles.heroRow}>
-          <ProIconChip name="crown" size={58} iconSize={30} />
+          <ProIconChip name="crown" tone="amber" size={58} iconSize={30} />
           <Text style={styles.price}>{inr(view.feePaisa)}<Text style={styles.perMonth}>/month</Text></Text>
         </View>
         {view.status === 'PAST_DUE' ? <Text style={styles.warning}>Your last membership payment failed. Subscribe again to restore benefits with a fresh month.</Text> : null}
         {benefitsFor(terms).map(benefit => <View key={benefit.title} style={styles.benefit}>
-          <ProIconChip name={benefit.icon} size={44} iconSize={23} />
+          <ProIconChip name={benefit.icon} tone={benefit.tone} size={44} iconSize={23} />
           <View style={styles.benefitCopy}>
             <Text style={styles.benefitTitle}>{benefit.title}</Text>
             <Text style={styles.text}>{benefit.body}</Text>
           </View>
         </View>)}
         {activating ? <View style={styles.activating}>
-          <ActivityIndicator size="small" color={ProColors.primary} />
-          <Text style={styles.text}>Payment received — activating your membership…</Text>
+          <ProLoader size={26} />
+          <View style={styles.activatingCopy}>
+            <Text style={styles.text}>Payment received — activating your membership…</Text>
+            <Text style={styles.small}>
+              {activationAttempt > 0
+                ? `Checking confirmation ${activationAttempt} of ${ACTIVATION_CHECKS}…`
+                : 'Contacting Razorpay for the first confirmation…'}
+            </Text>
+            <View style={styles.activatingActions}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Check membership now"
+                disabled={checkingNow || cancel.isPending} onPress={checkActivationNow} style={styles.checkNow}>
+                <Text style={styles.checkNowText}>{checkingNow ? 'Checking…' : 'Check now'}</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Cancel this checkout"
+                disabled={cancel.isPending} onPress={() => startCancel(true)} style={styles.checkNow}>
+                <Text style={styles.checkNowText}>{cancel.isPending ? 'Cancelling…' : 'Cancel checkout'}</Text>
+              </Pressable>
+            </View>
+          </View>
         </View> : null}
         {view.status === 'PENDING' && !activating ? <>
           <Text style={styles.small}>A payment was started but has not finished. Complete it above, or cancel the checkout to start fresh — nothing is charged until the Razorpay authorization completes.</Text>
@@ -205,7 +342,7 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
             <Text style={styles.secondaryButtonText}>{cancel.isPending ? 'Cancelling…' : 'Cancel this checkout'}</Text>
           </Pressable>
         </> : null}
-        <Text style={styles.small}>Recurring autopay via Razorpay (UPI, cards and netbanking). Cancel anytime; benefits run until the paid month ends.</Text>
+        <Text style={styles.small}>Recurring autopay via Razorpay (UPI and cards). Cancel anytime; benefits run until the paid month ends.</Text>
       </View> : null}
       {view?.effective ? <View style={styles.card}>
         <View style={styles.activeBadge}><Text style={styles.activeBadgeText}>PRO MEMBER</Text></View>
@@ -224,8 +361,8 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
         {view.cancelAtPeriodEnd ? <>
           <Text style={styles.text}>You cancelled renewal. Benefits end {endDate ?? 'at the period end'}. Resubscribing starts the new cycle then — no double charge.</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Resubscribe to Pro membership" disabled={busy}
-            onPress={() => subscribe.mutate()} style={[styles.secondaryButton, busy && {opacity: 0.5}]}>
-            <Text style={styles.secondaryButtonText}>{subscribe.isPending ? 'Opening secure checkout…' : `Resubscribe for ${inr(view.feePaisa)}/month`}</Text>
+            onPress={startSubscribe} style={[styles.secondaryButton, busy && {opacity: 0.5}]}>
+            <Text style={styles.secondaryButtonText}>{subscribeBusy ? 'Opening secure checkout…' : `Resubscribe for ${inr(view.feePaisa)}/month`}</Text>
           </Pressable>
         </>
         : <Pressable accessibilityRole="button" accessibilityLabel="Cancel membership" disabled={busy}
@@ -234,12 +371,13 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
         </Pressable>}
       </View> : null}
       {cancelled ? <Text style={styles.text}>Checkout cancelled. Nothing was charged — subscribe whenever you are ready.</Text> : null}
+      {checkoutStalled && !view?.effective ? <Text style={styles.stalled}>Checkout was interrupted — nothing was charged. Tap below to try again.</Text> : null}
       {failed ? <View accessibilityRole="alert" style={styles.actionError}><Text style={styles.error}>{failed}</Text></View> : null}
     </ScrollView>
     {view && !view.effective && !activating ? <View style={[styles.stickyBar, {paddingBottom: tabBarHeight + ProSpacing.md}]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Subscribe to Pro membership" accessibilityState={{disabled: busy, busy: subscribe.isPending}}
-        disabled={busy} onPress={() => subscribe.mutate()} style={[styles.button, busy && {opacity: 0.5}]}>
-        <Text style={styles.buttonText}>{subscribe.isPending ? 'Opening secure checkout…' : view.status === 'PENDING' ? 'Complete authorization' : `Subscribe for ${inr(view.feePaisa)}/month`}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Subscribe to Pro membership" accessibilityState={{disabled: busy, busy: subscribeBusy}}
+        disabled={busy} onPress={startSubscribe} style={[styles.button, busy && {opacity: 0.5}]}>
+        <Text style={styles.buttonText}>{subscribeBusy ? 'Opening secure checkout…' : view.status === 'PENDING' ? 'Complete authorization' : `Subscribe for ${inr(view.feePaisa)}/month`}</Text>
       </Pressable>
     </View> : null}
   </View>;
@@ -255,7 +393,7 @@ const styles = StyleSheet.create({
   heroRow: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md},
   price: {fontSize: 34, fontWeight: '800', color: ProColors.text},
   perMonth: {fontSize: 16, fontWeight: '600', color: ProColors.muted},
-  benefit: {flexDirection: 'row', alignItems: 'center', gap: ProSpacing.md},
+  benefit: {flexDirection: 'row', alignItems: 'flex-start', gap: ProSpacing.md},
   benefitCopy: {flex: 1, gap: 2},
   benefitTitle: {fontSize: 16, fontWeight: '700', color: ProColors.text},
   text: {fontSize: 15, lineHeight: 22, color: ProColors.text},
@@ -266,11 +404,17 @@ const styles = StyleSheet.create({
   buttonText: {color: '#FFFFFF', fontWeight: '700', textAlign: 'center', fontSize: 16},
   secondaryButton: {borderRadius: ProRadius.input, minHeight: 50, padding: 12, justifyContent: 'center', borderWidth: 1, borderColor: ProColors.muted},
   secondaryButtonText: {color: ProColors.text, fontWeight: '700', textAlign: 'center'},
-  activating: {flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: ProColors.successSoft, padding: 12, borderRadius: 12},
+  activating: {flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: ProColors.successSoft, padding: 12, borderRadius: 12},
+  activatingCopy: {flex: 1, gap: 4},
+  activatingActions: {flexDirection: 'row', gap: 16, marginTop: 4},
+  checkNow: {minHeight: 40, justifyContent: 'center'},
+  checkNowText: {fontSize: 14, fontWeight: '800', color: ProColors.primary, textDecorationLine: 'underline'},
   retry: {alignItems: 'center', paddingVertical: 8},
   retryText: {fontSize: 14, fontWeight: '700', color: ProColors.primary},
   actionError: {padding: 12, borderRadius: 12, backgroundColor: ProColors.errorSoft},
   error: {color: ProColors.error, lineHeight: 21},
+  stalled: {fontSize: 14, lineHeight: 20, fontWeight: '700', color: ProColors.warning,
+    backgroundColor: ProColors.warningSoft, padding: 12, borderRadius: 12},
   activeBadge: {alignSelf: 'flex-start', backgroundColor: ProColors.primary, borderRadius: ProRadius.pill, paddingHorizontal: 12, paddingVertical: 6},
   activeBadgeText: {color: '#FFFFFF', fontWeight: '800', fontSize: 12, letterSpacing: 1},
   savings: {backgroundColor: ProColors.successSoft, borderRadius: ProRadius.input, padding: ProSpacing.md, gap: 2},

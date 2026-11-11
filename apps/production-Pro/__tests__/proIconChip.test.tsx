@@ -7,15 +7,15 @@ import type {IconChipTone} from '../src/components/ProIconChip';
 import {ProColors} from '../src/theme/professionalTheme';
 
 const EXPECTED: Record<IconChipTone, {background: string; foreground: string}> = {
-  navy: {background: ProColors.primary, foreground: '#FFFFFF'},
-  amber: {background: ProColors.primary, foreground: '#FFFFFF'},
-  green: {background: ProColors.success, foreground: '#FFFFFF'},
-  red: {background: ProColors.error, foreground: '#FFFFFF'},
-  blue: {background: ProColors.primary, foreground: '#FFFFFF'},
-  slate: {background: ProColors.primary, foreground: '#FFFFFF'},
+  navy: {background: ProColors.blueSoft, foreground: ProColors.primary},
+  blue: {background: ProColors.blueSoft, foreground: '#2563EB'},
+  amber: {background: ProColors.accentSoft, foreground: ProColors.accentText},
+  green: {background: ProColors.successSoft, foreground: ProColors.success},
+  red: {background: ProColors.errorSoft, foreground: ProColors.error},
+  slate: {background: ProColors.slateSoft, foreground: '#52627A'},
 };
 
-it.each(Object.keys(EXPECTED) as IconChipTone[])('chip tone %s pairs a solid block with a readable glyph', tone => {
+it.each(Object.keys(EXPECTED) as IconChipTone[])('chip tone %s pairs a soft tint with a readable glyph', tone => {
   let screen!: renderer.ReactTestRenderer;
   renderer.act(() => {
     screen = renderer.create(<ProIconChip name="cash" tone={tone} />);

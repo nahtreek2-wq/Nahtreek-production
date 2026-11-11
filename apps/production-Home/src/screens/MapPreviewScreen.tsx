@@ -3,11 +3,13 @@ import {ActivityIndicator, Alert, Image, Linking, NativeModules, Pressable, requ
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useQuery} from '@tanstack/react-query';
 import type {RootStackParamList} from '../navigation/types';
 import {Colors} from '@nahtreek/design-system';
 import {ClientColors} from '../design-system/tokens';
 import {Icon, ICONS} from '../components/ui';
 import {headerStyles} from '../../../../packages/mobile-ui/headerStyles';
+import {api} from '../services/apiClient';
 
 type Route = RouteProp<RootStackParamList, 'MapPreview'>;
 const mapBridge = NativeModules.NahtreekRuntimeConfig as {getStaticMapUrl?: (latitude: number, longitude: number) => Promise<string>};
@@ -21,14 +23,64 @@ try {
   GeoapifyMapView = null;
 }
 
+type JourneyTracking = {latitude: number; longitude: number; updatedAt: string; stale: boolean};
+type JourneyView = {stage: string; tracking?: JourneyTracking | null};
+const CLOSED_STAGES = ['COMPLETED', 'CANCELLED', 'DECLINED', 'EXPIRED'];
+const STAGE_LABELS: Record<string, string> = {
+  PENDING: 'Waiting for acceptance',
+  ACCEPTED: 'Visit accepted',
+  EN_ROUTE: 'Professional is on the way',
+  ARRIVED: 'Professional has arrived',
+  IN_PROGRESS: 'Work in progress',
+  AWAITING_CONFIRMATION: 'Please confirm the completed work',
+  COMPLETED: 'Service completed',
+  CANCELLED: 'Booking cancelled',
+  DECLINED: 'Professional declined',
+  EXPIRED: 'Request expired',
+  DISPUTED: 'Issue reported — not completed',
+};
+
+function agoLabel(updatedAt: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(updatedAt)) / 1000));
+  if (!Number.isFinite(seconds)) return '';
+  if (seconds < 10) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  return minutes === 1 ? '1 min ago' : `${minutes} min ago`;
+}
+
 export function MapPreviewScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {params} = useRoute<Route>();
   const insets = useSafeAreaInsets();
-  const hasCoordinates = typeof params.latitude === 'number' && typeof params.longitude === 'number'
-    && Number.isFinite(params.latitude) && Number.isFinite(params.longitude)
-    && Math.abs(params.latitude) <= 90 && Math.abs(params.longitude) <= 180;
+  const validCoords = (latitude?: number, longitude?: number) =>
+    typeof latitude === 'number' && typeof longitude === 'number'
+    && Number.isFinite(latitude) && Number.isFinite(longitude)
+    && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+  const hasCoordinates = validCoords(params.latitude, params.longitude);
   const destination = hasCoordinates ? `${params.latitude},${params.longitude}` : params.address;
+  // Live mode (service bookings only): follow the professional while they
+  // travel, Swiggy-style — the map recenters on their latest fix and the
+  // banner names the stage and freshness. Closed bookings and plain pins
+  // keep the static destination map below.
+  const journey = useQuery({
+    queryKey: ['service-journey', params.requestId],
+    queryFn: () => api.get<JourneyView>(`/service-workflow/${params.requestId}`),
+    enabled: Boolean(params.requestId),
+    retry: 1,
+    refetchInterval: query => {
+      if (query.state.error) return false;
+      const stage = query.state.data?.stage;
+      return !stage || !CLOSED_STAGES.includes(stage) ? 5000 : false;
+    },
+    refetchIntervalInBackground: false,
+  });
+  const tracking = journey.data?.tracking ?? null;
+  const journeyOpen = !journey.data || !CLOSED_STAGES.includes(journey.data.stage);
+  const liveTracking = tracking && journeyOpen && validCoords(tracking.latitude, tracking.longitude) ? tracking : null;
+  const centerLatitude = liveTracking ? liveTracking.latitude : params.latitude;
+  const centerLongitude = liveTracking ? liveTracking.longitude : params.longitude;
+  const centerHasCoordinates = validCoords(centerLatitude, centerLongitude);
   const [mapUrl, setMapUrl] = useState<string | null>(null);
   const [mapError, setMapError] = useState('');
   const [mapLoading, setMapLoading] = useState(true);
@@ -46,22 +98,27 @@ export function MapPreviewScreen() {
     setMapError('');
     setMapLoading(true);
     setInteractive(false);
-    if (!hasCoordinates || !mapBridge?.getStaticMapUrl) {
+    if (!centerHasCoordinates || !mapBridge?.getStaticMapUrl) {
       clearTimeout(watchdog);
       setMapLoading(false);
-      if (hasCoordinates) setMapError('Map view is unavailable in this build. Use directions below.');
+      if (centerHasCoordinates) setMapError('Map view is unavailable in this build. Use directions below.');
       return () => {active = false;};
     }
-    mapBridge.getStaticMapUrl(params.latitude!, params.longitude!)
+    mapBridge.getStaticMapUrl(centerLatitude!, centerLongitude!)
       .then(url => {if (active) {clearTimeout(watchdog); setMapUrl(url);}})
       .catch(error => {if (active) {clearTimeout(watchdog); setMapLoading(false); setMapError(error instanceof Error ? error.message : 'Map is unavailable.');}});
     return () => {active = false; clearTimeout(watchdog);};
-  }, [hasCoordinates, params.latitude, params.longitude, attempt]);
+  }, [centerHasCoordinates, centerLatitude, centerLongitude, attempt]);
 
   const openDirections = () => {
     void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`)
       .catch(() => Alert.alert('Directions unavailable', 'Please try again when you are connected.'));
   };
+  const retry = () => {
+    setAttempt(value => value + 1);
+    if (params.requestId) void journey.refetch();
+  };
+  const stageLabel = journey.data ? STAGE_LABELS[journey.data.stage] ?? journey.data.stage : '';
 
   return (
     <View style={[styles.root, {paddingTop: insets.top, paddingBottom: insets.bottom}]}>
@@ -77,25 +134,50 @@ export function MapPreviewScreen() {
           <Image source={require('../assets/nahtreek_home_mark.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="NAHTREEK logo" />
         </View>
       </View>
+      {params.requestId && !journey.isError && journey.data ? (
+        <View style={styles.liveBar}>
+          <View style={[styles.liveDot, liveTracking && !liveTracking.stale ? styles.liveDotOn : styles.liveDotOff]} />
+          <View style={styles.liveCopy}>
+            {liveTracking ? (
+              <>
+                <Text style={styles.liveTitle}>{stageLabel}{liveTracking.stale ? '' : ` · updated ${agoLabel(liveTracking.updatedAt)}`}</Text>
+                {liveTracking.stale ? (
+                  <Text style={styles.liveStale}>Location is stale — the professional may have lost signal. Showing the last known position.</Text>
+                ) : (
+                  <Text style={styles.liveSubtitle}>Live professional location — the map follows them.</Text>
+                )}
+              </>
+            ) : journeyOpen ? (
+              <>
+                <Text style={styles.liveTitle}>{stageLabel || 'Live tracking'}</Text>
+                <Text style={styles.liveSubtitle}>Live tracking starts when the professional heads your way.</Text>
+              </>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
       <View style={styles.map}>
-        {interactive && hasCoordinates && GeoapifyMapView ? (
-          <GeoapifyMapView latitude={params.latitude!} longitude={params.longitude!} style={styles.mapImage} />
+        {interactive && centerHasCoordinates && GeoapifyMapView ? (
+          <GeoapifyMapView latitude={centerLatitude!} longitude={centerLongitude!} style={styles.mapImage} />
         ) : mapUrl && !mapError ? <><Image source={{uri: mapUrl}} style={styles.mapImage} resizeMode="cover"
           onLoad={() => setMapLoading(false)} onError={() => {setMapLoading(false); setMapError('Map image could not load. Use directions below.');}} />
-          {!mapLoading ? <View style={styles.pin} accessibilityLabel="Pinned location" /> : null}</> : null}
+          {!mapLoading ? <View style={[styles.pin, liveTracking && styles.livePin]} accessibilityLabel={liveTracking ? 'Professional live location' : 'Pinned location'} /> : null}</> : null}
         {mapLoading && !mapError && !interactive ? <ActivityIndicator size="large" color={ClientColors.accentIcon} /> : null}
-        {!interactive && (mapError || !hasCoordinates) ? <View style={styles.emptyWrap}>
+        {!interactive && (mapError || !centerHasCoordinates) ? <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>
             {mapError || 'A map pin is not available for this address yet.'}
           </Text>
-          {mapError && hasCoordinates ? <Pressable accessibilityRole="button" accessibilityLabel="Retry loading the map"
-            onPress={() => setAttempt(value => value + 1)} style={styles.mapMode}>
+          {mapError && centerHasCoordinates ? <Pressable accessibilityRole="button" accessibilityLabel="Retry loading the map"
+            onPress={retry} style={styles.mapMode}>
             <Text style={styles.mapModeText}>Retry map</Text>
           </Pressable> : null}
         </View> : null}
       </View>
       <View style={styles.footer}>
-        {hasCoordinates && GeoapifyMapView ? (
+        {liveTracking ? (
+          <Text style={styles.liveFooter} numberOfLines={2}>Heading to {params.address}</Text>
+        ) : null}
+        {centerHasCoordinates && GeoapifyMapView ? (
           <Pressable accessibilityRole="button" onPress={() => setInteractive(value => !value)} style={styles.mapMode}>
             <Text style={styles.mapModeText}>{interactive ? 'Show map' : 'Explore interactive map'}</Text>
           </Pressable>
@@ -117,9 +199,19 @@ const styles = StyleSheet.create({
   logo: {width: 48, height: 48, marginLeft: -6, marginTop: -6},
   title: {fontSize: 20, fontWeight: '800', color: '#FFFFFF'},
   address: {fontSize: 13, lineHeight: 19, color: '#D6E0E9', marginTop: 2},
+  liveBar: {flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: Colors.white, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.slate100},
+  liveDot: {width: 10, height: 10, borderRadius: 5, marginTop: 5},
+  liveDotOn: {backgroundColor: Colors.success},
+  liveDotOff: {backgroundColor: Colors.slate300},
+  liveCopy: {flex: 1, gap: 2},
+  liveTitle: {fontSize: 14, lineHeight: 19, fontWeight: '700', color: Colors.navyDeep},
+  liveSubtitle: {fontSize: 13, lineHeight: 18, color: Colors.slate500},
+  liveStale: {fontSize: 13, lineHeight: 18, color: Colors.warning, fontWeight: '600'},
+  liveFooter: {fontSize: 13, lineHeight: 18, color: Colors.slate600},
   map: {flex: 1, backgroundColor: Colors.offWhite, alignItems: 'center', justifyContent: 'center', padding: 20},
   mapImage: {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0},
   pin: {width: 24, height: 24, borderRadius: 12, borderWidth: 4, borderColor: Colors.navyDeep, backgroundColor: ClientColors.accent},
+  livePin: {borderColor: Colors.success},
   emptyText: {fontSize: 16, color: '#516376', textAlign: 'center'},
   emptyWrap: {gap: 12, alignItems: 'center', paddingHorizontal: 24},
   footer: {padding: 16, backgroundColor: '#FFFFFF', gap: 10},

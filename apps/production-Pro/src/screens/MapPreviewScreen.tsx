@@ -1,7 +1,7 @@
 import {ScreenHeader} from '../components/ScreenHeader';
+import {ProLoader} from '../components/ProLoader';
 import React, {useEffect, useState} from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   Linking,
@@ -154,7 +154,7 @@ export function MapPreviewScreen() {
           </>
         ) : null}
         {mapLoading && !mapError && !interactive ? (
-          <ActivityIndicator size="large" color={Colors.navyMid} />
+          <ProLoader size={52} label="Loading map…" />
         ) : null}
         {!interactive &&
         (mapError || !hasCoordinates || Platform.OS !== 'android') ? (
@@ -173,6 +173,23 @@ export function MapPreviewScreen() {
         ) : null}
       </View>
       <View style={styles.footer}>
+        {params.title || params.clientName ? (
+          <View style={styles.jobCard}>
+            {params.title ? (
+              <Text style={styles.jobTitle} numberOfLines={1}>
+                {params.title}
+              </Text>
+            ) : null}
+            {params.clientName ? (
+              <Text style={styles.jobClient} numberOfLines={1}>
+                {params.clientName}
+              </Text>
+            ) : null}
+            <Text style={styles.jobAddress} numberOfLines={2}>
+              {params.address}
+            </Text>
+          </View>
+        ) : null}
         {hasCoordinates && GeoapifyMapView ? (
           <Pressable
             accessibilityRole="button"
@@ -242,6 +259,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   footer: {padding: 20, backgroundColor: '#FFFFFF', gap: 10},
+  jobCard: {gap: 2, borderRadius: 14, borderWidth: 1, borderColor: Colors.slate200,
+    backgroundColor: Colors.offWhite, paddingHorizontal: 14, paddingVertical: 12},
+  jobTitle: {fontSize: 16, lineHeight: 22, fontWeight: '700', color: Colors.slate900},
+  jobClient: {fontSize: 13, lineHeight: 18, fontWeight: '600', color: Colors.slate600},
+  jobAddress: {fontSize: 13, lineHeight: 19, color: Colors.slate600, marginTop: 2},
   mapMode: {
     minHeight: 48,
     alignItems: 'center',

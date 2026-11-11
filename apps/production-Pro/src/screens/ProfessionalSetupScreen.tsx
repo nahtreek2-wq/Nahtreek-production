@@ -1,9 +1,9 @@
 import {FormScrollView, useFormFieldFocus} from '../../../../packages/mobile-ui/FormScrollView';
 import {ScreenHeader} from '../components/ScreenHeader';
+import {ProLoader} from '../components/ProLoader';
 import React, {useEffect, useRef, useState} from 'react';
 import {StateDistrictPicker} from '../../../../packages/mobile-geography/StateDistrictPicker';
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -241,8 +241,7 @@ export function ProfessionalSetupScreen() {
   if (profileQuery.isPending) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.navyMid} />
-        <Text style={styles.help}>Loading your profile…</Text>
+        <ProLoader size={52} label="Loading your profile…" />
       </View>
     );
   }
@@ -348,10 +347,9 @@ export function ProfessionalSetupScreen() {
           Choose every approved area that applies to your work.
         </Text>
         {categories.isPending || specializations.isPending ? (
-          <ActivityIndicator
-            color={Colors.navyMid}
-            style={styles.catalogLoading}
-          />
+          <View style={styles.catalogLoading}>
+            <ProLoader size={30} />
+          </View>
         ) : (
           <View style={styles.chips}>
             {choices.map(item => (

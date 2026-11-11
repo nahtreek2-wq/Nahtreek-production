@@ -25,7 +25,7 @@ export type MessagesStackParamList = {
 export type RequestsStackParamList = {
   RequestInbox: undefined;
   RequestDetail: {id: string; kind: 'engineering' | 'service'};
-  MapPreview: {latitude?: number; longitude?: number; address: string};
+  MapPreview: {latitude?: number; longitude?: number; address: string; title?: string; clientName?: string};
 };
 
 export type ProfileStackParamList = {

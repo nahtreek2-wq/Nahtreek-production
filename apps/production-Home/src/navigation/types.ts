@@ -13,7 +13,7 @@ export type RootStackParamList = {
   ProviderProfile: {professionalProfileId: string};
   Scan: undefined;
   RequestDetail: {requestId: string};
-  MapPreview: {latitude?: number; longitude?: number; address: string};
+  MapPreview: {latitude?: number; longitude?: number; address: string; requestId?: string};
   Chat: {conversationId: string; title: string; subtitle?: string; avatarUrl?: string};
   Notifications: undefined;
   Saved: undefined;

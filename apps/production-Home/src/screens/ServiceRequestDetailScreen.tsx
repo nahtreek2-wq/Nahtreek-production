@@ -128,6 +128,7 @@ export function ServiceRequestDetailScreen() {
                 latitude: item.latitude,
                 longitude: item.longitude,
                 address: item.locationAddress,
+                requestId: item.journey ? item.id : undefined,
               })}
             />
             <View style={styles.addressNotice}>

@@ -1,5 +1,6 @@
 import React from 'react';
-import {ActivityIndicator, Animated, StyleProp, StyleSheet, Text, TouchableOpacity, ViewStyle} from 'react-native';
+import {Animated, StyleProp, StyleSheet, Text, TouchableOpacity, ViewStyle} from 'react-native';
+import {ProLoader} from './ProLoader';
 import {BorderRadius, Colors, Spacing, Typography} from '@nahtreek/design-system';
 import {usePressMotion} from '../../../../packages/mobile-ui/usePressMotion';
 import {ProColors} from '../theme/professionalTheme';
@@ -35,7 +36,7 @@ export function ProButton({label, onPress, variant = 'primary', loading = false,
       onPressOut={motion.onPressOut}
       activeOpacity={0.8}
       style={[styles.base, styles[variant], style, disabled && styles.disabled, motion.style]}>
-      {loading ? <ActivityIndicator accessible={false} color={textColor} /> : icon}
+      {loading ? <ProLoader size={22} tone={variant === 'danger' ? 'red' : 'navy'} /> : icon}
       <Text style={[styles.label, {color: textColor}]}>{loading && loadingLabel ? loadingLabel : label}</Text>
     </AnimatedTouchable>
   );

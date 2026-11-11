@@ -10,7 +10,7 @@ import {RazorpayError, RazorpayProvider} from './razorpay.provider';
 import {MembershipsService} from '../memberships/memberships.service';
 import {DUES_BLOCK_Paisa, MEMBER_DUES_BLOCK_Paisa, MEMBER_FEE_BPS, MEMBER_FREE_JOBS_PER_MONTH, PLATFORM_FEE_BPS, duesLimitPaisa, plusDiscountPaisa} from './commission';
 import {isPlusClient} from '../memberships/membership-reads';
-import {RefundPaymentDto, RegisterPayoutAccountDto, ResolveDisputeDto, VerifyPaymentDto, VerifySettlementDto} from './payments.dto';
+import {RefundPaymentDto, RegisterPayoutAccountDto, ResolveDisputeDto, ReviewPayoutAccountDto, VerifyPaymentDto, VerifySettlementDto} from './payments.dto';
 
 // Held-payment flow for service bookings. The client pays the approved quote
 // (integer paisa) before work starts; the professional share is held via a
@@ -868,6 +868,89 @@ export class PaymentsService {
     await this.db.auditLog.create({data: {userId: adminUserId, entity: 'PayoutAccount', entityId: account.id,
       action: 'PAYOUT_ACCOUNT_LINKED', metadata: {professionalProfileId: dto.professionalProfileId}}});
     return {id: account.id, status: account.status};
+  }
+
+  async listPayoutAccountsForAdmin(query: {status?: string; page?: string; limit?: string}) {
+    const {page, limit, skip} = pagination(query.page, query.limit);
+    const status = query.status?.trim();
+    if (status && !Object.values(PayoutAccountStatus).includes(status as PayoutAccountStatus))
+      throw new BadRequestException('Invalid payout account status');
+    const where = status ? {status: status as PayoutAccountStatus} : {};
+    const [rows, total] = await this.db.$transaction([
+      this.db.payoutAccount.findMany({where, orderBy: {updatedAt: 'desc'}, skip, take: limit, include: {
+        profile: {select: {fullName: true, user: {select: {phoneNumber: true}}}},
+      }}),
+      this.db.payoutAccount.count({where}),
+    ]);
+    return {data: rows.map(row => ({id: row.id, professionalProfileId: row.professionalProfileId,
+      professionalName: row.profile.fullName, phoneNumber: row.profile.user.phoneNumber,
+      ...this.payoutAccountViewOf(row),
+      providerAccountRef: row.providerAccountRef ? '••••' + String(row.providerAccountRef).slice(-4) : null,
+      createdAt: row.createdAt, updatedAt: row.updatedAt})),
+      meta: {page, limit, total, totalPages: Math.ceil(total / limit)}};
+  }
+
+  async reviewPayoutAccount(adminUserId: string, id: string, dto: ReviewPayoutAccountDto) {
+    const account = await this.db.payoutAccount.findUnique({where: {id}});
+    if (!account) throw new NotFoundException('Payout account not found');
+    const note = dto.note?.trim();
+    // Activation only happens through registerPayoutAccount with a verified
+    // Route reference — review can pause or refuse, never activate.
+    if (dto.decision === 'suspend') {
+      if (account.status !== PayoutAccountStatus.ACTIVE)
+        throw new ConflictException('Only an active payout account can be suspended');
+      if (!note) throw new BadRequestException('Add a reason for the suspension');
+      await this.db.payoutAccount.update({where: {id}, data: {status: PayoutAccountStatus.SUSPENDED, rejectionReason: note}});
+    } else if (dto.decision === 'reject') {
+      if (account.status !== PayoutAccountStatus.PENDING)
+        throw new ConflictException('Only a pending submission can be rejected');
+      if (!note) throw new BadRequestException('Add a reason so the professional can fix it');
+      await this.db.payoutAccount.update({where: {id}, data: {status: PayoutAccountStatus.REJECTED, rejectionReason: note}});
+    } else {
+      if (!([PayoutAccountStatus.REJECTED, PayoutAccountStatus.SUSPENDED] as PayoutAccountStatus[]).includes(account.status))
+        throw new ConflictException('Only a rejected or suspended account can be cleared for re-review');
+      await this.db.payoutAccount.update({where: {id}, data: {status: PayoutAccountStatus.PENDING, rejectionReason: null}});
+    }
+    await this.db.auditLog.create({data: {userId: adminUserId, entity: 'PayoutAccount', entityId: id,
+      action: `PAYOUT_ACCOUNT_${dto.decision.toUpperCase()}`, metadata: {professionalProfileId: account.professionalProfileId}}});
+    return {id, decision: dto.decision};
+  }
+
+  async payoutQueue() {
+    // One row per professional holding releasable money: what can go out now
+    // (PAID + HELD), what is stuck (RELEASE_PENDING), and lifetime released.
+    const groups = await this.db.payment.groupBy({by: ['professionalProfileId', 'status'],
+      where: {status: {in: [PaymentStatus.PAID, PaymentStatus.HELD, PaymentStatus.RELEASE_PENDING, PaymentStatus.RELEASED]}},
+      _sum: {professionalAmountPaisa: true}});
+    const profileIds = [...new Set(groups.map(group => group.professionalProfileId))];
+    if (!profileIds.length) return {data: [], totals: {pendingReleasePaisa: 0, stuckPaisa: 0, releasedLifetimePaisa: 0}};
+    const [profiles, accounts] = await Promise.all([
+      this.db.professionalProfile.findMany({where: {id: {in: profileIds}},
+        select: {id: true, fullName: true, user: {select: {phoneNumber: true}}}}),
+      this.db.payoutAccount.findMany({where: {professionalProfileId: {in: profileIds}},
+        select: {professionalProfileId: true, status: true, accountLast4: true, upiId: true}}),
+    ]);
+    const byProfile = new Map(profiles.map(profile => [profile.id, profile]));
+    const byAccount = new Map(accounts.map(account => [account.professionalProfileId, account]));
+    const data = profileIds.map(profileId => {
+      const rows = groups.filter(group => group.professionalProfileId === profileId);
+      const sum = (...statuses: PaymentStatus[]) => rows
+        .filter(row => statuses.includes(row.status)).reduce((total, row) => total + (row._sum.professionalAmountPaisa ?? 0), 0);
+      const profile = byProfile.get(profileId);
+      const account = byAccount.get(profileId);
+      return {professionalProfileId: profileId, professionalName: profile?.fullName ?? 'Unknown professional',
+        phoneNumber: profile?.user.phoneNumber ?? null,
+        pendingReleasePaisa: sum(PaymentStatus.PAID, PaymentStatus.HELD),
+        stuckPaisa: sum(PaymentStatus.RELEASE_PENDING),
+        releasedLifetimePaisa: sum(PaymentStatus.RELEASED),
+        payoutAccountStatus: account?.status ?? PayoutAccountStatus.NOT_SUBMITTED,
+        accountLast4: account?.accountLast4 ?? null, upiId: account?.upiId ?? null};
+    }).filter(row => row.pendingReleasePaisa > 0 || row.stuckPaisa > 0)
+      .sort((a, b) => (b.pendingReleasePaisa + b.stuckPaisa) - (a.pendingReleasePaisa + a.stuckPaisa));
+    return {data,
+      totals: {pendingReleasePaisa: data.reduce((total, row) => total + row.pendingReleasePaisa, 0),
+        stuckPaisa: data.reduce((total, row) => total + row.stuckPaisa, 0),
+        releasedLifetimePaisa: data.reduce((total, row) => total + row.releasedLifetimePaisa, 0)}};
   }
 
   // ---- Pro payout-account self-service ----

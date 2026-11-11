@@ -76,6 +76,7 @@
           <p class="nav-caption" aria-hidden="true">Money</p>
           <button class="nav-item" type="button" data-view="payments"><span aria-hidden="true">₹</span><b>Payments</b></button>
           <button class="nav-item" type="button" data-view="memberships"><span aria-hidden="true">★</span><b>Memberships</b></button>
+          <button class="nav-item" type="button" data-view="payouts"><span aria-hidden="true">◈</span><b>Payouts</b></button>
           <button class="nav-item" type="button" data-view="tickets"><span aria-hidden="true">✉</span><b>Support</b></button>
           <p class="nav-caption" aria-hidden="true">System</p>
           <button class="nav-item" type="button" data-view="activity"><span aria-hidden="true">≋</span><b>Activity</b></button>
@@ -184,7 +185,7 @@
               <article id="membership-detail" class="detail-panel"><div class="empty-detail"><div class="empty-icon" aria-hidden="true">★</div><h2>Select a membership</h2><p>Choose a subscription to review its status and billing period.</p></div></article>
             </section>
             <section class="ai-memberships" aria-label="Home AI subscriptions">
-              <div><p class="eyebrow gold">HOME APP REVENUE</p><h2>NAHTREEK AI subscriptions</h2><p class="muted">₹99/month Home plans, renewals and lapsed subscribers.</p><p id="ai-engine-status" class="status-line" aria-live="polite"></p></div>
+              <div><p class="eyebrow gold">HOME APP REVENUE</p><h2>NAHTREEK AI subscriptions</h2><p class="muted">₹129/month Home plans, renewals and lapsed subscribers.</p><p id="ai-engine-status" class="status-line" aria-live="polite"></p></div>
               <section id="ai-memberships-summary" class="summary" aria-label="AI subscription summary"></section>
               <div class="queue-panel user-list-panel">
                 <div class="user-toolbar">
@@ -192,6 +193,31 @@
                 </div>
                 <div id="ai-membership-list-status" class="muted status-line" aria-live="polite"></div>
                 <div id="ai-membership-list" class="queue"></div>
+              </div>
+            </section>
+          </section>
+
+          <section id="payouts-view" class="page-view hidden">
+            <header class="topbar compact-topbar">
+              <div><p class="eyebrow gold">PROFESSIONAL EARNINGS</p><h1>Payouts</h1><p class="muted">Releasable earnings per professional and payout-account reviews.</p></div>
+              <button id="payouts-refresh" class="button secondary refresh-button" type="button"><span aria-hidden="true">↻</span> Refresh</button>
+            </header>
+            <section id="payouts-summary" class="summary" aria-label="Payout summary"></section>
+            <section class="user-layout">
+              <div class="queue-panel user-list-panel">
+                <div class="user-toolbar">
+                  <label><span>Status</span><select id="payout-status-filter"><option value="">All statuses</option><option value="PENDING">Pending review</option><option value="ACTIVE">Active</option><option value="REJECTED">Rejected</option><option value="SUSPENDED">Suspended</option></select></label>
+                </div>
+                <div id="payout-list-status" class="muted status-line" aria-live="polite"></div>
+                <div id="payout-list" class="queue"></div>
+              </div>
+              <article id="payout-detail" class="detail-panel"><div class="empty-detail"><div class="empty-icon" aria-hidden="true">◈</div><h2>Select a payout account</h2><p>Choose a submission to link its Route account or review it.</p></div></article>
+            </section>
+            <section class="ai-memberships" aria-label="Earnings queue">
+              <div><p class="eyebrow gold">EARNINGS QUEUE</p><h2>Who holds releasable money</h2><p class="muted">Confirmed work awaiting release, biggest balance first.</p></div>
+              <div class="queue-panel user-list-panel">
+                <div id="payout-queue-status" class="muted status-line" aria-live="polite"></div>
+                <div id="payout-queue" class="queue"></div>
               </div>
             </section>
           </section>

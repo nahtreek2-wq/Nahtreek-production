@@ -7,6 +7,7 @@ import { VerificationDesk } from "./verification.js";
 import { ActivityController } from "./activity.js";
 import { MembershipsController } from "./memberships.js";
 import { PaymentsController } from "./payments.js";
+import { PayoutsController } from "./payouts.js";
 import { SettingsController } from "./settings.js";
 import { TicketsDesk } from "./tickets.js";
 
@@ -15,7 +16,7 @@ const api = new ApiClient(config.apiBaseUrl);
 const verification = new VerificationDesk(api);
 const users = new UsersController(api);
 const tickets = new TicketsDesk(api);
-const viewTitles = { overview: "Dashboard", verification: "Verifications", users: "Users", payments: "Payments", memberships: "Memberships", tickets: "Support", activity: "Activity", settings: "My account" };
+const viewTitles = { overview: "Dashboard", verification: "Verifications", users: "Users", payments: "Payments", memberships: "Memberships", payouts: "Payouts", tickets: "Support", activity: "Activity", settings: "My account" };
 let currentView = "overview";
 
 function setMenuState(open) {
@@ -46,6 +47,7 @@ function navigate(view) {
   if (view === "users") void users.load();
   if (view === "payments") void payments.load();
   if (view === "memberships") void memberships.load();
+  if (view === "payouts") void payouts.load();
   if (view === "tickets") void tickets.load();
   if (view === "activity") void activity.load();
   if (view === "settings") void settings.load();
@@ -57,6 +59,7 @@ function navigate(view) {
 const overview = new OverviewController(api, navigate);
 const payments = new PaymentsController(api);
 const memberships = new MembershipsController(api);
+const payouts = new PayoutsController(api);
 const activity = new ActivityController(api);
 const settings = new SettingsController(api, updateAdminName);
 
@@ -100,6 +103,7 @@ const PURGE_IDS = [
   "membership-list", "membership-detail", "ai-membership-list", "activity-list",
   "overview-summary", "attention-list", "role-breakdown", "summary",
   "payments-summary", "memberships-summary", "ai-memberships-summary",
+  "payouts-summary", "payout-list", "payout-detail", "payout-queue",
   "ticket-queue", "ticket-detail",
 ];
 
@@ -141,6 +145,7 @@ verification.bind();
 users.bind();
 payments.bind();
 memberships.bind();
+payouts.bind();
 tickets.bind();
 overview.bind();
 activity.bind();

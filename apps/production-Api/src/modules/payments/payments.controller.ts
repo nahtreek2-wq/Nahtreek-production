@@ -6,7 +6,7 @@ import {Roles} from '../../common/decorators/roles.decorator';
 import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {JwtPayload} from '../../common/strategies/jwt.strategy';
-import {CreatePaymentOrderDto, DeclareEngineerCollectionDto, RefundPaymentDto, RegisterPayoutAccountDto, ReleasePaymentDto, ReportDisputeDto, ResolveDisputeDto, SubmitPayoutAccountDto, SyncPaymentDto, VerifyPaymentDto, VerifySettlementDto} from './payments.dto';
+import {CreatePaymentOrderDto, DeclareEngineerCollectionDto, RefundPaymentDto, RegisterPayoutAccountDto, ReleasePaymentDto, ReportDisputeDto, ResolveDisputeDto, ReviewPayoutAccountDto, SubmitPayoutAccountDto, SyncPaymentDto, VerifyPaymentDto, VerifySettlementDto} from './payments.dto';
 import {PaymentsService} from './payments.service';
 
 @Controller('payments')
@@ -69,6 +69,21 @@ export class PaymentsController {
   @Post('payout-accounts') @Roles(Role.ADMIN)
   registerPayoutAccount(@CurrentUser() user: JwtPayload, @Body() dto: RegisterPayoutAccountDto) {
     return this.service.registerPayoutAccount(user.sub, dto);
+  }
+
+  @Get('admin/payout-accounts') @Roles(Role.ADMIN)
+  listPayoutAccounts(@Query() query: {status?: string; page?: string; limit?: string}) {
+    return this.service.listPayoutAccountsForAdmin(query);
+  }
+
+  @Post('admin/payout-accounts/:id/review') @Roles(Role.ADMIN)
+  reviewPayoutAccount(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: ReviewPayoutAccountDto) {
+    return this.service.reviewPayoutAccount(user.sub, id, dto);
+  }
+
+  @Get('admin/payout-queue') @Roles(Role.ADMIN)
+  payoutQueue() {
+    return this.service.payoutQueue();
   }
 
   @Get('payout-accounts/me') @Roles(Role.SERVICE_PROVIDER, Role.ENGINEER)

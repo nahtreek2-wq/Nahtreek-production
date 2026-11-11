@@ -7,6 +7,7 @@ import { safeHttpUrl, timeAgo } from "../src/js/dom.js";
 import { availablePaymentActions, formatPaisa as formatPaymentPaisa, moneyConfirmWord, paymentStatusLabel } from "../src/js/payments.js";
 import { aiEngineLabel, aiSummaryCards, formatPaisa as formatMembershipPaisa, membershipStatusLabel } from "../src/js/memberships.js";
 import { replyAuthorLabel, ticketStatusLabel } from "../src/js/tickets.js";
+import { formatPaisa as formatPayoutPaisa, payoutStatusLabel } from "../src/js/payouts.js";
 
 test("ApiClient sends the administrator bearer token", async () => {
   let received;
@@ -314,4 +315,23 @@ test("support desk labels statuses and authors plainly", () => {
   assert.equal(ticketStatusLabel("WEIRD"), "WEIRD");
   assert.equal(replyAuthorLabel("ADMIN"), "Support");
   assert.equal(replyAuthorLabel("USER"), "User");
+});
+
+test("payout desk labels statuses and formats rupees", () => {
+  assert.equal(payoutStatusLabel("PENDING"), "Pending");
+  assert.equal(payoutStatusLabel("NOT_SUBMITTED"), "Not submitted");
+  assert.equal(payoutStatusLabel("SUSPENDED"), "Suspended");
+  assert.equal(formatPayoutPaisa(19999), "₹200");
+  assert.equal(formatPayoutPaisa(250000), "₹2,500");
+});
+
+test("build ships the payouts view", async () => {
+  const html = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
+  assert.match(html, /data-view="payouts"/);
+  assert.match(html, /id="payouts-view"/);
+  assert.match(html, /id="payout-status-filter"/);
+  assert.match(html, /id="payout-list"/);
+  assert.match(html, /id="payout-detail"/);
+  assert.match(html, /id="payout-queue"/);
+  assert.match(html, /EARNINGS QUEUE/);
 });

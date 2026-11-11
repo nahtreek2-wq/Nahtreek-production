@@ -74,3 +74,8 @@ export class RegisterPayoutAccountDto {
   @IsString() @MaxLength(120) bankName?: string;
   @IsString() @Matches(/^[0-9]{4}$/) accountLast4?: string;
 }
+
+export class ReviewPayoutAccountDto {
+  @IsIn(['suspend', 'reject', 'clear']) decision: 'suspend' | 'reject' | 'clear';
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}

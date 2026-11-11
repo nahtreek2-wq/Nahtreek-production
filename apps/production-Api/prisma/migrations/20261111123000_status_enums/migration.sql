@@ -3,6 +3,10 @@
 -- Each guard fails the migration with a clear message instead of casting
 -- unknown legacy values — review the offending rows before retrying.
 
+-- One-off: a manual push test from 2026-09-24 used an ad-hoc kind. Remap
+-- that single synthetic row to 'system' (verified: exactly 1 row, staging).
+UPDATE "Notification" SET "kind" = 'system' WHERE "kind" = 'push_acceptance_test_20260924';
+
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM "ServiceJourney" WHERE "stage" NOT IN
       ('PENDING','ACCEPTED','DECLINED','EN_ROUTE','ARRIVED','IN_PROGRESS','AWAITING_CONFIRMATION','DISPUTED','COMPLETED','CANCELLED','EXPIRED')) THEN

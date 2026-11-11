@@ -5,10 +5,10 @@
 CREATE TYPE "SupportReplyAuthor" AS ENUM ('USER', 'ADMIN');
 
 CREATE TABLE "SupportTicketReply" (
-    "id" "TEXT" NOT NULL,
-    "ticketId" "TEXT" NOT NULL,
+    "id" TEXT NOT NULL,
+    "ticketId" TEXT NOT NULL,
     "authorRole" "SupportReplyAuthor" NOT NULL,
-    "message" "TEXT" NOT NULL,
+    "message" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "SupportTicketReply_pkey" PRIMARY KEY ("id")

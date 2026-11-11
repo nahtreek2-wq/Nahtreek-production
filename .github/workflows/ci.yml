@@ -82,6 +82,17 @@ jobs:
       - run: npx eslint src __tests__
         working-directory: apps/production-Pro
 
+  bundle-budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: ./scripts/check-bundle-budget.sh
+
   # Device smoke on pull requests only (emulator + APK builds are slow for
   # every push). Guest assertions always run; login assertions run only when
   # the E2E_* repository secrets exist, otherwise they skip green.

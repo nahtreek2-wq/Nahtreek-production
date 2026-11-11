@@ -301,7 +301,7 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
         </Pressable>
       </> : null}
       {view && !view.effective ? <View style={styles.card}>
-        <Image source={require('../assets/professionals/engineer-work-banner-v1.png')} style={styles.heroImage} resizeMode="cover" accessibilityLabel="Professional at work on a home site" />
+        <Image source={require('../assets/professionals/engineer-work-banner-v1.jpg')} style={styles.heroImage} resizeMode="cover" accessibilityLabel="Professional at work on a home site" />
         <View style={styles.heroRow}>
           <ProIconChip name="crown" tone="amber" size={58} iconSize={30} />
           <Text style={styles.price}>{inr(view.feePaisa)}<Text style={styles.perMonth}>/month</Text></Text>

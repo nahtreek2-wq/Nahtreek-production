@@ -206,12 +206,12 @@ export function HomeScreen() {
   const offersPainting = serviceCategories.some(category => category.includes('paint'));
   const offersPlumbing = serviceCategories.some(category => category.includes('plumb'));
   const introImage = engineer
-    ? require('../assets/professionals/engineer-work-banner-v1.png')
+    ? require('../assets/professionals/engineer-work-banner-v1.jpg')
     : offersPainting
     ? require('../assets/professionals/painting-job-detail-v1.jpg')
     : offersPlumbing
     ? require('../assets/professionals/plumbing-job-detail-v1.jpg')
-    : require('../assets/professionals/service-work-banner-v1.png');
+    : require('../assets/professionals/service-work-banner-v1.jpg');
   const introImageDescription = engineer
     ? 'Engineer reviewing a home construction site with a contractor'
     : offersPainting

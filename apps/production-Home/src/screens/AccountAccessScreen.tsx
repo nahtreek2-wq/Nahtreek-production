@@ -279,7 +279,7 @@ export function AccountAccessScreen({
         <View style={[s.brandHeader, compact && s.compactBrandHeader, {paddingTop: insets.top + (compact ? 12 : 18)}]}>
           <View style={s.brandRow}>
             <Image
-              source={require('../assets/nahtreek-logo-reference.png')}
+              source={require('../assets/nahtreek_home_mark.png')}
               style={[s.logo, compact && s.compactLogo]}
               resizeMode="contain"
               accessibilityLabel="Nahtreek logo"

@@ -2,12 +2,12 @@ import {PaymentsService} from './payments.service';
 import {DUES_BLOCK_Paisa, MEMBER_DUES_BLOCK_Paisa, duesLimitPaisa, unsettledDuesPaisa} from './commission';
 
 const journey = (over: Record<string, unknown> = {}) => ({stage: 'AWAITING_CONFIRMATION',
-  quoteAmount: 2000, quoteAccepted: true, collectionMode: 'AT_HOME',
+  quoteAmountPaisa: 200000, quoteAccepted: true, collectionMode: 'AT_HOME',
   collectedAmountPaisa: 200000, collectedMethod: 'UPI', ...over});
 const request = (over: Record<string, unknown> = {}) => ({id: 'req', status: 'IN_PROGRESS',
   client: {userId: 'client'}, provider: {id: 'prof', userId: 'pro'}, journey: journey(), ...over});
 
-function setup(over: {req?: any; pays?: any[]; penalties?: any[]; settlements?: any[]; provider?: any; member?: boolean; email?: any; user?: any; membership?: any} = {}) {
+function setup(over: {req?: any; pays?: any[]; penalties?: any[]; settlements?: any[]; links?: any[]; provider?: any; member?: boolean; email?: any; user?: any; membership?: any} = {}) {
   const req = over.req === undefined ? request() : over.req;
   const pays: any[] = over.pays ?? [];
   const settlements: any[] = over.settlements ?? [];
@@ -88,6 +88,8 @@ function setup(over: {req?: any; pays?: any[]; penalties?: any[]; settlements?: 
       findMany: jest.fn().mockResolvedValue([])},
     notification: {createMany: jest.fn(), create: jest.fn()},
     auditLog: {createMany: jest.fn(), create: jest.fn()},
+    // Empty by default: existing tests exercise the legacy snapshot fallback.
+    settlementPayment: {findMany: jest.fn(async () => over.links ?? [])},
   };
   const provider = {enabled: true, keyId: 'rzp_test', createOrder: jest.fn().mockResolvedValue({id: 'order_stl'}),
     fetchPayment: jest.fn(), verifyPaymentSignature: jest.fn().mockReturnValue(true), ...over.provider};
@@ -272,6 +274,22 @@ describe('dues settlement', () => {
       razorpayOrderId: order.orderId, razorpayPaymentId: 'pay_stl', razorpaySignature: 'a'.repeat(64)});
     expect(again).toMatchObject({settled: true, duplicate: true});
   });
+  it('settles the junction membership when present, snapshot otherwise (F-010)', async () => {
+    const {db, provider, service} = setup({pays: [unsettled('a', 20000), unsettled('b', 5000)],
+      links: [{paymentId: 'a'}]});
+    const order = await service.createSettlementOrder('pro');
+    // Junction write rides the same atomic create as the snapshot.
+    expect(db.commissionSettlement.create).toHaveBeenCalledWith({data: expect.objectContaining({
+      paymentIds: ['a', 'b'],
+      settledPayments: {create: [{paymentId: 'a'}, {paymentId: 'b'}]},
+    })});
+    provider.fetchPayment.mockResolvedValue({status: 'captured', order_id: order.orderId, amount: 25000});
+    const result = await service.verifySettlement('pro', {settlementId: order.settlementId,
+      razorpayOrderId: order.orderId, razorpayPaymentId: 'pay_stl', razorpaySignature: 'a'.repeat(64)});
+    expect(db.payment.updateMany).toHaveBeenCalledWith({where: {id: {in: ['a']}, status: 'COLLECTED_UNSETTLED'},
+      data: {status: 'SETTLED', settledAt: expect.any(Date)}});
+    expect(result).toMatchObject({settled: true, settledJobs: 1});
+  });
   it('emails a settlement receipt to the professional after dues clear', async () => {
     const {email, provider, service} = setup({pays: [unsettled('a', 20000)], email: {},
       user: {email: 'pro@example.com', displayName: 'Pro'}});
@@ -297,5 +315,13 @@ describe('dues settlement', () => {
     await expect(service.verifySettlement('pro', {settlementId: order.settlementId,
       razorpayOrderId: order.orderId, razorpayPaymentId: 'pay_x', razorpaySignature: 'b'.repeat(64)}))
       .rejects.toThrow('amount mismatch');
+  });
+  it('refuses to verify a settlement outside ORDER_CREATED (F-006)', async () => {
+    const {service} = setup({pays: [unsettled('a', 20000)], settlements: [{id: 'stl-0',
+      professionalProfileId: 'prof', status: 'FAILED', providerOrderId: 'order_stl', providerPaymentId: null,
+      amountPaisa: 20000, paymentIds: ['a']}]});
+    await expect(service.verifySettlement('pro', {settlementId: 'stl-0',
+      razorpayOrderId: 'order_stl', razorpayPaymentId: 'pay_x', razorpaySignature: 'c'.repeat(64)}))
+      .rejects.toThrow('cannot be confirmed');
   });
 });

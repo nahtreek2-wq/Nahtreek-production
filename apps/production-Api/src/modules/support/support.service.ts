@@ -1,5 +1,5 @@
 import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
-import {SupportReplyAuthor, SupportTicketStatus} from '@prisma/client';
+import {NotificationKind, SupportReplyAuthor, SupportTicketStatus} from '@prisma/client';
 import {PrismaService} from '../../common/prisma/prisma.service';
 import {CreateSupportTicketDto, FollowUpSupportTicketDto, ReplySupportTicketDto} from './support.dto';
 import {pagination} from '../platform/platform.service';
@@ -74,7 +74,7 @@ export class SupportService {
       this.db.supportTicket.update({where: {id},
         data: {adminReply: reply, repliedAt: new Date(), status: SupportTicketStatus.ANSWERED}}),
     ]);
-    await this.db.notification.create({data: {userId: ticket.userId, kind: 'support',
+    await this.db.notification.create({data: {userId: ticket.userId, kind: NotificationKind.support,
       title: 'Support replied', body: reply.slice(0, 140), data: {ticketId: id, destination: 'support'}}});
     await this.db.auditLog.create({data: {userId: adminUserId, entity: 'SupportTicket',
       entityId: id, action: 'SUPPORT_REPLIED', metadata: {}}});

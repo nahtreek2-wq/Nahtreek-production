@@ -7,6 +7,7 @@ import {
   AccountStatus,
   Prisma,
   Role,
+  NotificationKind,
   VerificationStatus,
 } from "@prisma/client";
 import { signedAssetUrl } from "../../common/storage";
@@ -474,7 +475,7 @@ export class AdminService {
       if (dto.status === 'REJECTED' && document.profile.verificationStatus === 'VERIFIED') {
         await tx.professionalProfile.update({where: {id: profileId}, data: {verificationStatus: 'REJECTED', onboardingStep: 'REVIEW', isAvailable: false}});
         await tx.providerPresence.updateMany({where: {professionalProfileId: profileId}, data: {online: false}});
-        await tx.notification.create({data: {userId: document.profile.userId, kind: 'verification', title: 'Verification needs attention', body: dto.reason!.trim(), data: {professionalProfileId: profileId}}});
+        await tx.notification.create({data: {userId: document.profile.userId, kind: NotificationKind.verification, title: 'Verification needs attention', body: dto.reason!.trim(), data: {professionalProfileId: profileId}}});
       }
       await tx.auditLog.create({
         data: {
@@ -552,7 +553,7 @@ export class AdminService {
       await tx.notification.create({
         data: {
           userId: profile.userId,
-          kind: "verification",
+          kind: NotificationKind.verification,
           title:
             dto.status === "VERIFIED"
               ? "Profile verified"
@@ -628,7 +629,7 @@ export class AdminService {
       baseCity: profile.baseCity,
       baseState: profile.baseState,
       serviceCategories: profile.serviceCategories,
-      startingPrice: profile.startingPrice,
+      startingPricePaisa: profile.startingPricePaisa,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
       accountType: roles.includes(Role.ENGINEER)
@@ -645,7 +646,7 @@ export class AdminService {
             institution: profile.engineerProfile.institution,
             graduationYear: profile.engineerProfile.graduationYear,
             licenseNumber: profile.engineerProfile.licenseNumber,
-            consultationFee: profile.engineerProfile.consultationFee,
+            consultationFeePaisa: profile.engineerProfile.consultationFeePaisa,
             specializations: profile.engineerProfile.specializations.map(
               ({ specialization }) => specialization.name
             ),

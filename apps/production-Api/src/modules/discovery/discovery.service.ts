@@ -206,7 +206,7 @@ export class DiscoveryService {
     const membersFirst = { profile: { memberPriority: 'desc' as const } };
     switch (sort) {
       case 'fee':
-        return [membersFirst, { consultationFee: 'asc' as const }];
+        return [membersFirst, { consultationFeePaisa: 'asc' as const }];
       case 'available':
         return [membersFirst, { profile: { isAvailable: 'desc' as const } }];
       default:
@@ -217,7 +217,7 @@ export class DiscoveryService {
   private serializeEngineer(engineer: {
     id: string;
     professionalProfileId: string;
-    consultationFee: number | null;
+    consultationFeePaisa: number | null;
     qualificationDegree: string;
     institution: string;
     graduationYear: number;
@@ -268,7 +268,7 @@ export class DiscoveryService {
       baseLongitude: engineer.profile.baseLongitude,
       isMember: engineer.profile.memberPriority,
       specializations: engineer.specializations.map(item => item.specialization.name),
-      consultationFee: engineer.consultationFee ?? undefined,
+      consultationFeePaisa: engineer.consultationFeePaisa ?? undefined,
       nextSlot: engineer.profile.availabilitySlots[0]?.startsAt.toISOString(),
       serviceAreas: engineer.profile.serviceAreas.map(area => area.name),
       portfolio: engineer.profile.portfolioItems.map(item => ({

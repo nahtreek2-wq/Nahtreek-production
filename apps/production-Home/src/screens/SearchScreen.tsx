@@ -18,11 +18,11 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   Colors,
   BorderRadius,
-  IndiaLocale,
   Spacing,
   Typography,
 } from '@nahtreek/design-system';
 import {ClientColors} from '../design-system/tokens';
+import {inr} from '../utils/format';
 import {
   AppHeader,
   EmptyState,
@@ -119,9 +119,9 @@ export function SearchScreen() {
       reviews={item.totalReviewsCount}
       verified={item.verificationStatus === 'VERIFIED'}
       priceLabel={
-        item.consultationFee === undefined
+        item.consultationFeePaisa === undefined
           ? 'On request'
-          : IndiaLocale.formatCurrency(item.consultationFee)
+          : inr(item.consultationFeePaisa)
       }
       onPress={() =>
         navigation.navigate('EngineerProfile', {engineerId: item.id})

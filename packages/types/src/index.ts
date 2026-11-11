@@ -76,7 +76,7 @@ export interface EngineerProfileDto {
   baseLatitude: number;
   baseLongitude: number;
   specializations: string[];
-  consultationFee?: number;
+  consultationFeePaisa?: number;
   distanceKm?: number;
   nextSlot?: string;
   serviceAreas?: string[];
@@ -91,7 +91,7 @@ export interface EngineerRequestDto {
   engineerName: string;
   engineerAvatarUrl?: string;
   preferredStartDate?: string;
-  consultationFee?: number;
+  consultationFeePaisa?: number;
   completionCode?: string;
   projectTitle: string;
   projectDescription: string;
@@ -163,8 +163,8 @@ export interface FavoriteProfessionalDto {
   totalReviewsCount: number;
   isAvailable: boolean;
   baseCity: string;
-  startingPrice: number | null;
-  engineerProfile: {consultationFee: number | null} | null;
+  startingPricePaisa: number | null;
+  engineerProfile: {consultationFeePaisa: number | null} | null;
 }
 
 export interface FavoriteDto {

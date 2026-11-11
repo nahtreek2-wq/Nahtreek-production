@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RequestStatus } from '@prisma/client';
+import { NotificationKind, Prisma, RequestStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -224,7 +224,7 @@ export class ChatService {
         await tx.notification.createMany({
           data: recipients.map(recipient => ({
             userId: recipient.userId,
-            kind: 'message',
+            kind: NotificationKind.message,
             title: `New message from ${senderName}`,
             body: content.length > 120 ? `${content.slice(0, 117)}…` : content,
             data: {conversationId: id, senderName},

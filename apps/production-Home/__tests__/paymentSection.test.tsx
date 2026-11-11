@@ -6,7 +6,7 @@ import {PaymentSection} from '../../../packages/mobile-booking/PaymentSection';
 import type {PaymentHooks} from '../../../packages/mobile-booking/PaymentSection';
 import {CheckoutCancelledError} from '../../../packages/mobile-booking/razorpayGateway';
 
-function setup(hooks: PaymentHooks, props?: {requestKind?: 'service' | 'engineer'; quoteAmount?: number;
+function setup(hooks: PaymentHooks, props?: {requestKind?: 'service' | 'engineer'; quoteAmountPaisa?: number;
   receiptEmail?: string | null; onSaveReceiptEmail?: (email: string) => Promise<unknown>; isPlus?: boolean;
   plusDiscount?: {percent: number; capPaisa: number} | null}) {
   const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
@@ -14,7 +14,7 @@ function setup(hooks: PaymentHooks, props?: {requestKind?: 'service' | 'engineer
   const render = async () => {
     await renderer.act(async () => {
       screen = renderer.create(<QueryClientProvider client={client}>
-        <PaymentSection requestId="req" quoteAmount={props?.quoteAmount ?? 2000} requestKind={props?.requestKind}
+        <PaymentSection requestId="req" quoteAmountPaisa={props?.quoteAmountPaisa ?? 200000} requestKind={props?.requestKind}
           hooks={hooks} receiptEmail={props?.receiptEmail} onSaveReceiptEmail={props?.onSaveReceiptEmail}
           isPlus={props?.isPlus} plusDiscount={props?.plusDiscount} />
       </QueryClientProvider>);
@@ -51,6 +51,19 @@ it('pays an approved quote through order, checkout and verify', async () => {
   expect(hooks.createOrder).toHaveBeenCalledTimes(1);
   expect(hooks.checkout).toHaveBeenCalledWith(expect.objectContaining({orderId: 'o', amountPaisa: 200000, keyId: 'k'}));
   expect(hooks.verify).toHaveBeenCalledWith(checkoutResult);
+  t.done();
+});
+
+it('quotes odd paisa exactly with no float drift (F-005 round-trip)', async () => {
+  const hooks: PaymentHooks = {
+    createOrder: jest.fn().mockResolvedValue({...order, amountPaisa: 19999}),
+    verify: jest.fn().mockResolvedValue({status: 'HELD', amountPaisa: 19999, currency: 'INR'}),
+    loadStatus: jest.fn().mockResolvedValue(null),
+    checkout: jest.fn().mockResolvedValue(checkoutResult),
+  };
+  const t = setup(hooks, {quoteAmountPaisa: 19999});
+  await t.render();
+  expect(t.texts()).toContain('Pay ₹199.99 securely');
   t.done();
 });
 
@@ -184,7 +197,7 @@ it('pays a consultation fee with engineer copy and checkout description', async 
     loadStatus: jest.fn().mockResolvedValue(null),
     checkout: jest.fn().mockResolvedValue(checkoutResult),
   };
-  const t = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500});
+  const t = setup(hooks, {requestKind: 'engineer', quoteAmountPaisa: 350000});
   await t.render();
   expect(t.texts()).toContain('Pay ₹3,500 consultation fee');
   await t.pressPay();
@@ -200,7 +213,7 @@ it('shows Plus members the exact discounted charge before checkout', async () =>
     loadStatus: jest.fn().mockResolvedValue(null),
     checkout: jest.fn(),
   };
-  const plus = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500, isPlus: true,
+  const plus = setup(hooks, {requestKind: 'engineer', quoteAmountPaisa: 350000, isPlus: true,
     plusDiscount: {percent: 2, capPaisa: 10000}});
   await plus.render();
   // 2% of ₹3,500 is ₹70, under the ₹100 cap: the button quotes ₹3,430, the
@@ -208,13 +221,13 @@ it('shows Plus members the exact discounted charge before checkout', async () =>
   expect(plus.texts()).toContain('Pay ₹3,430 consultation fee');
   expect(plus.texts()).toContain('(₹3,500 fee minus your Plus discount)');
   plus.done();
-  const noPlan = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500, isPlus: true});
+  const noPlan = setup(hooks, {requestKind: 'engineer', quoteAmountPaisa: 350000, isPlus: true});
   await noPlan.render();
   // Plan endpoint unreachable: generic sentence, never stale hard numbers.
   expect(noPlan.texts()).toContain('Your Plus discount applies automatically at checkout.');
   expect(noPlan.texts()).not.toContain('2% discount (up to');
   noPlan.done();
-  const regular = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500});
+  const regular = setup(hooks, {requestKind: 'engineer', quoteAmountPaisa: 350000});
   await regular.render();
   expect(regular.texts()).not.toContain('Plus discount');
   regular.done();
@@ -226,7 +239,7 @@ it('shows the engineer held state with a review note and no pay button', async (
     loadStatus: jest.fn().mockResolvedValue({status: 'HELD', amountPaisa: 350000, currency: 'INR'}),
     checkout: jest.fn(),
   };
-  const t = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500});
+  const t = setup(hooks, {requestKind: 'engineer', quoteAmountPaisa: 350000});
   await t.render();
   expect(t.texts()).toContain('Paid ₹3,500');
   expect(t.texts()).toContain('releases to the engineer after review');
@@ -241,7 +254,7 @@ it('shows direct settlement without a pay button', async () => {
       loadStatus: jest.fn().mockResolvedValue({status, amountPaisa: 350000, currency: 'INR'}),
       checkout: jest.fn(),
     };
-    const t = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500});
+    const t = setup(hooks, {requestKind: 'engineer', quoteAmountPaisa: 350000});
     await t.render();
     expect(t.texts()).toContain('Paid directly ₹3,500');
     expect(t.buttons()).toHaveLength(0);
@@ -258,7 +271,7 @@ it('reports a problem on a held payment and refreshes to disputed', async () => 
     checkout: jest.fn(),
     dispute: jest.fn().mockResolvedValue({status: 'DISPUTED', amountPaisa: 350000, currency: 'INR'}),
   };
-  const t = setup(hooks, {requestKind: 'engineer', quoteAmount: 3500});
+  const t = setup(hooks, {requestKind: 'engineer', quoteAmountPaisa: 350000});
   await t.render();
   expect(t.texts()).toContain('Report a problem');
   const {TextInput} = jest.requireActual('react-native');

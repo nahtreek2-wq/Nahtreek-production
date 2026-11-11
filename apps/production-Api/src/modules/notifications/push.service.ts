@@ -1,4 +1,5 @@
 import {ForbiddenException, Injectable} from '@nestjs/common';
+import {NotificationKind, PushState} from '@prisma/client';
 import {PrismaService} from '../../common/prisma/prisma.service';
 import {JwtPayload} from '../../common/strategies/jwt.strategy';
 import {FcmProvider} from './fcm.provider';
@@ -82,25 +83,25 @@ export class PushService {
       await this.queueReminders(now);
     }
     const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    await this.prisma.notification.updateMany({where: {pushState: 'PENDING', createdAt: {lt: cutoff}}, data: {pushState: 'SKIPPED'}});
-    const rows = await this.prisma.notification.findMany({where: {pushState: 'PENDING', pushAfter: {lte: now},
+    await this.prisma.notification.updateMany({where: {pushState: PushState.PENDING, createdAt: {lt: cutoff}}, data: {pushState: PushState.SKIPPED}});
+    const rows = await this.prisma.notification.findMany({where: {pushState: PushState.PENDING, pushAfter: {lte: now},
       ...(requestId ? {data: {path: [dataKey], equals: requestId}} : {}),
       OR: [{pushLeaseUntil: null}, {pushLeaseUntil: {lt: now}}]}, orderBy: {createdAt: 'asc'}, take: 10});
     let processed = 0;
     // Bounded batches, durable retries and a lease permit multiple worker instances.
     await Promise.allSettled(rows.map(async row => {
       if (row.kind === 'offer' && !inTipHours(now)) {
-        await this.prisma.notification.updateMany({where: {id: row.id, pushState: 'PENDING',
+        await this.prisma.notification.updateMany({where: {id: row.id, pushState: PushState.PENDING,
           OR: [{pushLeaseUntil: null}, {pushLeaseUntil: {lt: now}}]}, data: {pushAfter: new Date(now.getTime() + 60 * 60_000)}});
         return;
       }
-      const lease = await this.prisma.notification.updateMany({where: {id: row.id, pushState: 'PENDING',
+      const lease = await this.prisma.notification.updateMany({where: {id: row.id, pushState: PushState.PENDING,
         OR: [{pushLeaseUntil: null}, {pushLeaseUntil: {lt: now}}]},
         data: {pushLeaseUntil: new Date(now.getTime() + 120_000), pushAttempts: {increment: 1}}});
       if (!lease.count) return;
       const preference = await this.prisma.notificationPreference.findUnique({where: {userId: row.userId}});
       if (!allowsNotification(row.kind, preference ?? DEFAULT_NOTIFICATION_PREFERENCES)) {
-        await this.prisma.notification.update({where: {id: row.id}, data: {pushState: 'SKIPPED', pushLeaseUntil: null}});
+        await this.prisma.notification.update({where: {id: row.id}, data: {pushState: PushState.SKIPPED, pushLeaseUntil: null}});
         return;
       }
       const devices = await this.prisma.pushDevice.findMany({where: {userId: row.userId,
@@ -114,7 +115,7 @@ export class PushService {
       const failed = outcomes.includes('retry');
       const waitingForDevice = !failed && !outcomes.includes('sent');
       await this.prisma.notification.update({where: {id: row.id}, data: {
-        pushState: failed ? (row.pushAttempts >= 4 ? 'FAILED' : 'PENDING') : waitingForDevice ? 'PENDING' : 'SENT',
+        pushState: failed ? (row.pushAttempts >= 4 ? PushState.FAILED : PushState.PENDING) : waitingForDevice ? PushState.PENDING : PushState.SENT,
         // A signed-out device may register again. Preserve the notification
         // until the existing 24-hour cutoff without consuming send retries.
         ...(waitingForDevice ? {pushAttempts: {decrement: 1}} : {}),
@@ -139,7 +140,7 @@ export class PushService {
       if (!claimed.count) return;
       const professional = item.user.roles.some(role => role.role === 'ENGINEER' || role.role === 'SERVICE_PROVIDER');
       const [title, body] = tipForWeek(professional, item.userId, now);
-      await tx.notification.create({data: {userId: item.userId, kind: 'offer', title, body,
+      await tx.notification.create({data: {userId: item.userId, kind: NotificationKind.offer, title, body,
         data: {destination: professional ? 'profile' : 'home', category: 'weekly-tip'},
       }});
     });
@@ -151,21 +152,21 @@ export class PushService {
     const recent = new Date(now.getTime() - 20 * 60 * 60_000);
     const due = await this.prisma.serviceJourney.findMany({
       where: {stage: {in: ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS']},
-        OR: [{scheduledAt: {gt: now, lte: inDay}}, {quoteAmount: {not: null}, quoteAccepted: false, updatedAt: {lt: stale}}]},
+        OR: [{scheduledAt: {gt: now, lte: inDay}}, {quoteAmountPaisa: {not: null}, quoteAccepted: false, updatedAt: {lt: stale}}]},
       include: {request: {include: {client: {select: {userId: true}}, provider: {select: {userId: true, fullName: true}},
         category: {select: {title: true}}}}},
       take: 20, orderBy: {updatedAt: 'asc'},
     });
     for (const journey of due) {
       const requestId = journey.requestId;
-      const already = await this.prisma.notification.count({where: {kind: 'reminder', createdAt: {gte: recent},
+      const already = await this.prisma.notification.count({where: {kind: NotificationKind.reminder, createdAt: {gte: recent},
         data: {path: ['serviceRequestId'], equals: requestId}}});
       if (already) continue;
       const proName = journey.request.provider.fullName?.split(' ')[0] || 'your professional';
       const service = journey.request.category.title || 'service';
-      if (journey.quoteAmount !== null && journey.quoteAmount !== undefined && !journey.quoteAccepted && journey.updatedAt < stale) {
-        const amount = `₹${Math.round(journey.quoteAmount / 100).toLocaleString('en-IN')}`;
-        await this.prisma.notification.create({data: {userId: journey.request.client.userId, kind: 'reminder',
+      if (journey.quoteAmountPaisa !== null && journey.quoteAmountPaisa !== undefined && !journey.quoteAccepted && journey.updatedAt < stale) {
+        const amount = `₹${Math.round(journey.quoteAmountPaisa / 100).toLocaleString('en-IN')}`;
+        await this.prisma.notification.create({data: {userId: journey.request.client.userId, kind: NotificationKind.reminder,
           title: `Your ${amount} quote is waiting`,
           body: `${proName} sent the ${service} quote. Approve it in one tap and work can start.`,
           data: {serviceRequestId: requestId, category: 'quote-nudge'},
@@ -174,7 +175,7 @@ export class PushService {
       }
       if (journey.scheduledAt && journey.scheduledAt > now && journey.scheduledAt <= inDay) {
         const when = new Intl.DateTimeFormat('en-IN', {weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata'}).format(journey.scheduledAt);
-        await this.prisma.notification.create({data: {userId: journey.request.client.userId, kind: 'reminder',
+        await this.prisma.notification.create({data: {userId: journey.request.client.userId, kind: NotificationKind.reminder,
           title: `${proName} visits ${when}`,
           body: `Your ${service} visit is coming up. Keep the start code ready in the request.`,
           data: {serviceRequestId: requestId, category: 'visit-reminder'},

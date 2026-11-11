@@ -63,4 +63,17 @@ describe('engineer request list', () => {
     const client = await service.list('plus-user', {});
     expect(client.data[0]).not.toHaveProperty('clientPlus');
   });
+
+  it('pages at the database with skip/take (F-002)', async () => {
+    const prisma: any = {
+      $transaction: jest.fn().mockResolvedValue([[], 95]),
+      engineerRequest: {findMany: jest.fn(), count: jest.fn()},
+    };
+    const service = new RequestsService(prisma, {emitUserUpdate: jest.fn()} as any, {dispatch: jest.fn()} as any);
+    const result = await service.list('client-user', {page: '3', limit: '10'});
+    expect(prisma.engineerRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({skip: 20, take: 10}),
+    );
+    expect(result.meta).toMatchObject({page: 3, limit: 10, total: 95, totalPages: 10});
+  });
 });

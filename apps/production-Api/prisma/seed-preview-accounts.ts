@@ -254,7 +254,7 @@ async function main() {
             baseLatitude: location.latitude,
             baseLongitude: location.longitude,
             serviceCategories: engineer ? [] : [service[0], SERVICES[(account.index + 5) % SERVICES.length][0]],
-            startingPrice: engineer ? 1200 + (account.index % 5) * 300 : 300 + (account.index % 5) * 100,
+            startingPricePaisa: (engineer ? 1200 + (account.index % 5) * 300 : 300 + (account.index % 5) * 100) * 100,
             serviceAreas: {create: {name: location.city, city: location.city}},
           }});
           if (engineer) {
@@ -263,7 +263,7 @@ async function main() {
               qualificationDegree: 'Preview demo qualification — not verified',
               institution: 'Preview demonstration only',
               graduationYear: 2014 + (account.index % 8),
-              consultationFee: 1200 + (account.index % 5) * 300,
+              consultationFeePaisa: (1200 + (account.index % 5) * 300) * 100,
             }});
             await tx.engineerSpecialization.create({data: {
               engineerProfileId: engineerProfile.id,

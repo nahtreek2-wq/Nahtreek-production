@@ -1,5 +1,5 @@
 import {BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException} from '@nestjs/common';
-import {MembershipStatus, PaymentStatus} from '@prisma/client';
+import {MembershipStatus, NotificationKind, PaymentStatus} from '@prisma/client';
 import {PrismaService} from '../../common/prisma/prisma.service';
 import {pagination} from '../platform/platform.service';
 import {PushService} from '../notifications/push.service';
@@ -110,7 +110,7 @@ export class MembershipsService {
   }
 
   private async tell(userId: string, title: string, body: string, action: string, membershipId: string) {
-    await this.db.notification.create({data: {userId, kind: 'membership', title, body, data: {membershipId}}});
+    await this.db.notification.create({data: {userId, kind: NotificationKind.membership, title, body, data: {membershipId}}});
     await this.db.auditLog.create({data: {userId, entity: 'Membership', entityId: membershipId, action, metadata: {title}}});
     await this.push.dispatch().catch(() => undefined);
     this.realtime.emitUserUpdate(userId, 'notifications');
@@ -394,7 +394,7 @@ export class MembershipsService {
   }
 
   private async tellAi(userId: string, title: string, body: string, action: string, aiSubscriptionId: string) {
-    await this.db.notification.create({data: {userId, kind: 'membership', title, body, data: {aiSubscriptionId}}});
+    await this.db.notification.create({data: {userId, kind: NotificationKind.membership, title, body, data: {aiSubscriptionId}}});
     await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: aiSubscriptionId, action, metadata: {title}}});
     await this.push.dispatch().catch(() => undefined);
     this.realtime.emitUserUpdate(userId, 'notifications');

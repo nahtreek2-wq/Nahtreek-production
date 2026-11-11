@@ -46,7 +46,7 @@ type ProfileResponse = {
     baseLatitude?: number;
     baseLongitude?: number;
     serviceCategories: string[];
-    startingPrice?: number;
+    startingPricePaisa?: number;
     isAvailable: boolean;
     portfolioItems?: {id: string; title: string; description?: string; imageUrl: string}[];
     engineerProfile?: null | {
@@ -54,7 +54,7 @@ type ProfileResponse = {
       institution: string;
       graduationYear: number;
       licenseNumber?: string;
-      consultationFee?: number;
+      consultationFeePaisa?: number;
       specializations: {specializationId: string}[];
     };
   };
@@ -139,13 +139,8 @@ export function ProfessionalSetupScreen() {
         : '',
     );
     setLicenseNumber(profile.engineerProfile?.licenseNumber ?? '');
-    setPrice(
-      String(
-        engineer
-          ? profile.engineerProfile?.consultationFee ?? ''
-          : profile.startingPrice ?? '',
-      ),
-    );
+    const savedPaisa = engineer ? profile.engineerProfile?.consultationFeePaisa : profile.startingPricePaisa;
+    setPrice(savedPaisa == null ? '' : String(savedPaisa / 100));
   }, [
     categories.data,
     engineer,
@@ -188,7 +183,7 @@ export function ProfessionalSetupScreen() {
       if (!coordinates) {
         throw new ApiError(400, 'Find your work area before submitting.');
       }
-      const amount = price.trim() ? Number(price) : undefined;
+      const amount = price.trim() ? Math.round(Number(price) * 100) : undefined;
       return api.put('/professionals/me', {
         kind: engineer ? 'engineer' : 'service-provider',
         fullName: fullName.trim(),
@@ -207,9 +202,9 @@ export function ProfessionalSetupScreen() {
               institution: institution.trim(),
               graduationYear: Number(graduationYear),
               licenseNumber: licenseNumber.trim() || undefined,
-              consultationFee: amount,
+              consultationFeePaisa: amount,
             }
-          : {serviceCategories: selected, startingPrice: amount}),
+          : {serviceCategories: selected, startingPricePaisa: amount}),
       });
     },
     onSuccess: async () => {

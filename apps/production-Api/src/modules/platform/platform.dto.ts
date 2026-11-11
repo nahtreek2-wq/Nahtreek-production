@@ -8,7 +8,6 @@ import {
   IsInt,
   IsLatitude,
   IsLongitude,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -30,8 +29,8 @@ export class ProfessionalSetupDto {
   @IsLongitude() baseLongitude: number;
   @IsOptional() @IsString() @MaxLength(2000) bio?: string;
   @IsInt() @Min(0) @Max(80) yearsOfExperience: number;
-  @IsOptional() @IsNumber() @Min(0) startingPrice?: number;
-  @IsOptional() @IsNumber() @Min(0) consultationFee?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100000000) startingPricePaisa?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100000000) consultationFeePaisa?: number;
   @IsOptional() @IsBoolean() isAvailable?: boolean;
   @IsOptional()
   @IsArray()

@@ -3,7 +3,8 @@ import {FlatList, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Colors, IndiaLocale, Spacing} from '@nahtreek/design-system';
+import {Colors, Spacing} from '@nahtreek/design-system';
+import {inr} from '../utils/format';
 import {AppHeader, EmptyState, OfflineBanner} from '../components/ui';
 import {ProfessionalCard} from '../components/shared/ProfessionalCard';
 import {useFavoritesList} from '../services/queries';
@@ -16,13 +17,13 @@ function priceFor(item: FavoriteDto): string {
   const pro = item.professional;
   if (!pro) return '';
   if (pro.engineerProfile) {
-    return pro.engineerProfile.consultationFee == null
+    return pro.engineerProfile.consultationFeePaisa == null
       ? 'Fee on request'
-      : IndiaLocale.formatCurrency(pro.engineerProfile.consultationFee);
+      : inr(pro.engineerProfile.consultationFeePaisa);
   }
-  return pro.startingPrice == null
+  return pro.startingPricePaisa == null
     ? 'Price on request'
-    : `From ${IndiaLocale.formatCurrency(pro.startingPrice)}`;
+    : `From ${inr(pro.startingPricePaisa)}`;
 }
 
 function subFor(item: FavoriteDto): string {

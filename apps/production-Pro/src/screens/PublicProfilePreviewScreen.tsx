@@ -39,7 +39,7 @@ type Profile = {
   yearsOfExperience: number;
   verificationStatus: string;
   serviceCategories: string[];
-  startingPrice?: number;
+  startingPricePaisa?: number;
   baseCity: string;
   baseState: string;
   completedJobs?: number;
@@ -55,7 +55,7 @@ type Profile = {
     qualificationDegree?: string;
     institution?: string;
     graduationYear?: number;
-    consultationFee?: number;
+    consultationFeePaisa?: number;
     specializations?: {
       specializationId: string;
       specialization?: {name: string};
@@ -132,8 +132,8 @@ export function PublicProfilePreviewScreen() {
         item => serviceNames[item] ?? item,
       );
   const price = engineer
-    ? profile?.engineerProfile?.consultationFee
-    : profile?.startingPrice;
+    ? profile?.engineerProfile?.consultationFeePaisa
+    : profile?.startingPricePaisa;
 
   return (
     <KeyboardAwareView style={styles.root}>
@@ -288,7 +288,7 @@ export function PublicProfilePreviewScreen() {
                   ? 'Consultation starts from'
                   : 'Service visit starts from'}
               </Text>
-              <Text style={styles.price}>₹{price.toLocaleString('en-IN')}</Text>
+              <Text style={styles.price}>₹{(price / 100).toLocaleString('en-IN')}</Text>
             </View>
           </View>
         ) : null}

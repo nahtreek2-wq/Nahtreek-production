@@ -168,12 +168,12 @@ export class VerificationDesk {
         information("Graduation year", profile.engineer.graduationYear),
         information("Licence", profile.engineer.licenseNumber),
         information("Specialisations", listText(profile.engineer.specializations)),
-        information("Consultation fee", profile.engineer.consultationFee ? `₹${profile.engineer.consultationFee}` : "Not provided"),
+        information("Consultation fee", profile.engineer.consultationFeePaisa ? `₹${(profile.engineer.consultationFeePaisa / 100).toLocaleString('en-IN')}` : "Not provided"),
       );
     } else {
       content.append(
         information("Services", listText(profile.serviceCategories)),
-        information("Starting price", profile.startingPrice ? `₹${profile.startingPrice}` : "Not provided"),
+        information("Starting price", profile.startingPricePaisa ? `₹${(profile.startingPricePaisa / 100).toLocaleString('en-IN')}` : "Not provided"),
         information("Service areas", listText(profile.serviceAreas?.map((area) => area.name))),
         information("Availability", profile.isAvailable ? "Available" : "Unavailable"),
       );

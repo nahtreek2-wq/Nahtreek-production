@@ -1,4 +1,5 @@
-import {IsBoolean, IsDateString, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength} from 'class-validator';
+import {IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength} from 'class-validator';
+import {CollectionMode} from '@prisma/client';
 
 export class PresenceDto {
   @IsBoolean() online: boolean;
@@ -28,9 +29,9 @@ export class JourneyActionDto {
   @IsIn(['ACCEPT', 'DECLINE', 'DEPART', 'ARRIVE', 'QUOTE', 'APPROVE_QUOTE', 'START', 'FINISH', 'CONFIRM', 'ISSUE', 'CANCEL', 'RESCHEDULE']) action: string;
   @IsInt() @Min(1) revision: number;
   @IsOptional() @IsString() @MaxLength(2000) note?: string;
-  @IsOptional() @IsNumber() @Min(0) @Max(1000000) amount?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100000000) amountPaisa?: number;
   @IsOptional() @IsString() @Matches(/^[0-9]{6}$/) code?: string;
-  @IsOptional() @IsIn(['ONLINE', 'AT_HOME']) collectionMode?: 'ONLINE' | 'AT_HOME';
+  @IsOptional() @IsEnum(CollectionMode) collectionMode?: CollectionMode;
   @IsOptional() @IsInt() @Min(100) @Max(100000000) collectedAmountPaisa?: number;
   @IsOptional() @IsIn(['CASH', 'UPI']) collectedMethod?: 'CASH' | 'UPI';
   @IsOptional() @IsString() @MaxLength(40) scheduledAt?: string;

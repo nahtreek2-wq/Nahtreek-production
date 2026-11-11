@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { AccountStatus, Prisma, Role, User } from "@prisma/client";
+import { AccountStatus, PenaltyStatus, Prisma, Role, User } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { PrismaService } from "../../common/prisma/prisma.service";
@@ -703,7 +703,7 @@ export class AuthService {
       const dues = await this.prisma.payment.aggregate({where: {professionalProfileId: user.professionalProfile.id,
           status: 'COLLECTED_UNSETTLED'}, _sum: {platformFeePaisa: true}}).catch(() => null);
       const penalties = await this.prisma.professionalPenalty.aggregate({where: {professionalProfileId: user.professionalProfile.id,
-          status: 'PENDING'}, _sum: {amountPaisa: true}}).catch(() => null);
+          status: PenaltyStatus.PENDING}, _sum: {amountPaisa: true}}).catch(() => null);
       const owed = (dues?._sum?.platformFeePaisa ?? 0) + (penalties?._sum?.amountPaisa ?? 0);
       if (owed > 0) throw new ConflictException(
         `Settle your \u20B9${(owed / 100).toLocaleString('en-IN')} commission dues before deleting your account`);

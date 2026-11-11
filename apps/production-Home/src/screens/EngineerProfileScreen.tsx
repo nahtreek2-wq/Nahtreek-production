@@ -16,8 +16,8 @@ import {
   Typography,
   Spacing,
   BorderRadius,
-  IndiaLocale,
 } from '@nahtreek/design-system';
+import {inr} from '../utils/format';
 import {
   AppHeader,
   Avatar,
@@ -148,11 +148,9 @@ export function EngineerProfileScreen() {
         ];
   const reviews = engineer.reviews ?? [];
   const consultationFeeLabel =
-    engineer.consultationFee === undefined
+    engineer.consultationFeePaisa === undefined
       ? 'Request consultation'
-      : `Request consultation • ${IndiaLocale.formatCurrency(
-          engineer.consultationFee,
-        )}`;
+      : `Request consultation • ${inr(engineer.consultationFeePaisa)}`;
 
   return (
     <View style={styles.container}>

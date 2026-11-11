@@ -2,6 +2,7 @@ import {Type} from 'class-transformer';
 import {
   IsDateString,
   IsIn,
+  IsInt,
   IsLatitude,
   IsLongitude,
   IsNumber,
@@ -132,9 +133,9 @@ export class QuoteRequestFromPlanDto {
 
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   @Min(0)
-  budgetEstimate?: number;
+  budgetEstimatePaisa?: number;
 }
 
 export class UploadAiDocumentDto {

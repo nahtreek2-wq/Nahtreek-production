@@ -18,8 +18,8 @@ import {
   Typography,
   Spacing,
   BorderRadius,
-  IndiaLocale,
 } from '@nahtreek/design-system';
+import {inr} from '../utils/format';
 import {
   AppHeader,
   Avatar,
@@ -679,13 +679,13 @@ function EngineerRow({
               style={styles.fee}
               numberOfLines={1}
               accessibilityLabel={
-                engineer.consultationFee == null
+                engineer.consultationFeePaisa == null
                   ? 'Consultation fee on request'
-                  : `Consultation fee ${IndiaLocale.formatCurrency(engineer.consultationFee)}`
+                  : `Consultation fee ${inr(engineer.consultationFeePaisa)}`
               }>
-              {engineer.consultationFee == null
+              {engineer.consultationFeePaisa == null
                 ? 'Fee on request'
-                : IndiaLocale.formatCurrency(engineer.consultationFee)}
+                : inr(engineer.consultationFeePaisa)}
               <Text style={styles.feeSuffix}> · Consultation</Text>
             </Text>
             <Button

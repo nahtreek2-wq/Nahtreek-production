@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsLatitude, IsLongitude, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsDateString, IsInt, IsLatitude, IsLongitude, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateRequestDto {
   @IsString()
@@ -41,7 +41,7 @@ export class CreateRequestDto {
 
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   @Min(0)
-  budgetEstimate?: number;
+  budgetEstimatePaisa?: number;
 }

@@ -22,7 +22,7 @@ export type PaymentHooks = {
 };
 
 export type PlusDiscount = {percent: number; capPaisa: number};
-type Props = {requestId: string; requestKind?: 'service' | 'engineer'; quoteAmount: number; hooks: PaymentHooks;
+type Props = {requestId: string; requestKind?: 'service' | 'engineer'; quoteAmountPaisa: number; hooks: PaymentHooks;
   receiptEmail?: string | null; onSaveReceiptEmail?: (email: string) => Promise<unknown>; isPlus?: boolean;
   plusDiscount?: PlusDiscount | null};
 
@@ -51,7 +51,7 @@ const SETTLED = ['PAID', 'HELD', 'RELEASE_PENDING', 'RELEASED', 'REFUND_PENDING'
 const notCaptured = (error: unknown) =>
   (error as {status?: number})?.status === 409 && error instanceof Error && /not captured yet/i.test(error.message);
 
-export function PaymentSection({requestId, requestKind = 'service', quoteAmount, hooks, receiptEmail, onSaveReceiptEmail, isPlus, plusDiscount}: Props) {
+export function PaymentSection({requestId, requestKind = 'service', quoteAmountPaisa, hooks, receiptEmail, onSaveReceiptEmail, isPlus, plusDiscount}: Props) {
   const cache = useQueryClient();
   const [failed, setFailed] = useState<string | null>(null);
   const [cancelled, setCancelled] = useState(false);
@@ -344,7 +344,7 @@ export function PaymentSection({requestId, requestKind = 'service', quoteAmount,
     if (!view || view.status === 'FAILED' || view.status === 'NOT_STARTED') {
       // Plus figures come from the plan endpoint, never literals: without plan
       // data the sentence stays generic instead of quoting wrong numbers.
-      const feePaisa = Math.round(quoteAmount * 100);
+      const feePaisa = quoteAmountPaisa;
       // Mirror of server plusDiscountPaisa (payments/commission.ts):
       // min(floor(amount * bps / 10000), cap). The server stays the source of
       // truth at order time; this only aligns the button with what the
@@ -361,8 +361,8 @@ export function PaymentSection({requestId, requestKind = 'service', quoteAmount,
             discountPaisa > 0
               ? `Pay ${rupees(payablePaisa)} for the consultation (${rupees(feePaisa)} fee minus your Plus discount). The money is held safely and reaches the engineer after review.`
               : `Pay ${rupees(feePaisa)} for the consultation. The money is held safely and reaches the engineer after review.${plusLine}`)
-        : payAgain(`Pay ${rupees(Math.round(quoteAmount * 100))} securely`,
-            `Pay ${rupees(Math.round(quoteAmount * 100))} for the approved scope. The money is held safely and reaches the professional only after you confirm the work.`);
+        : payAgain(`Pay ${rupees(quoteAmountPaisa)} securely`,
+            `Pay ${rupees(quoteAmountPaisa)} for the approved scope. The money is held safely and reaches the professional only after you confirm the work.`);
     } else if (view.status === 'ORDER_CREATED') {
       const checkStatus = async () => {
         setChecking(true);

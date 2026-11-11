@@ -1,7 +1,7 @@
 import {createHmac} from 'crypto';
 import {PaymentsService} from './payments.service';
 
-const journey = (over: Record<string, unknown> = {}) => ({stage: 'ARRIVED', quoteAmount: 2000, quoteAccepted: true, ...over});
+const journey = (over: Record<string, unknown> = {}) => ({stage: 'ARRIVED', quoteAmountPaisa: 200000, quoteAccepted: true, ...over});
 const request = (over: Record<string, unknown> = {}) => ({id: 'req', status: 'ACCEPTED',
   client: {userId: 'client'}, provider: {id: 'prof', userId: 'pro'}, journey: journey(), ...over});
 const payment = (over: Record<string, unknown> = {}) => ({id: 'pay', professionalProfileId: 'prof', serviceRequestId: 'req',
@@ -86,6 +86,14 @@ describe('payments order creation', () => {
       professionalAmountPaisa: 180000, idempotencyKey: 'pay-req'});
     expect(result).toMatchObject({paymentId: 'pay', keyId: 'rzp_test', status: 'ORDER_CREATED'});
   });
+  it('passes odd paisa through with no float math (F-005 round-trip)', async () => {
+    // ₹199.99 stored as 19999 must reach Razorpay as exactly 19999 — the
+    // float round-trip that used to live here is gone.
+    const {db, provider, service} = setup({req: request({journey: journey({quoteAmountPaisa: 19999})})});
+    await service.createOrder('client', 'req');
+    expect(provider.createOrder).toHaveBeenCalledWith(expect.objectContaining({amountPaisa: 19999}));
+    expect(db.payment.create.mock.calls[0][0].data).toMatchObject({amountPaisa: 19999});
+  });
   it('charges active members 7% instead of 10%', async () => {
     const ctx = setup();
     ctx.db.payment.count.mockResolvedValue(2);
@@ -114,12 +122,12 @@ describe('payments order creation', () => {
   });
   it('refuses to reset a paid row when the quote changed', async () => {
     const {service} = setup({pay: payment({status: 'PAID', providerPaymentId: 'pay_1'}),
-      req: request({journey: journey({quoteAmount: 2500})})});
+      req: request({journey: journey({quoteAmountPaisa: 250000})})});
     await expect(service.createOrder('client', 'req')).rejects.toMatchObject({status: 409});
   });
   it('starts a new attempt when an unpaid order is stale', async () => {
     const {db, provider, service} = setup({pay: payment({status: 'FAILED'}),
-      req: request({journey: journey({quoteAmount: 2500})})});
+      req: request({journey: journey({quoteAmountPaisa: 250000})})});
     await service.createOrder('client', 'req');
     expect(db.payment.update.mock.calls[0][0].data).toMatchObject({amountPaisa: 250000, status: 'NOT_STARTED'});
     expect(provider.createOrder).toHaveBeenCalled();

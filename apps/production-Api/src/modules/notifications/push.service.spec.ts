@@ -43,6 +43,28 @@ describe('push delivery boundaries', () => {
     expect(fcm.send).not.toHaveBeenCalled();
     expect(db.notification.update.mock.calls[2][0].data).toMatchObject({pushState: 'PENDING', pushAttempts: {decrement: 1}});
   });
+  it('yields when another worker holds the lease (F-006)', async () => {
+    const row = {id: 'notification', userId: 'client', kind: 'request', pushAttempts: 0};
+    const db = {notificationPreference: {findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null)},
+      serviceJourney: {findMany: jest.fn().mockResolvedValue([])},
+      notification: {updateMany: jest.fn().mockResolvedValue({count: 0}), findMany: jest.fn().mockResolvedValue([row]), update: jest.fn()},
+      pushDevice: {findMany: jest.fn().mockResolvedValue([])}};
+    const fcm = {enabled: true, send: jest.fn()};
+    await expect(new PushService(db as any, fcm as any).dispatch()).resolves.toMatchObject({enabled: true, processed: 0});
+    expect(fcm.send).not.toHaveBeenCalled();
+    expect(db.notification.update).not.toHaveBeenCalled();
+  });
+  it('parks the row FAILED after the retry budget is spent (F-006)', async () => {
+    const row = {id: 'notification', userId: 'client', kind: 'request', pushAttempts: 4};
+    const device = {id: 'd', token: 'token', session: {authVersion: 2}, user: {authVersion: 2}};
+    const db = {notificationPreference: {findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null)},
+      serviceJourney: {findMany: jest.fn().mockResolvedValue([])},
+      notification: {updateMany: jest.fn().mockResolvedValue({count: 1}), findMany: jest.fn().mockResolvedValue([row]), update: jest.fn()},
+      pushDevice: {findMany: jest.fn().mockResolvedValue([device]), deleteMany: jest.fn()}};
+    const fcm = {enabled: true, send: jest.fn().mockResolvedValue('retry')};
+    await new PushService(db as any, fcm as any).dispatch();
+    expect(db.notification.update.mock.calls[0][0].data).toMatchObject({pushState: 'FAILED', pushLeaseUntil: null});
+  });
 });
 
 describe('push deep links', () => {
@@ -71,7 +93,7 @@ describe('push deep links', () => {
 });
 
 describe('engagement queue', () => {
-  const journey = (over: any = {}) => ({requestId: 'r1', stage: 'ACCEPTED', scheduledAt: null, quoteAmount: null,
+  const journey = (over: any = {}) => ({requestId: 'r1', stage: 'ACCEPTED', scheduledAt: null, quoteAmountPaisa: null,
     quoteAccepted: false, updatedAt: new Date(), request: {client: {userId: 'client'}, provider: {userId: 'pro', fullName: 'Ravi Kumar'},
     category: {title: 'Plumbing'}}, ...over});
   const dbFor = (journeys: any[], reminded: number) => ({notificationPreference: {findMany: jest.fn().mockResolvedValue([])},
@@ -87,7 +109,7 @@ describe('engagement queue', () => {
     expect(db.notification.create.mock.calls[0][0].data.title).toMatch('Ravi visits');
   });
   it('queues a quote nudge for stale unapproved quotes', async () => {
-    const db = dbFor([journey({quoteAmount: 150000, updatedAt: new Date(Date.now() - 8 * 3600_000)})], 0);
+    const db = dbFor([journey({quoteAmountPaisa: 150000, updatedAt: new Date(Date.now() - 8 * 3600_000)})], 0);
     await new PushService(db as any, {enabled: true} as any).dispatch();
     expect(db.notification.create.mock.calls[0][0].data).toMatchObject({kind: 'reminder'});
     expect(db.notification.create.mock.calls[0][0].data.title).toMatch('₹1,500');

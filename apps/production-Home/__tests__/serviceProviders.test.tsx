@@ -23,7 +23,7 @@ jest.mock('../src/services/platformQueries', () => ({
               yearsOfExperience: 6,
               averageRating: 4.5,
               totalReviewsCount: 12,
-              startingPrice: 499,
+              startingPricePaisa: 49900,
               baseLatitude: 13.0,
               baseLongitude: 80.2,
             },

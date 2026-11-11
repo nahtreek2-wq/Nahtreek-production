@@ -1,9 +1,9 @@
 import {FavoritesService} from './favorites.service';
 
-function setup(rows: any[] = [], profiles: any[] = []) {
+function setup(joined: any[] = [], profiles: any[] = []) {
   const db: any = {
     favorite: {
-      findMany: jest.fn(async () => rows),
+      findMany: jest.fn(async () => joined),
     },
     professionalProfile: {
       findMany: jest.fn(async () => profiles),
@@ -15,7 +15,7 @@ function setup(rows: any[] = [], profiles: any[] = []) {
 
 const profile = (id: string) => ({id, fullName: 'Pro ' + id, avatarUrl: null, title: 'Plumber',
   verificationStatus: 'VERIFIED', averageRating: 4.5, totalReviewsCount: 10,
-  isAvailable: true, baseCity: 'Chennai', startingPrice: 299,
+  isAvailable: true, baseCity: 'Chennai', startingPricePaisa: 29900,
   engineerProfile: null});
 
 describe('favorites list', () => {
@@ -26,18 +26,17 @@ describe('favorites list', () => {
   });
 
   it('merges card fields so Saved renders without extra fetches', async () => {
-    const {service} = setup(
-      [{professionalId: 'p1', createdAt: new Date()}, {professionalId: 'p2', createdAt: new Date()}],
-      [profile('p1'), {...profile('p2'), engineerProfile: {consultationFee: 499}}]);
+    const {db, service} = setup(
+      [{professionalId: 'p1', createdAt: new Date(), professional: profile('p1')},
+        {professionalId: 'p2', createdAt: new Date(),
+          professional: {...profile('p2'), engineerProfile: {consultationFeePaisa: 49900}}}]);
     const rows = await service.list('u1');
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({professionalId: 'p1', professional: {fullName: 'Pro p1'}});
-    expect(rows[1].professional).toMatchObject({engineerProfile: {consultationFee: 499}});
-  });
-
-  it('marks deleted professionals null instead of dropping the row', async () => {
-    const {service} = setup([{professionalId: 'gone', createdAt: new Date()}], []);
-    const rows = await service.list('u1');
-    expect(rows).toEqual([{professionalId: 'gone', createdAt: expect.any(Date), professional: null}]);
+    expect(rows[1].professional).toMatchObject({engineerProfile: {consultationFeePaisa: 49900}});
+    // One join — the manual second query is gone (F-004).
+    expect(db.professionalProfile.findMany).not.toHaveBeenCalled();
+    expect(db.favorite.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({include: expect.objectContaining({professional: expect.anything()})}));
   });
 });

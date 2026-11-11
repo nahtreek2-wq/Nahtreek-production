@@ -15,7 +15,6 @@ import {
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   Colors,
-  IndiaLocale,
   Spacing,
   Typography,
 } from '@nahtreek/design-system';
@@ -44,7 +43,7 @@ import {
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {fetchAiPlan, fetchAiSubscription} from '../services/aiBilling';
 import {useToast} from '../stores/toast';
-import {cleanReviewComment} from '../utils/format';
+import {cleanReviewComment, inr} from '../utils/format';
 import type {EngineerRequestDto} from '@nahtreek/types';
 import type {RootStackParamList} from '../navigation/types';
 
@@ -321,24 +320,24 @@ export function RequestDetailScreen() {
             <Text numberOfLines={1} allowFontScaling={false} style={styles.summaryLabel}>Location</Text>
             <Text style={styles.summaryValue}>{request.locationAddress}</Text>
           </View>
-          {request.consultationFee !== undefined && request.consultationFee !== null ? (
+          {request.consultationFeePaisa !== undefined && request.consultationFeePaisa !== null ? (
             <View style={styles.summaryRow}>
               <Icon name={ICONS.currency} size={18} color={Colors.slate500} />
               <Text numberOfLines={1} allowFontScaling={false} style={styles.summaryLabel}>Consultation fee</Text>
-              <Text style={styles.summaryValue}>{IndiaLocale.formatCurrency(request.consultationFee)}</Text>
+              <Text style={styles.summaryValue}>{inr(request.consultationFeePaisa)}</Text>
             </View>
           ) : null}
         </Card>
 
         {isApiConfigured &&
-        request.consultationFee !== undefined &&
-        request.consultationFee !== null &&
+        request.consultationFeePaisa !== undefined &&
+        request.consultationFeePaisa !== null &&
         ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) ? (
           <View style={styles.paymentWrap}>
             <PaymentSection
               requestId={request.id}
               requestKind="engineer"
-              quoteAmount={request.consultationFee}
+              quoteAmountPaisa={request.consultationFeePaisa}
               hooks={paymentHooks}
               receiptEmail={profile.data?.email ?? null}
               onSaveReceiptEmail={email => updateProfile.mutateAsync({email}).then(() => undefined)}

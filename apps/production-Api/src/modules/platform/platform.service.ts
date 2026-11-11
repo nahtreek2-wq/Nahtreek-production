@@ -8,7 +8,7 @@ import {
 import { randomInt, randomUUID } from "crypto";
 import * as QRCode from "qrcode";
 import { signedAssetUrl, uploadAsset } from "../../common/storage";
-import { Prisma, RequestStatus, Role } from "@prisma/client";
+import { NotificationKind, Prisma, RequestStatus, Role } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import {isPlusClient, plusClientIds} from "../memberships/membership-reads";
 import { normalizePlace } from "../../common/place";
@@ -41,7 +41,7 @@ const providerSelect = {
   baseLatitude: true,
   baseLongitude: true,
   serviceCategories: true,
-  startingPrice: true,
+  startingPricePaisa: true,
   memberPriority: true,
 } satisfies Prisma.ProfessionalProfileSelect;
 const requestInclude = {
@@ -684,7 +684,7 @@ export class PlatformService {
         verificationStatus: "PENDING" as const,
         onboardingStep: "SUBMITTED",
         ...(dto.kind === "service-provider"
-          ? { serviceCategories: services, startingPrice: dto.startingPrice }
+          ? { serviceCategories: services, startingPricePaisa: dto.startingPricePaisa }
           : {}),
       };
       const profile = await tx.professionalProfile.upsert({
@@ -702,7 +702,7 @@ export class PlatformService {
           institution: dto.institution.trim(),
           graduationYear: dto.graduationYear,
           licenseNumber: dto.licenseNumber?.trim(),
-          consultationFee: dto.consultationFee,
+          consultationFeePaisa: dto.consultationFeePaisa,
         };
         const engineer = await tx.engineerProfile.upsert({
           where: { professionalProfileId: profile.id },
@@ -779,7 +779,7 @@ export class PlatformService {
       await tx.notification.create({
         data: {
           userId: provider.userId,
-          kind: "request",
+          kind: NotificationKind.request,
           title: "New service request",
           body: `You received a ${category.title} request.`,
           data: { serviceRequestId: request.id },
@@ -877,7 +877,7 @@ export class PlatformService {
           userId: clientAction
             ? request.provider.userId
             : request.client.userId,
-          kind: "request",
+          kind: NotificationKind.request,
           title: "Service request updated",
           body: `${request.category.title}: ${dto.status
             .replace(/_/g, " ")

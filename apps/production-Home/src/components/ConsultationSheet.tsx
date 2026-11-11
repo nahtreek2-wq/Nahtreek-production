@@ -8,6 +8,7 @@ import {
   IndiaLocale,
 } from '@nahtreek/design-system';
 import {ClientColors} from '../design-system/tokens';
+import {inr} from '../utils/format';
 import {BottomSheet, Button, ChipRow, Icon, ICONS, Input} from './ui';
 import {LocationPicker} from './LocationPicker';
 import {PlusPerkStrip} from './PlusPerkStrip';
@@ -23,7 +24,7 @@ export type ConsultationPayload = {
   latitude: number;
   longitude: number;
   preferredStartDate?: string;
-  budgetEstimate?: number;
+  budgetEstimatePaisa?: number;
 };
 interface Props {
   engineer: EngineerProfileDto;
@@ -117,7 +118,7 @@ export function ConsultationSheet({
         latitude: location.latitude,
         longitude: location.longitude,
         ...(sqft.trim() ? {projectSizeSqFt: Number(sqft)} : {}),
-        ...(budget.trim() ? {budgetEstimate: Number(budget)} : {}),
+        ...(budget.trim() ? {budgetEstimatePaisa: Math.round(Number(budget) * 100)} : {}),
         ...(timing === 'Choose a date' && date
           ? {preferredStartDate: new Date(date + 'T12:00:00').toISOString()}
           : {}),
@@ -171,9 +172,9 @@ export function ConsultationSheet({
       subtitle={
         engineer.fullName +
         ' · ' +
-        (engineer.consultationFee == null
+        (engineer.consultationFeePaisa == null
           ? 'Fee on request'
-          : IndiaLocale.formatCurrency(engineer.consultationFee))
+          : inr(engineer.consultationFeePaisa))
       }
       onClose={() => {
         if (!lock.current) onClose();
@@ -186,7 +187,7 @@ export function ConsultationSheet({
           </Text>
         </View>
       ) : null}
-      <PlusPerkStrip consultFee={engineer.consultationFee ?? undefined} />
+      <PlusPerkStrip consultFeePaisa={engineer.consultationFeePaisa ?? undefined} />
       <View style={styles.progressHeader}>
         <Text style={styles.stepCount}>
           STEP {step + 1} OF {steps.length}

@@ -1,6 +1,6 @@
 import {BadRequestException, ConflictException, Injectable, NotFoundException, Optional, ServiceUnavailableException} from '@nestjs/common';
 import {createHash, randomInt} from 'crypto';
-import {Prisma, RequestStatus} from '@prisma/client';
+import {CollectionMode, JourneyStage, NotificationKind, PenaltyReason, Prisma, RequestStatus} from '@prisma/client';
 import {PrismaService} from '../../common/prisma/prisma.service';
 import {PushService} from '../notifications/push.service';
 import {BookDto, JourneyActionDto, MatchDto, PresenceDto} from './journey.dto';
@@ -110,7 +110,7 @@ export class JourneyService {
     const routeResults = await Promise.allSettled(near.map(async ({p, distance}) => {
       const etaMinutes = dto.mode === 'ASAP' ? (await this.route(p.presence!, dto)) + 5 : null;
       return {id: p.id, fullName: p.fullName, title: p.title, distanceKm: Math.round(distance*10)/10, etaMinutes,
-        startingPrice: p.startingPrice, eligible: etaMinutes === null || etaMinutes <= 30};
+        startingPricePaisa: p.startingPricePaisa, eligible: etaMinutes === null || etaMinutes <= 30};
     }));
     const rows = routeResults.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
     const eligible = rows.filter(p => p.eligible).sort((a,b)=>(a.etaMinutes??0)-(b.etaMinutes??0));
@@ -172,7 +172,7 @@ export class JourneyService {
   }
 
   private async notify(tx: Prisma.TransactionClient, userId: string, id: string, title: string, body: string, stage: string) {
-    await tx.notification.create({data: {userId, kind: 'request', title, body, data: {serviceRequestId: id, stage}}});
+    await tx.notification.create({data: {userId, kind: NotificationKind.request, title, body, data: {serviceRequestId: id, stage}}});
   }
 
   async read(userId: string, id: string) {
@@ -187,8 +187,8 @@ export class JourneyService {
     // window figures — the values below are the same constants enforcement
     // uses, and null for non-Plus bookings.
     const plus = await isPlusClient(this.db, j.request.client.userId).catch(() => false);
-    return {...safe, startCode: client && ['ARRIVED'].includes(j.stage) ? startCode : undefined,
-      tracking: j.stage === 'EN_ROUTE' && p ? {latitude: p.latitude, longitude: p.longitude, updatedAt: p.observedAt, stale: !freshLocation(p)} : null,
+    return {...safe, startCode: client && ([JourneyStage.ARRIVED] as JourneyStage[]).includes(j.stage) ? startCode : undefined,
+      tracking: j.stage === JourneyStage.EN_ROUTE && p ? {latitude: p.latitude, longitude: p.longitude, updatedAt: p.observedAt, stale: !freshLocation(p)} : null,
       plusTerms: plus ? {acceptWindowMs: PLUS_ACCEPT_WINDOW_MS, arrivalGraceMs: PLUS_ARRIVAL_GRACE_MS,
         lateAcceptPenaltyPaisa: PENALTY_LATE_ACCEPT_Paisa, lateArrivalPenaltyPaisa: PENALTY_LATE_ARRIVAL_Paisa} : null,
       serverTime: new Date().toISOString()};
@@ -202,7 +202,7 @@ export class JourneyService {
     // Pros cancel too (emergency, overbooked): same CANCEL action before
     // travel starts; the client is notified and the shared money path below
     // voids unpaid orders / refunds captured fees.
-    const proCancel = !isClient && dto.action === 'CANCEL' && ['PENDING', 'ACCEPTED'].includes(snapshot.stage);
+    const proCancel = !isClient && dto.action === 'CANCEL' && ([JourneyStage.PENDING, JourneyStage.ACCEPTED] as JourneyStage[]).includes(snapshot.stage);
     if (!proCancel && !actionStage(snapshot.stage, dto.action, isClient)) throw new BadRequestException('That action is not available at this stage');
     let eta: number | undefined;
     if (['ACCEPT','DEPART'].includes(dto.action)) {
@@ -219,8 +219,8 @@ export class JourneyService {
     // Paid-before-work gate. No-op while payments are unconfigured so the
     // booking flow keeps working in development and existing tests.
     // Pay-at-home bookings skip it: the provider collects at the door.
-    if (dto.action === 'START' && this.payments && snapshot.collectionMode !== 'AT_HOME') await this.payments.requirePaid(id);
-    if (dto.action === 'CONFIRM' && snapshot.collectionMode === 'AT_HOME' && this.payments) {
+    if (dto.action === 'START' && this.payments && snapshot.collectionMode !== CollectionMode.AT_HOME) await this.payments.requirePaid(id);
+    if (dto.action === 'CONFIRM' && snapshot.collectionMode === CollectionMode.AT_HOME && this.payments) {
       await this.payments.ensureAtHomeCollection(id).catch(() => null);
       const recorded = await this.db.payment.findUnique({where: {serviceRequestId: id}}).catch(() => null);
       if (!recorded) throw new ConflictException('Collection is still recording. Try again in a moment.');
@@ -233,8 +233,8 @@ export class JourneyService {
       if (dto.action === 'ARRIVE') arrivalTarget = j.arrivalTarget;
       if (j.revision !== dto.revision) throw new ConflictException('Booking changed. Refresh before trying again.');
       let stage = actionStage(j.stage, dto.action, isClient);
-      if (!stage && proCancel && ['PENDING', 'ACCEPTED'].includes(j.stage)) stage = 'CANCELLED';
-      if (!stage || (j.stage === 'PENDING' && j.expiresAt.getTime() <= Date.now())) throw new ConflictException('This request is no longer available');
+      if (!stage && proCancel && (['PENDING', 'ACCEPTED'] as JourneyStage[]).includes(j.stage)) stage = JourneyStage.CANCELLED;
+      if (!stage || (j.stage === JourneyStage.PENDING && j.expiresAt.getTime() <= Date.now())) throw new ConflictException('This request is no longer available');
       const patch: Prisma.ServiceJourneyUpdateInput = {stage, revision: {increment: 1}};
       if (dto.action === 'ACCEPT') {
         const p = await tx.professionalProfile.findUniqueOrThrow({where: {id: snapshot.request.professionalProfileId}, include: {presence: true}});
@@ -253,19 +253,19 @@ export class JourneyService {
         patch.startCode = String(randomInt(100000,1000000));
       }
       if (dto.action === 'QUOTE') {
-        if (dto.amount === undefined || !dto.note || dto.note.trim().length < 10) throw new BadRequestException('Add the agreed work scope and full price');
-        patch.quoteAmount = dto.amount; patch.quoteScope = dto.note.trim(); patch.quoteAccepted = false;
+        if (dto.amountPaisa === undefined || !dto.note || dto.note.trim().length < 10) throw new BadRequestException('Add the agreed work scope and full price');
+        patch.quoteAmountPaisa = dto.amountPaisa; patch.quoteScope = dto.note.trim(); patch.quoteAccepted = false;
       }
       if (dto.action === 'APPROVE_QUOTE') {
-        if (j.quoteAmount === null) throw new BadRequestException('Wait for a quote first');
+        if (j.quoteAmountPaisa === null) throw new BadRequestException('Wait for a quote first');
         patch.quoteAccepted = true;
-        patch.collectionMode = dto.collectionMode ?? 'ONLINE';
+        patch.collectionMode = dto.collectionMode ?? CollectionMode.ONLINE;
       }
       if (dto.action === 'START') {
         if (!j.quoteAccepted) throw new BadRequestException('Customer must approve the quote first');
         // In-transaction recheck: a refund racing START must not let unpaid work begin.
         // Pay-at-home bookings skip it: the provider collects at the door.
-        if (this.payments?.enabled && j.collectionMode !== 'AT_HOME') {
+        if (this.payments?.enabled && j.collectionMode !== CollectionMode.AT_HOME) {
           const pay = await tx.payment.findUnique({where: {serviceRequestId: id}});
           if (!pay || !['PAID', 'HELD', 'RELEASE_PENDING', 'RELEASED'].includes(pay.status))
             throw new BadRequestException('Complete payment for the approved quote before work starts');
@@ -280,7 +280,7 @@ export class JourneyService {
       if (dto.action === 'FINISH') {
         if (!j.quoteAccepted || !dto.note || dto.note.trim().length < 10) throw new BadRequestException('Get price approval and add a completion summary');
         patch.completionSummary = dto.note.trim();
-        if (j.collectionMode === 'AT_HOME') {
+        if (j.collectionMode === CollectionMode.AT_HOME) {
           if (!dto.collectedAmountPaisa || dto.collectedAmountPaisa < 100 || !dto.collectedMethod)
             throw new BadRequestException('Enter the amount collected at home and how it was paid');
           patch.collectedAmountPaisa = dto.collectedAmountPaisa;
@@ -298,14 +298,14 @@ export class JourneyService {
           throw new BadRequestException('Choose a visit between 30 minutes and 30 days from now');
         patch.scheduledAt = when;
         patch.mode = 'SCHEDULED';
-        if (j.stage === 'PENDING') {
+        if (j.stage === JourneyStage.PENDING) {
           const plus = await isPlusClient(this.db, snapshot.request.client.userId).catch(() => false);
           patch.expiresAt = new Date(Date.now() + (plus ? PLUS_ACCEPT_WINDOW_MS : 3600000));
         }
       }
       await tx.serviceJourney.update({where: {requestId: id}, data: patch});
-      const status: RequestStatus = stage === 'COMPLETED' ? 'COMPLETED' : stage === 'CANCELLED' ? 'CANCELLED' : stage === 'DECLINED' ? 'DECLINED' :
-        ['IN_PROGRESS','AWAITING_CONFIRMATION','DISPUTED'].includes(stage) ? 'IN_PROGRESS' : 'ACCEPTED';
+      const status: RequestStatus = stage === JourneyStage.COMPLETED ? 'COMPLETED' : stage === JourneyStage.CANCELLED ? 'CANCELLED' : stage === JourneyStage.DECLINED ? 'DECLINED' :
+        ([JourneyStage.IN_PROGRESS, JourneyStage.AWAITING_CONFIRMATION, JourneyStage.DISPUTED] as JourneyStage[]).includes(stage) ? 'IN_PROGRESS' : 'ACCEPTED';
       await tx.serviceRequest.update({where: {id}, data: {status, statusHistory: {create: {toStatus: status, changedByUserId: userId, reason: `${dto.action}: ${stage}`}}}});
       const notice = journeyNotification(proCancel ? 'PRO_CANCEL' : dto.action, stage);
       await this.notify(tx, isClient ? snapshot.request.provider.userId : snapshot.request.client.userId, id, notice.title, notice.body, stage);
@@ -321,7 +321,7 @@ export class JourneyService {
         // Confirming from DISPUTED means the issue was resolved (in chat or
         // with support): un-freeze the payment back to HELD so the release
         // below pays the pro instead of stranding the money in DISPUTED.
-        if (snapshot.stage === 'DISPUTED') await this.payments?.resolveDisputeForRequest(id, userId).catch(() => undefined);
+        if (snapshot.stage === JourneyStage.DISPUTED) await this.payments?.resolveDisputeForRequest(id, userId).catch(() => undefined);
         await this.payments.releaseForRequest(id, userId).catch(() => undefined);
       }
       if (dto.action === 'ISSUE') await this.payments.markDisputed(id, userId).catch(() => undefined);
@@ -332,7 +332,7 @@ export class JourneyService {
           && Date.now() > arrivalTarget.getTime() + PLUS_ARRIVAL_GRACE_MS
           && await isPlusClient(this.db, snapshot.request.client.userId)) {
         await this.payments.postPenalty(snapshot.request.professionalProfileId, id,
-          PENALTY_LATE_ARRIVAL_Paisa, 'LATE_ARRIVAL').catch(() => undefined);
+          PENALTY_LATE_ARRIVAL_Paisa, PenaltyReason.LATE_ARRIVAL).catch(() => undefined);
       }
     }
     await this.push.dispatch(id).catch(() => undefined);
@@ -344,10 +344,10 @@ export class JourneyService {
   }
 
   async expire(id?: string, userId?: string) {
-    const due = await this.db.serviceJourney.findMany({where: {stage: 'PENDING', expiresAt: {lte: new Date()}, ...(id ? {requestId: id} : {}), ...(userId ? {request: {OR: [{client: {userId}}, {provider: {userId}}]}} : {})}, include: {request: {include: {client: true, provider: {include: {presence: true}}}}}, take: 50});
+    const due = await this.db.serviceJourney.findMany({where: {stage: JourneyStage.PENDING, expiresAt: {lte: new Date()}, ...(id ? {requestId: id} : {}), ...(userId ? {request: {OR: [{client: {userId}}, {provider: {userId}}]}} : {})}, include: {request: {include: {client: true, provider: {include: {presence: true}}}}}, take: 50});
     for (const j of due) {
       const expired = await this.db.$transaction(async tx => {
-        const claimed = await tx.serviceJourney.updateMany({where: {requestId: j.requestId, stage: 'PENDING'}, data: {stage: 'EXPIRED', revision: {increment: 1}}});
+        const claimed = await tx.serviceJourney.updateMany({where: {requestId: j.requestId, stage: JourneyStage.PENDING}, data: {stage: JourneyStage.EXPIRED, revision: {increment: 1}}});
         if (!claimed.count) return false;
         await tx.serviceRequest.update({where: {id: j.requestId}, data: {status: 'DECLINED', statusHistory: {create: {toStatus: 'DECLINED', changedByUserId: j.request.client.userId, reason: 'Acceptance window expired'}}}});
         await this.notify(tx, j.request.client.userId, j.requestId, 'Request expired', 'No acceptance was received. You can choose another professional.', 'EXPIRED');
@@ -360,7 +360,7 @@ export class JourneyService {
         if (j.request.provider.presence?.online && this.payments
             && await isPlusClient(this.db, j.request.client.userId)) {
           await this.payments.postPenalty(j.request.professionalProfileId, j.requestId,
-            PENALTY_LATE_ACCEPT_Paisa, 'LATE_ACCEPT').catch(() => undefined);
+            PENALTY_LATE_ACCEPT_Paisa, PenaltyReason.LATE_ACCEPT).catch(() => undefined);
         }
         await this.push.dispatch(j.requestId).catch(() => undefined);
         this.realtime.emitUserUpdate(j.request.client.userId, 'service-requests');

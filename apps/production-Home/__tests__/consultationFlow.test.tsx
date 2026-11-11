@@ -32,7 +32,7 @@ import {Input} from '../src/components/ui/Input';
 
 const engineer = {
   fullName: 'Arun Prakash',
-  consultationFee: 499,
+  consultationFeePaisa: 49900,
   specializations: ['Structural Design', 'Site Plan Approval'],
 } as EngineerProfileDto;
 

@@ -4,7 +4,7 @@ const req = (over: Record<string, unknown> = {}) => ({id: 'req-1', status: 'ACCE
   projectTitle: 'Wall crack', projectDescription: 'Fix', propertyType: 'Flat',
   locationAddress: 'Addr', latitude: 13, longitude: 80, createdAt: new Date(),
   client: {userId: 'client', fullName: 'Client'},
-  engineer: {consultationFee: 3500, profile: {userId: 'eng', fullName: 'Eng'}}, ...over});
+  engineer: {consultationFeePaisa: 350000, profile: {userId: 'eng', fullName: 'Eng'}}, ...over});
 
 function setup(row: any) {
   const tx: any = {

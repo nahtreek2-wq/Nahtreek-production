@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import { RequestStatus } from '@prisma/client';
+import { NotificationKind, RequestStatus } from '@prisma/client';
 import { randomInt } from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateRequestDto } from './dto/create-request.dto';
@@ -66,7 +66,7 @@ export class RequestsService {
           latitude: dto.latitude,
           longitude: dto.longitude,
           preferredStartDate: dto.preferredStartDate ? new Date(dto.preferredStartDate) : undefined,
-          budgetEstimate: dto.budgetEstimate,
+          budgetEstimatePaisa: dto.budgetEstimatePaisa,
           status: RequestStatus.PENDING,
         },
         include: { client: true, engineer: { include: { profile: true } } },
@@ -82,7 +82,7 @@ export class RequestsService {
       await tx.notification.create({
         data: {
           userId: engineer.profile.userId,
-          kind: 'request',
+          kind: NotificationKind.request,
           title: plus ? 'Plus priority request' : 'New client request',
           body: plus
             ? `${client.fullName} (Plus member) sent a priority request for ${request.projectTitle}.`
@@ -161,7 +161,7 @@ export class RequestsService {
       await tx.notification.create({
         data: {
           userId: byClient ? request.engineer.profile.userId : request.client.userId,
-          kind: 'request',
+          kind: NotificationKind.request,
           title: byClient ? 'Client cancelled a request' : 'Engineer cancelled a request',
           body: byClient
             ? `${request.projectTitle} was cancelled by the client.`
@@ -201,7 +201,7 @@ export class RequestsService {
         include: {client: true, engineer: {include: {profile: true}}}});
       await tx.requestStatusHistory.create({data: {engineerRequestId: request.id,
         fromStatus: request.status, toStatus: request.status, changedByUserId: userId}});
-      await tx.notification.create({data: {userId: request.engineer.profile.userId, kind: 'request',
+      await tx.notification.create({data: {userId: request.engineer.profile.userId, kind: NotificationKind.request,
         title: 'Consultation time changed',
         body: `The client picked a new time for ${request.projectTitle}. Tap to review it.`,
         data: {destination: 'pro-request', requestId: request.id, engineerRequestId: request.id}}});
@@ -233,7 +233,7 @@ export class RequestsService {
     await this.prisma.notification.create({
       data: {
         userId: request.engineer.profile.userId,
-        kind: 'review',
+        kind: NotificationKind.review,
         title: 'New client review',
         body: `You received a ${review.rating}-star review for ${request.projectTitle}.`,
         data: { destination: 'pro-reviews', requestId: request.id, engineerRequestId: request.id, rating: review.rating },
@@ -309,7 +309,7 @@ export class RequestsService {
         await this.prisma.engineerRequest.update({ where: { id }, data: { completionCode: fresh, completionCodeAttempts: 0 } });
         await this.prisma.notification.create({ data: {
           userId: request.client.userId,
-          kind: 'request',
+          kind: NotificationKind.request,
           title: 'Completion code',
           body: `${request.engineer.profile.fullName} is finishing ${request.projectTitle}. Your completion code is ${fresh} — share it only after the work is done.`,
           data: { destination: 'engineer-request', requestId: id, engineerRequestId: id, status: request.status },
@@ -348,14 +348,14 @@ export class RequestsService {
           longitude: Number.isFinite(opts?.longitude) ? opts!.longitude : undefined,
         },
       });
-      const fee = request.engineer.consultationFee;
+      const fee = request.engineer.consultationFeePaisa;
       await tx.notification.create({
         data: {
           userId: request.client.userId,
-          kind: 'request',
+          kind: NotificationKind.request,
           title: nextStatus === RequestStatus.COMPLETED ? 'Work completed' : nextStatus === RequestStatus.ACCEPTED ? 'Engineer accepted' : 'Request status updated',
           body: nextStatus === RequestStatus.COMPLETED && fee !== null && fee !== undefined
-            ? `${request.engineer.profile.fullName} marked ${request.projectTitle} complete. The ₹${Number(fee).toLocaleString('en-IN')} consultation fee can now be paid in the request.`
+            ? `${request.engineer.profile.fullName} marked ${request.projectTitle} complete. The ₹${(fee / 100).toLocaleString('en-IN')} consultation fee can now be paid in the request.`
             : nextStatus === RequestStatus.ACCEPTED
             ? `${request.engineer.profile.fullName} accepted ${request.projectTitle}. Your completion code is ${issuedCode} — share it only after the work is done.`
             : `${request.engineer.profile.fullName} changed ${request.projectTitle} to ${nextStatus.replace('_', ' ').toLowerCase()}.`,
@@ -421,7 +421,7 @@ export class RequestsService {
       status: RequestStatus;
       createdAt: Date;
       completionCode?: string | null;
-      engineer: { profile: { fullName: string; avatarUrl?: string | null }; consultationFee?: number | null };
+      engineer: { profile: { fullName: string; avatarUrl?: string | null }; consultationFeePaisa?: number | null };
       client?: { fullName: string; avatarUrl?: string | null };
       statusHistory?: unknown[];
       reviews?: { rating: number; comment: string; createdAt: Date }[];
@@ -438,7 +438,7 @@ export class RequestsService {
       engineerProfileId: request.engineerProfileId,
       engineerName: request.engineer.profile.fullName,
       engineerAvatarUrl: request.engineer.profile.avatarUrl ?? undefined,
-      consultationFee: request.engineer.consultationFee ?? undefined,
+      consultationFeePaisa: request.engineer.consultationFeePaisa ?? undefined,
       preferredStartDate: request.preferredStartDate
         ? (request.preferredStartDate instanceof Date ? request.preferredStartDate.toISOString() : request.preferredStartDate)
         : undefined,

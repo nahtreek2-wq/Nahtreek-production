@@ -144,7 +144,7 @@ describe('EngineerRow targets', () => {
     distanceKm: 3,
     nextSlot: 'Tomorrow 10:00',
     bio: 'Safe designs for homes.',
-    consultationFee: 499,
+    consultationFeePaisa: 49900,
   };
 
   beforeEach(() => {

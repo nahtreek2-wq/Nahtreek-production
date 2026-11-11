@@ -9,7 +9,7 @@ import {inr} from '../utils/format';
 import type {RootStackParamList} from '../navigation/types';
 
 /** Blinkit-style offer strip on booking sheets. Every number comes from the server plan card; hidden for Plus members and when offline. */
-export function PlusPerkStrip({consultFee}: {consultFee?: number}) {
+export function PlusPerkStrip({consultFeePaisa}: {consultFeePaisa?: number}) {
   const [plan, setPlan] = useState<AiPlanView | null>(null);
   const [effective, setEffective] = useState(false);
   useEffect(() => {
@@ -17,13 +17,13 @@ export function PlusPerkStrip({consultFee}: {consultFee?: number}) {
     fetchAiSubscription().then(view => setEffective(view.effective)).catch(() => undefined);
   }, []);
   if (!plan || effective) return null;
-  return <PlusPerkStripInner plan={plan} consultFee={consultFee} />;
+  return <PlusPerkStripInner plan={plan} consultFeePaisa={consultFeePaisa} />;
 }
 
-function PlusPerkStripInner({plan, consultFee}: {plan: AiPlanView; consultFee?: number}) {
+function PlusPerkStripInner({plan, consultFeePaisa}: {plan: AiPlanView; consultFeePaisa?: number}) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const savings = consultFee != null
-    ? Math.min(Math.floor((consultFee * 100 * plan.consultDiscountBps) / 10000), plan.consultDiscountCapPaisa)
+  const savings = consultFeePaisa != null
+    ? Math.min(Math.floor((consultFeePaisa * plan.consultDiscountBps) / 10000), plan.consultDiscountCapPaisa)
     : 0;
   return (
     <Pressable
@@ -34,7 +34,7 @@ function PlusPerkStripInner({plan, consultFee}: {plan: AiPlanView; consultFee?: 
       <Icon name={ICONS.star} size={20} color={Colors.amber} />
       <View style={styles.copy}>
         <Text style={styles.title}>
-          Plus members{consultFee != null && savings > 0 ? ` save ${inr(savings)} on this booking` : ' skip the wait'}
+          Plus members{consultFeePaisa != null && savings > 0 ? ` save ${inr(savings)} on this booking` : ' skip the wait'}
         </Text>
         <Text style={styles.body} numberOfLines={2}>
           {Math.round(plan.acceptWindowMs / 60000)}-min accept · late pros pay {inr(plan.lateArrivalPenaltyPaisa)} · consult discounts up to {inr(plan.consultDiscountCapPaisa)}

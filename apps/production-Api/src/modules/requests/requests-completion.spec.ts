@@ -51,7 +51,7 @@ function transitionSetup(found: Record<string, unknown>, updated: Record<string,
 
 const acceptedParties = {
   client: {userId: 'client-user', fullName: 'Asha'},
-  engineer: {profile: {userId: 'eng-user', fullName: 'Eng Narayanan'}, consultationFee: 3500, professionalProfileId: 'pro-1'},
+  engineer: {profile: {userId: 'eng-user', fullName: 'Eng Narayanan'}, consultationFeePaisa: 350000, professionalProfileId: 'pro-1'},
 };
 
 describe('engineer completion proof', () => {
@@ -141,7 +141,7 @@ describe('completion code visibility', () => {
   function detailSetup(viewerUserId: string, plus = false) {
     const found = {...baseRequest, status: 'IN_PROGRESS', completionCode: '654321',
       client: {userId: 'client-user', fullName: 'Asha'},
-      engineer: {profile: {userId: 'eng-user', fullName: 'Eng Narayanan'}, consultationFee: 3500},
+      engineer: {profile: {userId: 'eng-user', fullName: 'Eng Narayanan'}, consultationFeePaisa: 350000},
       statusHistory: [], reviews: []};
     const prisma: any = {engineerRequest: {findFirst: jest.fn().mockResolvedValue(found)},
       aiSubscription: {findUnique: jest.fn().mockResolvedValue(plus

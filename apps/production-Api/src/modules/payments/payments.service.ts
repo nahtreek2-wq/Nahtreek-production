@@ -1,7 +1,8 @@
 import {BadRequestException, ConflictException, Injectable, NotFoundException, Optional, ServiceUnavailableException, UnauthorizedException} from '@nestjs/common';
-import {PaymentStatus, PayoutAccountStatus} from '@prisma/client';
+import {CollectionMode, JourneyStage, NotificationKind, PaymentStatus, PayoutAccountStatus, PenaltyReason, PenaltyStatus, SettlementStatus} from '@prisma/client';
 import {PrismaService} from '../../common/prisma/prisma.service';
 import {pagination} from '../platform/platform.service';
+import {TERMINAL_STAGES} from '../platform/journey.rules';
 import {PushService} from '../notifications/push.service';
 import {ReceiptEmailService} from '../notifications/receipt-email.service';
 import {ChatGateway} from '../chat/chat.gateway';
@@ -20,7 +21,7 @@ import {RefundPaymentDto, RegisterPayoutAccountDto, ResolveDisputeDto, VerifyPay
 // advice is delivered. Webhooks are the source of truth for asynchronous
 // outcomes; every handler is idempotent and every money mutation is guarded
 // by the payment status.
-const PAYABLE_STAGES = ['ARRIVED', 'IN_PROGRESS', 'AWAITING_CONFIRMATION'];
+const PAYABLE_STAGES: JourneyStage[] = [JourneyStage.ARRIVED, JourneyStage.IN_PROGRESS, JourneyStage.AWAITING_CONFIRMATION];
 // Consultation fees open once the engineer accepts and stay open through
 // completion. PENDING has no rendered consultation yet; DECLINED and
 // CANCELLED are terminal and can never be paid.
@@ -32,14 +33,14 @@ type BookingRef = {serviceRequestId?: string; engineerRequestId?: string};
 type PartyRequest = {
   id: string; status: string; description: string;
   client: {userId: string; fullName: string}; provider: {id: string; userId: string; fullName: string};
-  journey: {stage: string; quoteAmount: number | null; quoteAccepted: boolean; collectionMode: string;
+  journey: {stage: JourneyStage; quoteAmountPaisa: number | null; quoteAccepted: boolean; collectionMode: CollectionMode;
     collectedAmountPaisa: number | null; collectedMethod: string | null} | null;
 };
 
 type EngineerPartyRequest = {
   id: string; status: string; projectTitle: string;
   client: {userId: string; fullName: string};
-  engineer: {professionalProfileId: string; consultationFee: number | null; profile: {userId: string; fullName: string}};
+  engineer: {professionalProfileId: string; consultationFeePaisa: number | null; profile: {userId: string; fullName: string}};
 };
 
 @Injectable()
@@ -114,13 +115,13 @@ export class PaymentsService {
     const request = await this.partyRequest(payment.serviceRequestId!).catch(() => null);
     return {kind: 'service' as const, requestId: payment.serviceRequestId!,
       clientUserId: request?.client.userId, providerUserId: request?.provider.userId,
-      closed: !request || ['COMPLETED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(request.journey?.stage ?? '')};
+      closed: !request || TERMINAL_STAGES.includes(request.journey?.stage ?? JourneyStage.PENDING)};
   }
 
   private async tell(userIds: string[], ref: BookingRef & {requestId: string}, title: string, body: string, action: string) {
     const engineer = !!ref.engineerRequestId;
     await this.db.notification.createMany({data: userIds.map(userId =>
-      ({userId, kind: 'payment', title, body, data: engineer
+      ({userId, kind: NotificationKind.payment, title, body, data: engineer
         ? {engineerRequestId: ref.engineerRequestId, requestId: ref.requestId, destination: 'engineer-request'}
         : {serviceRequestId: ref.serviceRequestId}}))});
     await this.db.auditLog.createMany({data: userIds.map(userId =>
@@ -195,10 +196,10 @@ export class PaymentsService {
 
   private viewOf(payment: {status: PaymentStatus; amountPaisa: number; platformFeePaisa: number; professionalAmountPaisa: number;
     currency: string; providerOrderId: string | null; paidAt: Date | null; releasedAt: Date | null; refundedAt: Date | null;
-    collectionMode?: string | null; settledAt?: Date | null}) {
+    collectionMode?: CollectionMode | null; settledAt?: Date | null}) {
     return {status: payment.status, amountPaisa: payment.amountPaisa, platformFeePaisa: payment.platformFeePaisa,
       professionalAmountPaisa: payment.professionalAmountPaisa, currency: payment.currency,
-      collectionMode: payment.collectionMode ?? 'ONLINE', settledAt: payment.settledAt ?? null,
+      collectionMode: payment.collectionMode ?? CollectionMode.ONLINE, settledAt: payment.settledAt ?? null,
       razorpayOrderId: payment.providerOrderId, paidAt: payment.paidAt, releasedAt: payment.releasedAt, refundedAt: payment.refundedAt};
   }
 
@@ -206,12 +207,12 @@ export class PaymentsService {
     this.requireEnabled();
     const request = await this.partyRequest(serviceRequestId);
     if (request.client.userId !== userId) throw new NotFoundException('Booking not found');
-    if (!request.journey!.quoteAccepted || request.journey!.quoteAmount === null)
+    if (!request.journey!.quoteAccepted || request.journey!.quoteAmountPaisa === null)
       throw new BadRequestException('A quote must be approved before payment');
     if (!PAYABLE_STAGES.includes(request.journey!.stage)) throw new ConflictException('This booking can no longer be paid');
-    if (request.journey!.collectionMode === 'AT_HOME')
+    if (request.journey!.collectionMode === CollectionMode.AT_HOME)
       throw new ConflictException('This booking is pay-at-home. No online payment is needed.');
-    const amountPaisa = Math.round(request.journey!.quoteAmount * 100);
+    const amountPaisa = request.journey!.quoteAmountPaisa;
     if (!Number.isFinite(amountPaisa) || amountPaisa < 100) throw new BadRequestException('The approved quote is below the minimum charge');
     const existing = await this.db.payment.findUnique({where: {serviceRequestId}});
     if (existing) {
@@ -254,9 +255,9 @@ export class PaymentsService {
         throw new ConflictException('This booking can no longer be paid');
       throw new BadRequestException('Payment opens after the engineer accepts the request');
     }
-    if (request.engineer.consultationFee === null || request.engineer.consultationFee === undefined)
+    if (request.engineer.consultationFeePaisa === null || request.engineer.consultationFeePaisa === undefined)
       throw new BadRequestException('This engineer has no consultation fee set. Agree the fee in chat before paying.');
-    const amountPaisa = Math.round(request.engineer.consultationFee * 100);
+    const amountPaisa = request.engineer.consultationFeePaisa;
     if (!Number.isFinite(amountPaisa) || amountPaisa < 100) throw new BadRequestException('The consultation fee is below the minimum charge');
     const existing = await this.db.payment.findUnique({where: {engineerRequestId}});
     if (existing) {
@@ -333,7 +334,7 @@ export class PaymentsService {
     if (!Number.isFinite(amountPaisa) || amountPaisa < 100) throw new BadRequestException('Enter the amount received (minimum ₹1)');
     const member = (await this.memberships?.isEffectiveByProfile(request.engineer.professionalProfileId).catch(() => false)) ?? false;
     const {platformFeePaisa, professionalAmountPaisa} = await this.feeSplitFor(request.engineer.professionalProfileId, amountPaisa, member);
-    const data = {amountPaisa, platformFeePaisa, professionalAmountPaisa, collectionMode: 'AT_HOME',
+    const data = {amountPaisa, platformFeePaisa, professionalAmountPaisa, collectionMode: CollectionMode.AT_HOME,
       collectedAmountPaisa: amountPaisa, collectedMethod: dto.method, status: PaymentStatus.COLLECTED_UNSETTLED,
       providerOrderId: null, providerPaymentId: null, providerTransferId: null};
     const row = existing
@@ -357,14 +358,14 @@ export class PaymentsService {
   // posts converge on the first row; anything else rethrows for the caller
   // to contain so the booking action itself never fails.
   async postPenalty(professionalProfileId: string, serviceRequestId: string, amountPaisa: number,
-      reason: 'LATE_ACCEPT' | 'LATE_ARRIVAL') {
+      reason: PenaltyReason) {
     try {
       const row = await this.db.professionalPenalty.create({data: {professionalProfileId, serviceRequestId, amountPaisa, reason}});
       const request = await this.partyRequest(serviceRequestId).catch(() => null);
-      const label = reason === 'LATE_ACCEPT' ? 'slow acceptance' : 'late arrival';
+      const label = reason === PenaltyReason.LATE_ACCEPT ? 'slow acceptance' : 'late arrival';
       const amount = `₹${(amountPaisa / 100).toLocaleString('en-IN')}`;
       if (request) {
-        await this.db.notification.create({data: {userId: request.provider.userId, kind: 'payment',
+        await this.db.notification.create({data: {userId: request.provider.userId, kind: NotificationKind.payment,
           title: 'Late penalty added to dues',
           body: `${amount} for ${label} on a Plus priority booking. Settle it with your commission dues.`,
           data: {serviceRequestId: request.id}}});
@@ -418,7 +419,7 @@ export class PaymentsService {
       return this.viewOf(payment);
     if (payment.status !== PaymentStatus.ORDER_CREATED || payment.providerOrderId !== dto.razorpayOrderId)
       throw new ConflictException('This payment cannot be confirmed in its current state');
-    if (['COMPLETED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(request.journey!.stage))
+    if (TERMINAL_STAGES.includes(request.journey!.stage))
       throw new ConflictException('This booking is closed and can no longer be paid');
     if (!this.provider.verifyPaymentSignature(dto.razorpayOrderId, dto.razorpayPaymentId, dto.razorpaySignature))
       throw new UnauthorizedException('Invalid payment signature');
@@ -521,7 +522,7 @@ export class PaymentsService {
     const payment = await this.db.payment.findUnique({where: {serviceRequestId: dto.serviceRequestId}});
     if (!payment) throw new NotFoundException('No payment for this booking');
     if (payment.status !== PaymentStatus.ORDER_CREATED || !payment.providerOrderId) return this.viewOf(payment);
-    if (['COMPLETED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(request.journey!.stage))
+    if (TERMINAL_STAGES.includes(request.journey!.stage))
       throw new ConflictException('This booking is closed and can no longer be paid');
     const remote = await this.capturedForOrder(payment.providerOrderId);
     if (!remote) return this.viewOf(payment);
@@ -787,7 +788,7 @@ export class PaymentsService {
     if (payment.status !== PaymentStatus.DISPUTED) throw new ConflictException('Only disputed payments can be resolved');
     await this.db.auditLog.create({data: {userId: adminUserId, entity: 'Payment', entityId: payment.id,
       action: 'PAYMENT_DISPUTE_RESOLVED', metadata: {decision: dto.decision, note: dto.note}}});
-    const restored = payment.collectionMode === 'AT_HOME' && !payment.providerTransferId
+    const restored = payment.collectionMode === CollectionMode.AT_HOME && !payment.providerTransferId
       ? PaymentStatus.COLLECTED_UNSETTLED
       : payment.providerTransferId ? PaymentStatus.HELD : PaymentStatus.PAID;
     await this.db.payment.update({where: {id: payment.id}, data: {status: restored}});
@@ -929,7 +930,7 @@ export class PaymentsService {
   async ensureAtHomeCollection(serviceRequestId: string) {
     const request = await this.partyRequest(serviceRequestId);
     const journey = request.journey!;
-    if (journey.collectionMode !== 'AT_HOME') return null;
+    if (journey.collectionMode !== CollectionMode.AT_HOME) return null;
     if (!journey.collectedAmountPaisa || journey.collectedAmountPaisa < 100 || !journey.collectedMethod)
       throw new ConflictException('Collection not recorded yet. The provider must submit it first.');
     const existing = await this.db.payment.findUnique({where: {serviceRequestId}});
@@ -939,7 +940,7 @@ export class PaymentsService {
     try {
       const created = await this.db.payment.create({data: {professionalProfileId: request.provider.id, serviceRequestId,
         amountPaisa: journey.collectedAmountPaisa, platformFeePaisa, professionalAmountPaisa,
-        collectionMode: 'AT_HOME', status: PaymentStatus.COLLECTED_UNSETTLED,
+        collectionMode: CollectionMode.AT_HOME, status: PaymentStatus.COLLECTED_UNSETTLED,
         idempotencyKey: `collect-${serviceRequestId}`}});
       await this.tell([request.client.userId, request.provider.userId], {serviceRequestId: request.id, requestId: request.id},
         'Payment collected at home',
@@ -968,7 +969,7 @@ export class PaymentsService {
     const rows = await this.db.payment.findMany({where: {professionalProfileId: profile.id, status: PaymentStatus.COLLECTED_UNSETTLED},
       orderBy: {createdAt: 'asc'},
       select: {id: true, serviceRequestId: true, engineerRequestId: true, amountPaisa: true, platformFeePaisa: true, createdAt: true}});
-    const penalties = await this.db.professionalPenalty.findMany({where: {professionalProfileId: profile.id, status: 'PENDING'},
+    const penalties = await this.db.professionalPenalty.findMany({where: {professionalProfileId: profile.id, status: PenaltyStatus.PENDING},
       orderBy: {createdAt: 'asc'},
       select: {id: true, serviceRequestId: true, amountPaisa: true, reason: true, createdAt: true}});
     const duesPaisa = rows.reduce((sum, row) => sum + row.platformFeePaisa, 0)
@@ -992,26 +993,29 @@ export class PaymentsService {
     const profile = await this.ownProfile(userId);
     const rows = await this.db.payment.findMany({where: {professionalProfileId: profile.id, status: PaymentStatus.COLLECTED_UNSETTLED},
       select: {id: true, platformFeePaisa: true}});
-    const penalties = await this.db.professionalPenalty.findMany({where: {professionalProfileId: profile.id, status: 'PENDING'},
+    const penalties = await this.db.professionalPenalty.findMany({where: {professionalProfileId: profile.id, status: PenaltyStatus.PENDING},
       select: {id: true, amountPaisa: true}});
     const totalPaisa = rows.reduce((sum, row) => sum + row.platformFeePaisa, 0)
       + penalties.reduce((sum, row) => sum + row.amountPaisa, 0);
     if ((!rows.length && !penalties.length) || totalPaisa < 100) throw new BadRequestException('No commission dues to settle');
     const paymentIds = rows.map(row => row.id).sort();
-    const open = await this.db.commissionSettlement.findFirst({where: {professionalProfileId: profile.id, status: 'ORDER_CREATED'},
+    const open = await this.db.commissionSettlement.findFirst({where: {professionalProfileId: profile.id, status: SettlementStatus.ORDER_CREATED},
       orderBy: {createdAt: 'desc'}});
     if (open && open.providerOrderId && open.amountPaisa === totalPaisa &&
         [...open.paymentIds].sort().join(',') === paymentIds.join(','))
       return {settlementId: open.id, keyId: this.provider.keyId, orderId: open.providerOrderId, amountPaisa: totalPaisa, currency: open.currency};
-    if (open) await this.db.commissionSettlement.update({where: {id: open.id}, data: {status: 'FAILED'}});
+    if (open) await this.db.commissionSettlement.update({where: {id: open.id}, data: {status: SettlementStatus.FAILED}});
+    // F-010: paymentIds stays the immutable snapshot; the junction rows are the
+    // queryable membership (nested create keeps both in one atomic write).
     const settlement = await this.db.commissionSettlement.create({data: {professionalProfileId: profile.id, paymentIds,
-      amountPaisa: totalPaisa, idempotencyKey: `stl-${profile.id}-${Date.now()}`}});
+      amountPaisa: totalPaisa, idempotencyKey: `stl-${profile.id}-${Date.now()}`,
+      settledPayments: {create: paymentIds.map(paymentId => ({paymentId}))}}});
     let order: {id: string};
     try {
       order = await this.provider.createOrder({amountPaisa: totalPaisa, currency: 'INR', receipt: `stl-${settlement.id}`,
         notes: {settlementId: settlement.id, professionalProfileId: profile.id}});
     } catch (error) {
-      await this.db.commissionSettlement.update({where: {id: settlement.id}, data: {status: 'FAILED'}});
+      await this.db.commissionSettlement.update({where: {id: settlement.id}, data: {status: SettlementStatus.FAILED}});
       this.toProviderError(error);
     }
     const updated = await this.db.commissionSettlement.update({where: {id: settlement.id}, data: {providerOrderId: order!.id}});
@@ -1023,9 +1027,9 @@ export class PaymentsService {
     const profile = await this.ownProfile(userId);
     const settlement = await this.db.commissionSettlement.findUnique({where: {id: dto.settlementId}});
     if (!settlement || settlement.professionalProfileId !== profile.id) throw new NotFoundException('Settlement not found');
-    if (settlement.providerPaymentId === dto.razorpayPaymentId && settlement.status === 'SETTLED')
+    if (settlement.providerPaymentId === dto.razorpayPaymentId && settlement.status === SettlementStatus.SETTLED)
       return {settled: true, duplicate: true};
-    if (settlement.status !== 'ORDER_CREATED' || settlement.providerOrderId !== dto.razorpayOrderId)
+    if (settlement.status !== SettlementStatus.ORDER_CREATED || settlement.providerOrderId !== dto.razorpayOrderId)
       throw new ConflictException('This settlement cannot be confirmed in its current state');
     if (!this.provider.verifyPaymentSignature(dto.razorpayOrderId, dto.razorpayPaymentId, dto.razorpaySignature))
       throw new UnauthorizedException('Invalid payment signature');
@@ -1043,41 +1047,44 @@ export class PaymentsService {
 
   // Atomic claim so app-verify and webhook converge on one winner.
   private async applySettlementCapture(settlementId: string, razorpayPaymentId: string) {
-    const claimed = await this.db.commissionSettlement.updateMany({where: {id: settlementId, status: 'ORDER_CREATED', providerPaymentId: null},
-      data: {providerPaymentId: razorpayPaymentId, status: 'SETTLED', settledAt: new Date()}});
+    const claimed = await this.db.commissionSettlement.updateMany({where: {id: settlementId, status: SettlementStatus.ORDER_CREATED, providerPaymentId: null},
+      data: {providerPaymentId: razorpayPaymentId, status: SettlementStatus.SETTLED, settledAt: new Date()}});
     if (!claimed.count) {
       const current = await this.db.commissionSettlement.findUnique({where: {id: settlementId}});
-      if (current?.status === 'SETTLED') return {settled: true, duplicate: true};
+      if (current?.status === SettlementStatus.SETTLED) return {settled: true, duplicate: true};
       throw new ConflictException('This settlement was already processed');
     }
     const settlement = await this.db.commissionSettlement.findUniqueOrThrow({where: {id: settlementId}});
-    await this.db.payment.updateMany({where: {id: {in: settlement.paymentIds}, status: PaymentStatus.COLLECTED_UNSETTLED},
+    // Junction first, snapshot fallback for rows settled before the backfill.
+    const links = await this.db.settlementPayment.findMany({where: {settlementId}, select: {paymentId: true}});
+    const memberIds = links.length ? links.map(link => link.paymentId) : settlement.paymentIds;
+    await this.db.payment.updateMany({where: {id: {in: memberIds}, status: PaymentStatus.COLLECTED_UNSETTLED},
       data: {status: PaymentStatus.SETTLED, settledAt: new Date()}});
     // Penalties settle with the same order: the total already included every
     // pending one, so anything still pending belonged to this settlement. A
     // penalty posted between order and verify fails the amount match first.
-    const cleared = await this.db.professionalPenalty.updateMany({where: {professionalProfileId: settlement.professionalProfileId, status: 'PENDING'},
-      data: {status: 'SETTLED', settledAt: new Date()}});
+    const cleared = await this.db.professionalPenalty.updateMany({where: {professionalProfileId: settlement.professionalProfileId, status: PenaltyStatus.PENDING},
+      data: {status: PenaltyStatus.SETTLED, settledAt: new Date()}});
     const profile = await this.db.professionalProfile.findUniqueOrThrow({where: {id: settlement.professionalProfileId}});
-    await this.db.notification.create({data: {userId: profile.userId, kind: 'payment', title: 'Commission dues cleared',
-      body: `₹${(settlement.amountPaisa / 100).toLocaleString('en-IN')} settled for ${settlement.paymentIds.length} job(s)${cleared.count ? ` and ${cleared.count} penalt${cleared.count === 1 ? 'y' : 'ies'}` : ''}. New jobs are unlocked.`,
+    await this.db.notification.create({data: {userId: profile.userId, kind: NotificationKind.payment, title: 'Commission dues cleared',
+      body: `₹${(settlement.amountPaisa / 100).toLocaleString('en-IN')} settled for ${memberIds.length} job(s)${cleared.count ? ` and ${cleared.count} penalt${cleared.count === 1 ? 'y' : 'ies'}` : ''}. New jobs are unlocked.`,
       data: {settlementId: settlement.id}}});
     await this.db.auditLog.create({data: {userId: profile.userId, entity: 'CommissionSettlement', entityId: settlement.id,
-      action: 'DUES_SETTLED', metadata: {amountPaisa: settlement.amountPaisa, jobs: settlement.paymentIds.length, penalties: cleared.count}}});
+      action: 'DUES_SETTLED', metadata: {amountPaisa: settlement.amountPaisa, jobs: memberIds.length, penalties: cleared.count}}});
     this.realtime.emitUserUpdate(profile.userId, 'notifications');
     const settledAmount = `₹${(settlement.amountPaisa / 100).toLocaleString('en-IN')}`;
     await this.receipt(profile.userId, `Commission dues settled · ${settledAmount}`,
-      [`Settled: ${settledAmount} for ${settlement.paymentIds.length} job(s).`,
+      [`Settled: ${settledAmount} for ${memberIds.length} job(s).`,
         `Date: ${new Date().toLocaleString('en-IN', {timeZone: 'Asia/Kolkata'})}`,
         'New jobs are unlocked. Thank you for settling promptly.']);
-    return {settled: true, settledJobs: settlement.paymentIds.length, settledPenalties: cleared.count, amountPaisa: settlement.amountPaisa};
+    return {settled: true, settledJobs: memberIds.length, settledPenalties: cleared.count, amountPaisa: settlement.amountPaisa};
   }
 
   async duesSummary() {
     const rows = await this.db.payment.groupBy({by: ['professionalProfileId'], where: {status: PaymentStatus.COLLECTED_UNSETTLED},
       _count: {_all: true}, _sum: {platformFeePaisa: true, amountPaisa: true}});
     const penaltyRows: {professionalProfileId: string; _count: {_all: number}; _sum: {amountPaisa: number | null}}[] =
-      await this.db.professionalPenalty?.groupBy({by: ['professionalProfileId'], where: {status: 'PENDING'},
+      await this.db.professionalPenalty?.groupBy({by: ['professionalProfileId'], where: {status: PenaltyStatus.PENDING},
         _count: {_all: true}, _sum: {amountPaisa: true}}).catch(() => []) ?? [];
     const byId = new Map(rows.map(row => [row.professionalProfileId, row]));
     for (const pen of penaltyRows) {
@@ -1128,9 +1135,9 @@ export class PaymentsService {
     if (!payment) throw new NotFoundException('No payment for this booking');
     // The engineer declares at-home cash/UPI against this reference: without
     // it the declare form cannot show what the visit should cost.
-    const fee = request.engineer.consultationFee;
+    const fee = request.engineer.consultationFeePaisa;
     return {...this.viewOf(payment),
-      ...(fee === null || fee === undefined ? {} : {expectedAmountPaisa: Math.round(fee * 100)})};
+      ...(fee === null || fee === undefined ? {} : {expectedAmountPaisa: fee})};
   }
 
   async summary() {
@@ -1182,7 +1189,7 @@ export class PaymentsService {
     if (event.event !== 'payment.captured' || !paymentEntity?.id) return {ok: true, ignored: true};
     const settlement = await this.db.commissionSettlement.findFirst({where: {providerPaymentId: paymentEntity.id}})
       .catch(() => null);
-    if (settlement?.status === 'SETTLED') return {ok: true, duplicate: true};
+    if (settlement?.status === SettlementStatus.SETTLED) return {ok: true, duplicate: true};
     let remote: {status: string; order_id: string; amount: number};
     try {
       remote = await this.provider.fetchPayment(paymentEntity.id);
@@ -1191,7 +1198,7 @@ export class PaymentsService {
     }
     if (remote.status !== 'captured') return {ok: true};
     const target = await this.db.commissionSettlement.findUnique({where: {providerOrderId: remote.order_id}}).catch(() => null);
-    if (!target || target.status !== 'ORDER_CREATED' || remote.amount !== target.amountPaisa) return {ok: true, ignored: true};
+    if (!target || target.status !== SettlementStatus.ORDER_CREATED || remote.amount !== target.amountPaisa) return {ok: true, ignored: true};
     try {
       return await this.applySettlementCapture(target.id, paymentEntity.id);
     } catch {

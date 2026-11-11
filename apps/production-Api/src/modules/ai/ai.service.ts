@@ -190,7 +190,7 @@ export class AiService {
       longitude: dto.longitude,
       projectSizeSqFt: dto.projectSizeSqFt,
       preferredStartDate: dto.preferredStartDate,
-      budgetEstimate: dto.budgetEstimate,
+      budgetEstimatePaisa: dto.budgetEstimatePaisa,
     }, userId);
     await this.prisma.aiMessage.create({
       data: {conversationId: plan.conversationId, type: AiMessageType.SERVICE_RECOMMENDATION, content: `Requested quotes from a verified professional for ${plan.title}.`, metadata: {planId, requestId: request.id}},

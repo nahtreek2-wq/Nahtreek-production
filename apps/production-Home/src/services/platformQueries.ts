@@ -56,7 +56,7 @@ export interface ServiceProvider {
   baseCity: string;
   isAvailable: boolean;
   yearsOfExperience: number;
-  startingPrice?: number;
+  startingPricePaisa?: number;
   averageRating: number;
   totalReviewsCount: number;
   baseLatitude: number;

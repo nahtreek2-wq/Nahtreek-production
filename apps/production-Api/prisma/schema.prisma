@@ -113,6 +113,67 @@ enum AiDocumentStatus {
   FAILED
 }
 
+// F-006: labels intentionally match the legacy String values so the API wire
+// format is unchanged (enums serialize as the same strings).
+enum JourneyStage {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EN_ROUTE
+  ARRIVED
+  IN_PROGRESS
+  AWAITING_CONFIRMATION
+  DISPUTED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum CollectionMode {
+  ONLINE
+  AT_HOME
+}
+
+enum SettlementStatus {
+  ORDER_CREATED
+  SETTLED
+  FAILED
+}
+
+enum PenaltyStatus {
+  PENDING
+  SETTLED
+}
+
+enum PenaltyReason {
+  LATE_ACCEPT
+  LATE_ARRIVAL
+}
+
+enum PushState {
+  PENDING
+  SKIPPED
+  FAILED
+  SENT
+}
+
+enum NotificationKind {
+  chat
+  engineer
+  membership
+  message
+  offer
+  payment
+  reminder
+  request
+  review
+  service
+  support
+  system
+  tracking
+  verification
+}
+
 model User {
   id              String        @id @default(uuid())
   displayName     String?
@@ -194,7 +255,7 @@ model ProfessionalProfile {
   totalReviewsCount  Int                @default(0)
   isAvailable        Boolean            @default(true)
   serviceCategories  String[]           @default([])
-  startingPrice      Float?
+  startingPricePaisa Int? @map("startingPrice")
   baseCity           String             @default("")
   baseState          String             @default("")
   baseCityNorm       String             @default("")
@@ -218,7 +279,8 @@ model ProfessionalProfile {
   payments              Payment[]
   membership            Membership?
   memberPriority        Boolean                @default(false)
-  CommissionSettlement  CommissionSettlement[]
+  commissionSettlements CommissionSettlement[]
+  favoritedBy           Favorite[]
   penalties             ProfessionalPenalty[]
 
   @@index([baseCityNorm])
@@ -295,17 +357,17 @@ model ServiceJourney {
   idempotencyKey       String         @unique
   payloadHash          String
   mode                 String
-  stage                String         @default("PENDING")
+  stage                JourneyStage   @default(PENDING)
   recipientName        String
   recipientPhone       String
   scheduledAt          DateTime?
   expiresAt            DateTime
   etaMinutes           Int?
   arrivalTarget        DateTime?
-  quoteAmount          Float?
+  quoteAmountPaisa          Int? @map("quoteAmount")
   quoteScope           String?
   quoteAccepted        Boolean        @default(false)
-  collectionMode       String         @default("ONLINE")
+  collectionMode       CollectionMode @default(ONLINE)
   collectedAmountPaisa Int?
   collectedMethod      String?
   collectedAt          DateTime?
@@ -321,7 +383,7 @@ model ServiceJourney {
 }
 
 model EngineerProfile {
-  consultationFee       Float?
+  consultationFeePaisa       Int? @map("consultationFee")
   id                    String   @id @default(uuid())
   professionalProfileId String   @unique
   licenseNumber         String?  @unique
@@ -397,7 +459,7 @@ model EngineerRequest {
   latitude           Float
   longitude          Float
   preferredStartDate DateTime?
-  budgetEstimate     Float?
+  budgetEstimatePaisa     Int? @map("budgetEstimate")
   status             RequestStatus @default(PENDING)
   // Single-use completion proof: issued at ACCEPT, shown only to the client,
   // entered by the engineer to COMPLETE, nulled on use. Mirrors the service
@@ -431,6 +493,8 @@ model RequestStatusHistory {
   createdAt         DateTime       @default(now())
 
   request EngineerRequest @relation(fields: [engineerRequestId], references: [id], onDelete: Cascade)
+
+  @@index([engineerRequestId, createdAt])
 }
 
 model Review {
@@ -447,6 +511,9 @@ model Review {
   professional    ProfessionalProfile @relation(fields: [professionalProfileId], references: [id], onDelete: Restrict)
   engineerRequest EngineerRequest?    @relation(fields: [engineerRequestId], references: [id])
   serviceRequest  ServiceRequest?     @relation(fields: [serviceRequestId], references: [id])
+
+  @@index([professionalProfileId, createdAt])
+  @@index([clientProfileId, createdAt])
 }
 
 model Conversation {
@@ -472,6 +539,7 @@ model ConversationParticipant {
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([conversationId, userId])
+  @@index([userId])
 }
 
 model Message {
@@ -537,7 +605,7 @@ model Payment {
   professionalAmountPaisa Int
   currency                String        @default("INR")
   status                  PaymentStatus @default(NOT_STARTED)
-  collectionMode          String        @default("ONLINE")
+  collectionMode          CollectionMode @default(ONLINE)
   settledAt               DateTime?
   idempotencyKey          String        @unique
   paidAt                  DateTime?
@@ -551,6 +619,7 @@ model Payment {
   engineerRequest EngineerRequest?    @relation(fields: [engineerRequestId], references: [id], onDelete: Restrict)
   serviceRequest  ServiceRequest?     @relation(fields: [serviceRequestId], references: [id], onDelete: Restrict)
   events          PaymentEvent[]
+  settlementLinks SettlementPayment[]
 
   @@index([professionalProfileId, status, createdAt])
 }
@@ -576,7 +645,7 @@ model CommissionSettlement {
   paymentIds            String[]
   amountPaisa           Int
   currency              String    @default("INR")
-  status                String    @default("ORDER_CREATED")
+  status                SettlementStatus @default(ORDER_CREATED)
   providerOrderId       String?   @unique
   providerPaymentId     String?   @unique
   idempotencyKey        String    @unique
@@ -585,8 +654,23 @@ model CommissionSettlement {
   updatedAt             DateTime  @updatedAt
 
   professional ProfessionalProfile @relation(fields: [professionalProfileId], references: [id], onDelete: Restrict)
+  settledPayments SettlementPayment[]
 
   @@index([professionalProfileId, status])
+}
+
+// F-010: relational settlement membership. paymentIds stays as the immutable
+// snapshot for history/compat; the junction is the queryable truth for new rows.
+model SettlementPayment {
+  settlementId String
+  paymentId    String
+  createdAt    DateTime @default(now())
+
+  settlement CommissionSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  payment    Payment              @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@id([settlementId, paymentId])
+  @@index([paymentId])
 }
 
 // Plus speed-SLA penalties: a late accept or late arrival on a Plus
@@ -596,8 +680,8 @@ model ProfessionalPenalty {
   professionalProfileId String
   serviceRequestId      String
   amountPaisa           Int
-  reason                String   @default("LATE_ARRIVAL")
-  status                String   @default("PENDING")
+  reason                PenaltyReason @default(LATE_ARRIVAL)
+  status                PenaltyStatus @default(PENDING)
   createdAt             DateTime @default(now())
   settledAt             DateTime?
 
@@ -677,6 +761,8 @@ model PortfolioItem {
   createdAt             DateTime @default(now())
 
   profile ProfessionalProfile @relation(fields: [professionalProfileId], references: [id], onDelete: Cascade)
+
+  @@index([professionalProfileId, createdAt])
 }
 
 model NotificationPreference {
@@ -692,13 +778,13 @@ model NotificationPreference {
 model Notification {
   id             String    @id @default(uuid())
   userId         String
-  kind           String    @default("system")
+  kind           NotificationKind @default(system)
   title          String
   body           String
   data           Json?
   isRead         Boolean   @default(false)
   createdAt      DateTime  @default(now())
-  pushState      String    @default("PENDING")
+  pushState      PushState @default(PENDING)
   pushAttempts   Int       @default(0)
   pushAfter      DateTime  @default(now())
   pushLeaseUntil DateTime?
@@ -733,6 +819,9 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model AiConversation {
@@ -835,6 +924,7 @@ model Favorite {
   professionalId String
   createdAt      DateTime @default(now())
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
 
   @@unique([userId, professionalId])
 }
@@ -876,6 +966,8 @@ model OtpChallenge {
   requestedAt     DateTime
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([expiresAt])
 }
 
 model SupportTicket {

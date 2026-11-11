@@ -1,6 +1,7 @@
 import React, {useRef, useState} from 'react';
 import {Pressable, StyleSheet, Switch, Text, View} from 'react-native';
-import {Colors, IndiaLocale, Typography} from '@nahtreek/design-system';
+import {Colors, Typography} from '@nahtreek/design-system';
+import {inr} from '../utils/format';
 import {ClientColors} from '../design-system/tokens';
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {Button, Icon, ICONS, Input} from './ui';
@@ -12,7 +13,7 @@ import {takeAiBookingPrefill} from '../services/aiBookingPrefill';
 import type {SelectedLocation} from '../services/location';
 import {platformStyles as s} from '../screens/PlatformHistoryScreen';
 
-type Match={id:string;fullName:string;distanceKm:number;etaMinutes:number|null;startingPrice?:number};
+type Match={id:string;fullName:string;distanceKm:number;etaMinutes:number|null;startingPricePaisa?:number};
 // Collision-resistant submission identifier, not a credential or an authorization token.
 const submissionId=()=> 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const n=Math.floor(Math.random()*16);return(c==='x'?n:(n&3)|8).toString(16);});
 export function ServiceBookingForm({serviceId, preferred, onBooked}: {serviceId:string;preferred?:{id:string;fullName:string};onBooked:(id:string)=>void}) {
@@ -50,7 +51,7 @@ export function ServiceBookingForm({serviceId, preferred, onBooked}: {serviceId:
         <ReviewRow label="Service address" value={pending.current.locationAddress}/>
         <ReviewRow label="Person at address" value={`${name.trim()} · ${phone.trim()}`}/>
         <ReviewRow label="Visit time" value={mode==='ASAP'?`As soon as possible${chosenMatch?.etaMinutes!=null?` · estimated ${chosenMatch.etaMinutes} min travel`:''}`:scheduledLabel??'Not chosen'}/>
-        <ReviewRow label="Price" value={chosenMatch?.startingPrice!=null?`From ${IndiaLocale.formatCurrency(chosenMatch.startingPrice)}; final scope and price confirmed before work`:'To be agreed with the professional before work'}/>
+        <ReviewRow label="Price" value={chosenMatch?.startingPricePaisa!=null?`From ${inr(chosenMatch.startingPricePaisa!)}; final scope and price confirmed before work`:'To be agreed with the professional before work'}/>
       </View>
       <Text style={s.text}>{mode==='ASAP'?'Travel time is an estimate, not a guarantee; service completion is not promised within 30 minutes.':'The requested time is subject to professional acceptance.'} You can still edit the request before sending.</Text>
       {book.error?<Text accessibilityRole="alert" style={styles.error}>{book.error instanceof Error?book.error.message:'We could not send this request right now. Check your connection and try again.'} Your details are saved here; retrying will not create a duplicate request.</Text>:null}

@@ -4,7 +4,7 @@ import {JourneyService} from './journey.service';
 describe('nearby journey matching', () => {
   const now = new Date();
   const provider = (id: string, latitude: number) => ({
-    id, fullName: id, title: 'Repair professional', startingPrice: 100,
+    id, fullName: id, title: 'Repair professional', startingPricePaisa: 10000,
     presence: {online: true, accuracy: 10, observedAt: now, latitude, longitude: 77, radiusKm: 10},
   });
   const dto = {serviceId: 'repair', latitude: 11, longitude: 77, mode: 'ASAP' as const};

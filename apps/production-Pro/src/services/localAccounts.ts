@@ -118,7 +118,7 @@ export type LocalProfessionalProfile = {
   verificationStatus: string;
   isAvailable: boolean;
   serviceCategories: string[];
-  startingPrice?: number;
+  startingPricePaisa?: number;
   baseCity: string;
   baseState: string;
   baseLatitude?: number;
@@ -146,11 +146,11 @@ export async function writeLocalProfessionalProfile(userId: string, profile: Loc
 const demoProfiles = {
   engineer: {
     user: {id: 'preview-engineer-arun', fullName: 'Arun Kumar', phoneNumber: '+919000000101', email: 'arun.demo@nahtreek.local', roles: ['ENGINEER'], city: 'Coimbatore', state: 'Tamil Nadu', verificationStatus: 'VERIFIED', needsProfessionalProfile: false},
-    profile: {fullName: 'Arun Kumar', title: 'Civil & Structural Engineer', bio: 'I help families plan safe homes, review drawings and check construction quality in simple language.', yearsOfExperience: 9, onboardingStep: 'COMPLETE', verificationStatus: 'VERIFIED', isAvailable: true, serviceCategories: [], startingPrice: 1200, baseCity: 'Coimbatore', baseState: 'Tamil Nadu', baseLatitude: 11.0168, baseLongitude: 76.9558, completedJobs: 86, rating: 4.8, reviewCount: 42, engineerProfile: {qualificationDegree: 'B.E. Civil Engineering', institution: 'Government College of Technology', graduationYear: 2016, licenseNumber: 'DEMO-CBE-101', consultationFee: 1200, specializations: [{specializationId: '11111111-1111-4111-8111-111111111111'}, {specializationId: '33333333-3333-4333-8333-333333333333'}]}, portfolioItems: [{id: 'engineer-site-1', title: 'Residential site supervision', description: 'Quality checks for a family home in Coimbatore.', imageKey: 'engineer'}], availabilitySlots: []},
+    profile: {fullName: 'Arun Kumar', title: 'Civil & Structural Engineer', bio: 'I help families plan safe homes, review drawings and check construction quality in simple language.', yearsOfExperience: 9, onboardingStep: 'COMPLETE', verificationStatus: 'VERIFIED', isAvailable: true, serviceCategories: [], startingPricePaisa: 120000, baseCity: 'Coimbatore', baseState: 'Tamil Nadu', baseLatitude: 11.0168, baseLongitude: 76.9558, completedJobs: 86, rating: 4.8, reviewCount: 42, engineerProfile: {qualificationDegree: 'B.E. Civil Engineering', institution: 'Government College of Technology', graduationYear: 2016, licenseNumber: 'DEMO-CBE-101', consultationFeePaisa: 120000, specializations: [{specializationId: '11111111-1111-4111-8111-111111111111'}, {specializationId: '33333333-3333-4333-8333-333333333333'}]}, portfolioItems: [{id: 'engineer-site-1', title: 'Residential site supervision', description: 'Quality checks for a family home in Coimbatore.', imageKey: 'engineer'}], availabilitySlots: []},
   },
   service: {
     user: {id: 'preview-service-selvam', fullName: 'Selvam R', phoneNumber: '+919000000202', email: 'selvam.demo@nahtreek.local', roles: ['SERVICE_PROVIDER'], city: 'Coimbatore', state: 'Tamil Nadu', verificationStatus: 'VERIFIED', needsProfessionalProfile: false},
-    profile: {fullName: 'Selvam R', title: 'Electrician & Home Service Professional', bio: 'I handle home wiring, switches, fans and electrical maintenance with clear pricing and safe work practices.', yearsOfExperience: 11, onboardingStep: 'COMPLETE', verificationStatus: 'VERIFIED', isAvailable: true, serviceCategories: ['electrical'], startingPrice: 350, baseCity: 'Coimbatore', baseState: 'Tamil Nadu', baseLatitude: 11.0168, baseLongitude: 76.9558, completedJobs: 214, rating: 4.9, reviewCount: 128, portfolioItems: [{id: 'service-home-1', title: 'Home electrical repair', description: 'Switchboard inspection and safe repair.', imageKey: 'service'}], availabilitySlots: []},
+    profile: {fullName: 'Selvam R', title: 'Electrician & Home Service Professional', bio: 'I handle home wiring, switches, fans and electrical maintenance with clear pricing and safe work practices.', yearsOfExperience: 11, onboardingStep: 'COMPLETE', verificationStatus: 'VERIFIED', isAvailable: true, serviceCategories: ['electrical'], startingPricePaisa: 35000, baseCity: 'Coimbatore', baseState: 'Tamil Nadu', baseLatitude: 11.0168, baseLongitude: 76.9558, completedJobs: 214, rating: 4.9, reviewCount: 128, portfolioItems: [{id: 'service-home-1', title: 'Home electrical repair', description: 'Switchboard inspection and safe repair.', imageKey: 'service'}], availabilitySlots: []},
   },
 } as const;
 

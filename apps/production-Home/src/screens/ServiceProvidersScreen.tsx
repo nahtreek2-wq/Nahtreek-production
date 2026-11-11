@@ -1,7 +1,8 @@
 import React, {useState} from 'react';
 import {Animated as NativeAnimated, FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
-import {Colors, IndiaLocale} from '@nahtreek/design-system';
+import {Colors} from '@nahtreek/design-system';
+import {inr} from '../utils/format';
 import {ClientColors} from '../design-system/tokens';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -195,8 +196,8 @@ export function ServiceProvidersScreen() {
               <RatingStars rating={item.averageRating} count={item.totalReviewsCount} />
             ) : <Text style={s.text}>New profile · No reviews yet</Text>}
             <View style={styles.pricePanel}>
-              <Text style={styles.price}>{item.startingPrice != null ? `From ${IndiaLocale.formatCurrency(item.startingPrice)}` : 'Ask for a quote'}</Text>
-              {item.startingPrice != null ? <Text style={s.text}>Final cost confirmed before work</Text> : null}
+              <Text style={styles.price}>{item.startingPricePaisa != null ? `From ${inr(item.startingPricePaisa)}` : 'Ask for a quote'}</Text>
+              {item.startingPricePaisa != null ? <Text style={s.text}>Final cost confirmed before work</Text> : null}
             </View>
             <Pressable
               style={styles.mapLink}

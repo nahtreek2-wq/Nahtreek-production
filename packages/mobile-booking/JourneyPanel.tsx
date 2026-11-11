@@ -7,7 +7,7 @@ import type {PaymentHooks} from './PaymentSection';
 import {DateTimeField} from '../mobile-ui/DateTimeField';
 
 type PlusTerms = {acceptWindowMs: number; arrivalGraceMs: number; lateAcceptPenaltyPaisa: number; lateArrivalPenaltyPaisa: number};
-type Journey = {stage: string; revision: number; mode: string; recipientName: string; recipientPhone: string; expiresAt: string; scheduledAt?: string; arrivalTarget?: string; quoteAmount?: number; quoteScope?: string; quoteAccepted: boolean; collectionMode?: string; collectedAmountPaisa?: number; collectedMethod?: string; startCode?: string; completionSummary?: string; issue?: string; plusTerms?: PlusTerms | null; tracking?: {latitude: number; longitude: number; updatedAt: string; stale: boolean}};
+type Journey = {stage: string; revision: number; mode: string; recipientName: string; recipientPhone: string; expiresAt: string; scheduledAt?: string; arrivalTarget?: string; quoteAmountPaisa?: number; quoteScope?: string; quoteAccepted: boolean; collectionMode?: string; collectedAmountPaisa?: number; collectedMethod?: string; startCode?: string; completionSummary?: string; issue?: string; plusTerms?: PlusTerms | null; tracking?: {latitude: number; longitude: number; updatedAt: string; stale: boolean}};
 const rupees = (paisa: number) => `₹${(paisa / 100).toLocaleString('en-IN')}`;
 type Props = {id: string; client: boolean; load: () => Promise<Journey>; act: (body: any) => Promise<unknown>; beforeAction?: (action: string) => Promise<unknown>; payment?: PaymentHooks; receiptEmail?: string | null; onSaveReceiptEmail?: (email: string) => Promise<unknown>; isPlus?: boolean; clientPlus?: boolean; onFindAnother?: () => void};
 function countdownTo(iso: string): string | null {
@@ -50,7 +50,7 @@ const professionalStageGuidance: Record<string,string> = {
 };
 function actionConfirmation(action:string,j:Journey,amount:string,note:string,paymentsOn:boolean,collectMode:string,collectAmount:string,collectMethod:string,client:boolean) {
   if(action==='QUOTE')return `Send a quote of ₹${Number(amount).toLocaleString('en-IN')} for this scope?\n\n${note.trim()}\n\nThe customer must approve it before work starts or the price changes.`;
-  if(action==='APPROVE_QUOTE')return `Approve ₹${j.quoteAmount?.toLocaleString('en-IN')} for this scope?\n\n${j.quoteScope ?? ''}\n\n${collectMode==='AT_HOME' ? 'You will pay the professional directly at home (cash or UPI) after the work.' : 'You will pay online now; the money releases to the professional when you confirm completion.'}\n\nOnly approve if you agree with both the amount and the described work.`;
+  if(action==='APPROVE_QUOTE')return `Approve ${rupees(j.quoteAmountPaisa ?? 0)} for this scope?\n\n${j.quoteScope ?? ''}\n\n${collectMode==='AT_HOME' ? 'You will pay the professional directly at home (cash or UPI) after the work.' : 'You will pay online now; the money releases to the professional when you confirm completion.'}\n\nOnly approve if you agree with both the amount and the described work.`;
   if(action==='START')return 'Start work only after the customer has approved the quote and you have verified their six-digit code at the service address.';
   if(action==='FINISH')return j.collectionMode==='AT_HOME' ? `Submit this completion summary and record ₹${Number(collectAmount).toLocaleString('en-IN')} collected by ${collectMethod}?\n\n${note.trim()}\n\nThe customer will review the work and the collected amount before the request is marked complete.` : `Submit this completion summary to the customer?\n\n${note.trim()}\n\nThe customer will review it before the request is marked complete.`;
   if(action==='CONFIRM')return j.collectionMode==='AT_HOME' && j.collectedAmountPaisa ? `Confirm only if the agreed work is complete and you paid ₹${(j.collectedAmountPaisa/100).toLocaleString('en-IN')} by ${j.collectedMethod} at home. If the amount is wrong, report a problem instead.` : paymentsOn ? 'Confirm only if the agreed work is complete. This marks the service complete and releases the held payment to the professional.' : 'Confirm only if the agreed work is complete. This marks the service request complete; it does not record an online payment.';
@@ -72,7 +72,7 @@ export function JourneyPanel({id, client, load, act, beforeAction, payment, rece
   const q = useQuery({queryKey: ['service-journey', id], queryFn: load, refetchInterval: 3000, refetchIntervalInBackground: false, retry: 1});
   const mutation = useMutation({mutationFn: async (action: string) => {
     await beforeAction?.(action);
-    return act({action, revision: q.data!.revision, ...(note.trim() ? {note: note.trim()} : {}), ...(action === 'QUOTE' && amount.trim() ? {amount: Number(amount)} : {}), ...(action === 'START' ? {code} : {}), ...(action === 'APPROVE_QUOTE' ? {collectionMode: collectMode} : {}), ...(action === 'FINISH' && q.data!.collectionMode === 'AT_HOME' ? {collectedAmountPaisa: Math.round(Number(collectAmount) * 100), collectedMethod: collectMethod} : {}), ...(action === 'RESCHEDULE' && parsedNewTime ? {scheduledAt: parsedNewTime.toISOString()} : {})});
+    return act({action, revision: q.data!.revision, ...(note.trim() ? {note: note.trim()} : {}), ...(action === 'QUOTE' && amount.trim() ? {amountPaisa: Math.round(Number(amount) * 100)} : {}), ...(action === 'START' ? {code} : {}), ...(action === 'APPROVE_QUOTE' ? {collectionMode: collectMode} : {}), ...(action === 'FINISH' && q.data!.collectionMode === 'AT_HOME' ? {collectedAmountPaisa: Math.round(Number(collectAmount) * 100), collectedMethod: collectMethod} : {}), ...(action === 'RESCHEDULE' && parsedNewTime ? {scheduledAt: parsedNewTime.toISOString()} : {})});
   }, onSuccess: () => {
     setCode(''); setNote(''); setAmount(''); setCollectAmount(''); setNewTime(null);
     const keys = client
@@ -86,7 +86,7 @@ export function JourneyPanel({id, client, load, act, beforeAction, payment, rece
   const showProgress=journeyStages.some(([stage])=>stage===j.stage);
   const actions: [string,string][] = client ? [
     ...(['PENDING','ACCEPTED'].includes(j.stage) ? [['RESCHEDULE','Change visit time'] as [string,string]] : []),
-    ...(['ARRIVED','IN_PROGRESS'].includes(j.stage) && j.quoteAmount != null && !j.quoteAccepted ? [['APPROVE_QUOTE','Approve scope and price'] as [string,string]] : []),
+    ...(['ARRIVED','IN_PROGRESS'].includes(j.stage) && j.quoteAmountPaisa != null && !j.quoteAccepted ? [['APPROVE_QUOTE','Approve scope and price'] as [string,string]] : []),
     ...(j.stage==='AWAITING_CONFIRMATION' ? [['CONFIRM','Confirm work completed'] as [string,string]] : []),
     ...(j.stage==='DISPUTED' ? [['CONFIRM','Mark resolved — release payment'] as [string,string]] : []),
     ...(['IN_PROGRESS','AWAITING_CONFIRMATION'].includes(j.stage) ? [['ISSUE','Report a problem'] as [string,string]] : []),
@@ -126,10 +126,10 @@ export function JourneyPanel({id, client, load, act, beforeAction, payment, rece
     {client && ['DECLINED','EXPIRED'].includes(j.stage) && onFindAnother ? <Pressable accessibilityRole="button" accessibilityLabel="Find another professional" onPress={onFindAnother} style={s.button}><Text style={s.buttonText}>Find another professional</Text></Pressable> : null}
     {client && j.tracking ? <LivePin tracking={j.tracking} /> : null}
     {client && !j.tracking && ['ACCEPTED','EN_ROUTE'].includes(j.stage) ? <View style={s.stageNote}><Text style={s.text}>{j.stage === 'EN_ROUTE' ? 'The professional is on the way, but no live location has arrived yet. Ask them to keep location sharing switched on.' : 'The live tracking map appears here once the professional starts the journey.'}</Text></View> : null}
-    {j.quoteAmount != null ? <View style={s.info}><Text style={s.heading}>₹{j.quoteAmount.toLocaleString('en-IN')}</Text><Text style={s.text}>{j.quoteScope}</Text><Text style={s.small}>{j.quoteAccepted ? `Customer approved this scope and price${j.collectionMode==='AT_HOME' ? ', pay at home.' : '.'}` : 'Awaiting customer approval. Do not start additional work.'}</Text></View> : null}
+    {j.quoteAmountPaisa != null ? <View style={s.info}><Text style={s.heading}>{rupees(j.quoteAmountPaisa)}</Text><Text style={s.text}>{j.quoteScope}</Text><Text style={s.small}>{j.quoteAccepted ? `Customer approved this scope and price${j.collectionMode==='AT_HOME' ? ', pay at home.' : '.'}` : 'Awaiting customer approval. Do not start additional work.'}</Text></View> : null}
     {j.collectedAmountPaisa != null ? <View style={s.info}><Text style={s.heading}>₹{(j.collectedAmountPaisa/100).toLocaleString('en-IN')} collected by {j.collectedMethod}</Text><Text style={s.small}>{client ? 'Check this matches what you paid at home. If it is wrong, report a problem instead of confirming.' : 'Recorded as collected at home. The platform commission is tracked as your dues.'}</Text></View> : null}
-    {client && j.quoteAccepted && j.quoteAmount != null && payment && j.collectionMode !== 'AT_HOME' ? <PaymentSection requestId={id} quoteAmount={j.quoteAmount} hooks={payment} receiptEmail={receiptEmail} onSaveReceiptEmail={onSaveReceiptEmail} /> : null}
-    {client && j.quoteAccepted && j.collectionMode === 'AT_HOME' ? <View style={s.stageNote}><Text style={s.text}>Pay at home: give ₹{j.quoteAmount?.toLocaleString('en-IN')} to the professional in cash or UPI after the work. The amount they record must match what you paid.</Text></View> : null}
+    {client && j.quoteAccepted && j.quoteAmountPaisa != null && payment && j.collectionMode !== 'AT_HOME' ? <PaymentSection requestId={id} quoteAmountPaisa={j.quoteAmountPaisa} hooks={payment} receiptEmail={receiptEmail} onSaveReceiptEmail={onSaveReceiptEmail} /> : null}
+    {client && j.quoteAccepted && j.collectionMode === 'AT_HOME' ? <View style={s.stageNote}><Text style={s.text}>Pay at home: give {rupees(j.quoteAmountPaisa ?? 0)} to the professional in cash or UPI after the work. The amount they record must match what you paid.</Text></View> : null}
     {j.startCode ? <View style={s.info}><Text style={s.heading}>Service-start code: {j.startCode}</Text><Text style={s.text}>Share only when the professional is at the correct address and you approve the work. For someone else, share it privately with the recipient.</Text></View> : null}
     {j.completionSummary ? <Text style={s.text}>Work summary: {j.completionSummary}</Text> : null}
     {j.issue ? <Text style={s.error}>Reported issue: {j.issue}. This booking remains open for support review.</Text> : null}
@@ -145,7 +145,7 @@ export function JourneyPanel({id, client, load, act, beforeAction, payment, rece
       <DateTimeField label="New visit time (local)" accessibilityLabel="New visit date and time" value={newTime} onChange={setNewTime} minimumDate={new Date(Date.now() + 30 * 60000)} maximumDate={new Date(Date.now() + 30 * 86400000)} />
       {newTime && !validNewTime ? <Text style={s.small}>Visits must be 30 minutes to 30 days from now.</Text> : null}
     </View> : null}
-    {client && !closed && ['ARRIVED','IN_PROGRESS'].includes(j.stage) && j.quoteAmount != null && !j.quoteAccepted ? <View>
+    {client && !closed && ['ARRIVED','IN_PROGRESS'].includes(j.stage) && j.quoteAmountPaisa != null && !j.quoteAccepted ? <View>
       <Text style={s.inputLabel}>How will you pay?</Text>
       <View style={s.chipRow}>
         {([['ONLINE','Pay online now'],['AT_HOME','Pay at home']] as [string,string][]).map(([value,label])=><Pressable key={value} accessibilityRole="radio" accessibilityState={{checked:collectMode===value}} onPress={()=>setCollectMode(value)} style={[s.chip,collectMode===value&&s.chipOn]}><Text style={[s.chipText,collectMode===value&&s.chipTextOn]}>{label}</Text></Pressable>)}

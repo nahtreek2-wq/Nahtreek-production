@@ -2,7 +2,7 @@ import {PaymentsService} from './payments.service';
 
 const engRequest = (over: Record<string, unknown> = {}) => ({id: 'eng-req', status: 'COMPLETED',
   client: {userId: 'client'},
-  engineer: {professionalProfileId: 'prof', consultationFee: 3500, profile: {userId: 'eng-user'}}, ...over});
+  engineer: {professionalProfileId: 'prof', consultationFeePaisa: 350000, profile: {userId: 'eng-user'}}, ...over});
 const payment = (over: Record<string, unknown> = {}) => ({id: 'pay', professionalProfileId: 'prof',
   serviceRequestId: null, engineerRequestId: 'eng-req',
   amountPaisa: 350000, platformFeePaisa: 35000, professionalAmountPaisa: 315000, currency: 'INR',
@@ -123,7 +123,7 @@ describe('engineer consultation order creation', () => {
 
   it('caps the Plus discount at ₹100 and skips it for non-Plus clients', async () => {
     const big = setup({plus: true, req: engRequest({engineer: {professionalProfileId: 'prof',
-      consultationFee: 10000, profile: {userId: 'eng-user'}}})});
+      consultationFeePaisa: 1000000, profile: {userId: 'eng-user'}}})});
     const capped = await big.service.createEngineerOrder('client', 'eng-req');
     expect(capped).toMatchObject({amountPaisa: 990000, plusDiscountPaisa: 10000});
     const plain = setup({});
@@ -145,9 +145,9 @@ describe('engineer consultation order creation', () => {
   });
 
   it('rejects missing fees, sub-minimum fees, and strangers', async () => {
-    const noFee = setup({req: engRequest({engineer: {professionalProfileId: 'prof', consultationFee: null, profile: {userId: 'eng-user'}}})});
+    const noFee = setup({req: engRequest({engineer: {professionalProfileId: 'prof', consultationFeePaisa: null, profile: {userId: 'eng-user'}}})});
     await expect(noFee.service.createEngineerOrder('client', 'eng-req')).rejects.toMatchObject({status: 400});
-    const tiny = setup({req: engRequest({engineer: {professionalProfileId: 'prof', consultationFee: 0.5, profile: {userId: 'eng-user'}}})});
+    const tiny = setup({req: engRequest({engineer: {professionalProfileId: 'prof', consultationFeePaisa: 50, profile: {userId: 'eng-user'}}})});
     await expect(tiny.service.createEngineerOrder('client', 'eng-req')).rejects.toMatchObject({status: 400});
     const {service} = setup();
     await expect(service.createEngineerOrder('stranger', 'eng-req')).rejects.toMatchObject({status: 404});
@@ -159,7 +159,7 @@ describe('engineer consultation order creation', () => {
     await expect(open.service.createEngineerOrder('client', 'eng-req')).resolves.toMatchObject({status: 'ORDER_CREATED'});
     expect(open.provider.createOrder).not.toHaveBeenCalled();
     const moved = setup({pay: payment({status: 'HELD', providerPaymentId: 'pay_1'}),
-      req: engRequest({engineer: {professionalProfileId: 'prof', consultationFee: 4000, profile: {userId: 'eng-user'}}})});
+      req: engRequest({engineer: {professionalProfileId: 'prof', consultationFeePaisa: 400000, profile: {userId: 'eng-user'}}})});
     await expect(moved.service.createEngineerOrder('client', 'eng-req')).rejects.toMatchObject({status: 409});
   });
 });
@@ -193,7 +193,7 @@ describe('engineer consultation verification and view', () => {
 
   it('emails a held-payment receipt to the client after verify', async () => {
     const titled = engRequest({projectTitle: 'Structural site visit',
-      engineer: {professionalProfileId: 'prof', consultationFee: 3500, profile: {userId: 'eng-user', fullName: 'Eng Rao'}}});
+      engineer: {professionalProfileId: 'prof', consultationFeePaisa: 350000, profile: {userId: 'eng-user', fullName: 'Eng Rao'}}});
     const {email, service} = setup({pay: payment(), req: titled, email: {}});
     (service as any).provider.fetchPayment.mockResolvedValue({status: 'captured', order_id: 'order_1', amount: 350000});
     await service.verify('client', dto() as any);
@@ -380,7 +380,7 @@ describe('engineer direct collection', () => {
 
 describe('client payment disputes', () => {
   const svcReq = {id: 'req', status: 'IN_PROGRESS', client: {userId: 'client'}, provider: {id: 'prof', userId: 'pro-user'},
-    journey: {stage: 'IN_PROGRESS', quoteAmount: 2000, quoteAccepted: true, collectionMode: 'ONLINE',
+    journey: {stage: 'IN_PROGRESS', quoteAmountPaisa: 200000, quoteAccepted: true, collectionMode: 'ONLINE',
       collectedAmountPaisa: null, collectedMethod: null}};
 
   it('freezes a held consultation payment for support review', async () => {

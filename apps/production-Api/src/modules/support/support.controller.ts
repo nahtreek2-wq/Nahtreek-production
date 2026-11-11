@@ -5,7 +5,7 @@ import {Roles} from '../../common/decorators/roles.decorator';
 import {JwtAuthGuard} from '../../common/guards/jwt-auth.guard';
 import {RolesGuard} from '../../common/guards/roles.guard';
 import {JwtPayload} from '../../common/strategies/jwt.strategy';
-import {CreateSupportTicketDto, ReplySupportTicketDto} from './support.dto';
+import {CreateSupportTicketDto, FollowUpSupportTicketDto, ReplySupportTicketDto} from './support.dto';
 import {SupportService} from './support.service';
 
 @Controller('support')
@@ -23,6 +23,12 @@ export class SupportController {
   @Roles(Role.CLIENT, Role.SERVICE_PROVIDER, Role.ENGINEER)
   mine(@CurrentUser() user: JwtPayload, @Query() query: {page?: string; limit?: string}) {
     return this.service.mine(user.sub, query);
+  }
+
+  @Post('tickets/:id/replies')
+  @Roles(Role.CLIENT, Role.SERVICE_PROVIDER, Role.ENGINEER)
+  followUp(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: FollowUpSupportTicketDto) {
+    return this.service.followUp(id, user.sub, dto);
   }
 
   @Get('admin/tickets')

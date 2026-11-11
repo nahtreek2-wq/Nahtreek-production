@@ -255,7 +255,8 @@ export function SearchScreen() {
                       key={item.query}
                       onPress={() => selectTerm(item.query)}
                       style={styles.suggestion}
-                      accessibilityRole="button">
+                      accessibilityRole="button"
+                      accessibilityLabel={`Search for ${item.query}`}>
                       <Icon
                         name={ICONS.search}
                         size={16}

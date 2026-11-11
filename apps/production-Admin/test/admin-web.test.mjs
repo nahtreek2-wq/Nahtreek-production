@@ -6,6 +6,7 @@ import { IDLE_TIMEOUT_MS, IDLE_WARN_MS, loginCooldownMs } from "../src/js/auth.j
 import { safeHttpUrl, timeAgo } from "../src/js/dom.js";
 import { availablePaymentActions, formatPaisa as formatPaymentPaisa, moneyConfirmWord, paymentStatusLabel } from "../src/js/payments.js";
 import { aiEngineLabel, aiSummaryCards, formatPaisa as formatMembershipPaisa, membershipStatusLabel } from "../src/js/memberships.js";
+import { replyAuthorLabel, ticketStatusLabel } from "../src/js/tickets.js";
 
 test("ApiClient sends the administrator bearer token", async () => {
   let received;
@@ -82,6 +83,8 @@ test("build contains official branding and generated environment config", async 
   assert.match(html, /OPERATIONS OVERVIEW/);
   assert.match(html, /id="menu-toggle"/);
   assert.match(html, /data-view="activity"/);
+  assert.match(html, /data-view="tickets"/);
+  assert.match(html, /id="ticket-reply-form"/);
   assert.match(html, /data-view="settings"/);
   assert.match(html, /id="user-edit-dialog"/);
   assert.doesNotMatch(html, /__NAHTREEK_API_ORIGIN__/);
@@ -302,4 +305,13 @@ test("ApiClient clears money caches by path prefix after mutations", async () =>
   api.clearCache("/payments");
   await api.get("/payments/admin/summary", { ttl: 60_000 });
   assert.equal(calls, 2);
+});
+
+test("support desk labels statuses and authors plainly", () => {
+  assert.equal(ticketStatusLabel("OPEN"), "Open");
+  assert.equal(ticketStatusLabel("ANSWERED"), "Answered");
+  assert.equal(ticketStatusLabel("RESOLVED"), "Resolved");
+  assert.equal(ticketStatusLabel("WEIRD"), "WEIRD");
+  assert.equal(replyAuthorLabel("ADMIN"), "Support");
+  assert.equal(replyAuthorLabel("USER"), "User");
 });

@@ -1,17 +1,20 @@
 import React, {useState} from 'react';
-import {ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {ScreenHeader} from '../components/ScreenHeader';
 import {ScreenLoading} from '../components/ScreenLoading';
 import {EmptyState} from '../components/EmptyState';
 import {PrimaryButton} from '../components/PrimaryButton';
+import {SupportThread, type SupportReplyView} from '../../../../packages/mobile-booking/SupportThread';
 import {api} from '../services/apiClient';
 import {useProToast} from '../stores/proToast';
 import {ProColors, ProRadius, ProSpacing, ProType} from '../theme/professionalTheme';
 
 type SupportTicket = {id: string; subject: string; message: string; bookingRef: string | null;
-  status: 'OPEN' | 'ANSWERED' | 'RESOLVED'; adminReply: string | null; createdAt: string};
+  status: 'OPEN' | 'ANSWERED' | 'RESOLVED'; adminReply: string | null; createdAt: string;
+  replies?: SupportReplyView[]};
 
 const TICKET_STATUS: Record<SupportTicket['status'], string> = {
   OPEN: 'Open — support will reply here',
@@ -44,6 +47,20 @@ export function SupportScreen() {
     onError: error => toast(error instanceof Error ? error.message : 'Could not send your request.', 'error'),
   });
   const valid = subject.trim().length >= 4 && message.trim().length >= 10;
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const followUp = useMutation({
+    mutationFn: (input: {ticketId: string; message: string}) =>
+      api.post(`/support/tickets/${input.ticketId}/replies`, {message: input.message}),
+    onSuccess: (_data, input) => {
+      setDrafts(current => ({...current, [input.ticketId]: ''}));
+      setReplyingTo(null);
+      void cache.invalidateQueries({queryKey: ['pro-support-tickets']});
+      toast('Reply sent. Support will follow up here.', 'success');
+    },
+    onError: error => toast(error instanceof Error ? error.message : 'Could not send your reply.', 'error'),
+    onSettled: () => setReplyingTo(null),
+  });
 
   return (
     <View style={styles.root}>
@@ -68,19 +85,37 @@ export function SupportScreen() {
         {tickets.isPending ? <ScreenLoading label="Loading your requests…" /> : tickets.isError || !tickets.data ? (
           <EmptyState title="Could not load your requests" message="Check your connection and try again."
             actionLabel={tickets.isFetching ? 'Checking…' : 'Try again'} onAction={() => void tickets.refetch()} />
-        ) : tickets.data.length ? tickets.data.map(ticket => (
+        ) : tickets.data.length ? tickets.data.map(ticket => {
+          const draft = drafts[ticket.id] ?? '';
+          const sending = followUp.isPending && replyingTo === ticket.id;
+          return (
           <View key={ticket.id} style={styles.card}>
             <Text style={styles.subject}>{ticket.subject}</Text>
             <Text style={styles.status}>{TICKET_STATUS[ticket.status]}</Text>
             <Text style={styles.message}>{ticket.message}</Text>
-            {ticket.adminReply ? (
+            {ticket.replies ? (
+              <SupportThread replies={ticket.replies} />
+            ) : ticket.adminReply ? (
               <View style={styles.replyBox}>
                 <Text style={styles.replyLabel}>Support reply</Text>
                 <Text style={styles.replyText}>{ticket.adminReply}</Text>
               </View>
             ) : null}
+            <View style={styles.replyRow}>
+              <TextInput accessibilityLabel={`Reply to ${ticket.subject}`} style={[styles.input, styles.replyInput]}
+                value={draft} onChangeText={text => setDrafts(current => ({...current, [ticket.id]: text}))}
+                placeholder="Write a follow-up…" placeholderTextColor={ProColors.muted} maxLength={2000}
+                multiline editable={!sending} />
+              <Pressable accessibilityRole="button" accessibilityLabel={sending ? 'Sending reply' : `Send reply to ${ticket.subject}`}
+                disabled={draft.trim().length < 2 || sending}
+                onPress={() => { setReplyingTo(ticket.id); followUp.mutate({ticketId: ticket.id, message: draft.trim()}); }}
+                style={[styles.send, (draft.trim().length < 2 || sending) && {opacity: 0.5}]}>
+                <MaterialCommunityIcons name="send" size={20} color={ProColors.onAccent} />
+              </Pressable>
+            </View>
           </View>
-        )) : (
+          );
+        }) : (
           <EmptyState icon="lifebuoy" title="No support requests yet"
             message="Replies from the team appear here." />
         )}
@@ -105,4 +140,8 @@ const styles = StyleSheet.create({
   replyBox: {backgroundColor: ProColors.blueSoft, borderRadius: ProRadius.input, padding: ProSpacing.sm, gap: 2},
   replyLabel: {...ProType.meta, fontWeight: '700', color: ProColors.primary},
   replyText: {...ProType.body, color: ProColors.text},
+  replyRow: {flexDirection: 'row', alignItems: 'flex-end', gap: ProSpacing.sm},
+  replyInput: {flex: 1, minHeight: 48, maxHeight: 120},
+  send: {width: 48, height: 48, borderRadius: 24, backgroundColor: ProColors.primary,
+    alignItems: 'center', justifyContent: 'center'},
 });

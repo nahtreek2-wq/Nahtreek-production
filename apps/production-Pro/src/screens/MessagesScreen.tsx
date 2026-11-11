@@ -160,6 +160,8 @@ export function MessagesScreen() {
             message="Check your connection and try again."
           />
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading conversations"
             onPress={() => conversations.refetch()}
             style={styles.retry}>
             <Text style={styles.retryText}>Try again</Text>

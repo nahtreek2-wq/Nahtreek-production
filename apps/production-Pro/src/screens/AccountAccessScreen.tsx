@@ -266,6 +266,9 @@ export function AccountAccessScreen() {
           {(['login', 'create'] as const).map(item => (
             <Pressable
               key={item}
+              accessibilityRole="tab"
+              accessibilityLabel={item === 'login' ? 'Login tab' : 'Create account tab'}
+              accessibilityState={{selected: mode === item}}
               onPress={() => {
                 setMode(item);
                 setCodeSent(false);
@@ -330,6 +333,8 @@ export function AccountAccessScreen() {
                 toggle={() => setShowPassword(value => !value)}
               />
               <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="Forgot password"
                 onPress={() => {
                   setMode('forgot');
                   if (identifier.includes('@')) {
@@ -412,7 +417,7 @@ export function AccountAccessScreen() {
                     secureTextEntry={!showPassword}
                     placeholder="Enter the password again"
                   />
-                  <Pressable disabled={busy} onPress={requestReset}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Send code again" disabled={busy} onPress={requestReset}>
                     <Text style={styles.link}>Send code again</Text>
                   </Pressable>
                   {error ? (
@@ -433,6 +438,8 @@ export function AccountAccessScreen() {
                 </Text>
               ) : null}
               <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="Back to login"
                 onPress={() => {
                   setMode('login');
                   setError('');

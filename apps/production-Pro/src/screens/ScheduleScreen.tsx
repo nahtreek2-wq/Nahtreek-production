@@ -186,6 +186,8 @@ export function ScheduleScreen() {
             }
           />
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading availability"
             onPress={() => availability.refetch()}
             style={styles.retry}>
             <Text style={styles.retryText}>Try again</Text>

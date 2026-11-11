@@ -89,6 +89,19 @@
 .badge.HELD, .badge.PAID { color: var(--navy); background: #e3ecf8; }
 .badge.RELEASE_PENDING, .badge.REFUND_PENDING, .badge.PAST_DUE, .badge.SUSPENDED, .badge.PAUSED { color: var(--warning); background: var(--warning-bg); }
 .badge.DISPUTED, .badge.REJECTED, .badge.DEACTIVATED, .badge.FAILED, .badge.REFUNDED, .badge.CANCELLED, .badge.EXPIRED { color: var(--error); background: var(--error-bg); }
+.badge.OPEN { color: var(--warning); background: var(--warning-bg); }
+.badge.ANSWERED { color: var(--info); background: var(--info-bg); }
+.badge.RESOLVED { color: var(--success); background: var(--success-bg); }
+.thread { display: grid; gap: 10px; margin: 12px 0; }
+.thread-row { display: grid; gap: 2px; max-width: 88%; padding: 10px 12px; border-radius: var(--radius-md); }
+.thread-row p { margin: 0; }
+.thread-row b { font-size: 0.72rem; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
+.thread-user { justify-self: start; background: var(--surface-muted); border: 1px solid var(--border); }
+.thread-admin { justify-self: end; background: var(--info-bg); border: 1px solid #9db4d4; text-align: right; }
+.thread-admin b { color: var(--info); }
+.reply-form { display: grid; gap: 8px; margin-top: 12px; }
+.reply-form textarea { min-height: 90px; resize: vertical; }
+.reply-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .detail-panel { min-height: 480px; padding: clamp(18px, 2.2vw, 28px); }
 .empty-detail, .empty-row { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 220px; padding: 24px; color: var(--muted); text-align: center; }
 .empty-row { min-height: 140px; }

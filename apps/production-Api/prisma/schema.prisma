@@ -51,6 +51,11 @@ enum SupportTicketStatus {
   RESOLVED
 }
 
+enum SupportReplyAuthor {
+  USER
+  ADMIN
+}
+
 enum PaymentStatus {
   NOT_STARTED
   ORDER_CREATED
@@ -885,8 +890,20 @@ model SupportTicket {
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies SupportTicketReply[]
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+}
+
+model SupportTicketReply {
+  id         String             @id @default(uuid())
+  ticketId   String
+  ticket     SupportTicket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorRole SupportReplyAuthor
+  message    String
+  createdAt  DateTime           @default(now())
+
+  @@index([ticketId, createdAt])
 }

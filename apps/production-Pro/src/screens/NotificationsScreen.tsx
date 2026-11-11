@@ -139,6 +139,8 @@ export function NotificationsScreen() {
         right={
           unread ? (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Mark all notifications as read"
               disabled={markAll.isPending}
               onPress={() => markAll.mutate()}
               style={styles.markAll}>
@@ -158,6 +160,8 @@ export function NotificationsScreen() {
             message="Check your connection and try again."
           />
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading notifications"
             onPress={() => notifications.refetch()}
             style={styles.retry}>
             <Text style={styles.retryText}>Try again</Text>

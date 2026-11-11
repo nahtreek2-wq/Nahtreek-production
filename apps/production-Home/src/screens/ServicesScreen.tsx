@@ -171,6 +171,7 @@ function ServicesScreenContent() {
                     key={item.id}
                     style={({pressed}) => [styles.card, pressed && styles.cardPressed]}
                     accessibilityRole="button"
+                    accessibilityLabel={item.title}
                     onPress={() => nav.push('Services', {serviceId: item.id})}>
                     <ImageBackground
                       source={imageFor(item.id)}

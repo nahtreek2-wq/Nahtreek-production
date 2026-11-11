@@ -309,6 +309,8 @@ export function ProfessionalSetupScreen() {
           />
           <View style={styles.locationActions}>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Find this area"
               disabled={locationBusy}
               onPress={() => findLocation(false)}
               style={styles.secondary}>
@@ -320,6 +322,8 @@ export function ProfessionalSetupScreen() {
               <Text style={styles.secondaryText}>Find this area</Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use my location"
               disabled={locationBusy}
               onPress={() => findLocation(true)}
               style={styles.secondary}>

@@ -8,6 +8,7 @@ import NetInfo from '@react-native-community/netinfo';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {Colors} from '@nahtreek/design-system';
 import {RootNavigator} from './src/navigation/RootNavigator';
+import {linking} from './src/navigation/linking';
 import {navigationRef} from './src/navigation/navRef';
 import {usePersistedNavigationState} from './src/navigation/navigationPersistence';
 import {useProPushNavigation} from './src/navigation/usePushNavigation';
@@ -87,7 +88,7 @@ export default function App() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <StatusBar barStyle="light-content" backgroundColor={Colors.navyDeep} />
-        <AppErrorBoundary><ConnectivityNotice />{hydrated && persistedNav.ready ? (<NavigationContainer ref={navigationRef} initialState={persistedNav.initialState} onStateChange={persistedNav.onStateChange}><RootNavigator instantSplash={!!persistedNav.initialState} /></NavigationContainer>) : null}</AppErrorBoundary>
+        <AppErrorBoundary><ConnectivityNotice />{hydrated && persistedNav.ready ? (<NavigationContainer ref={navigationRef} linking={linking} initialState={persistedNav.initialState} onStateChange={persistedNav.onStateChange}><RootNavigator instantSplash={!!persistedNav.initialState} /></NavigationContainer>) : null}</AppErrorBoundary>
         <ProToast />
       </QueryClientProvider>
     </SafeAreaProvider>

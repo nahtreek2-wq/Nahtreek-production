@@ -1,7 +1,7 @@
 import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
-import {SupportTicketStatus} from '@prisma/client';
+import {SupportReplyAuthor, SupportTicketStatus} from '@prisma/client';
 import {PrismaService} from '../../common/prisma/prisma.service';
-import {CreateSupportTicketDto, ReplySupportTicketDto} from './support.dto';
+import {CreateSupportTicketDto, FollowUpSupportTicketDto, ReplySupportTicketDto} from './support.dto';
 import {pagination} from '../platform/platform.service';
 
 function clean(value: string): string {
@@ -27,10 +27,25 @@ export class SupportService {
   async mine(userId: string, query: {page?: string; limit?: string}) {
     const {page, limit, skip} = pagination(query.page, query.limit);
     const [rows, total] = await this.db.$transaction([
-      this.db.supportTicket.findMany({where: {userId}, orderBy: {createdAt: 'desc'}, skip, take: limit}),
+      this.db.supportTicket.findMany({where: {userId}, orderBy: {createdAt: 'desc'}, skip, take: limit,
+        include: {replies: {orderBy: {createdAt: 'asc'}}}}),
       this.db.supportTicket.count({where: {userId}}),
     ]);
     return {data: rows, meta: {page, limit, total, totalPages: Math.ceil(total / limit)}};
+  }
+
+  // User follow-up: appends to the thread and reopens the ticket so the new
+  // message cannot sit invisible behind an ANSWERED/RESOLVED state.
+  async followUp(id: string, userId: string, dto: FollowUpSupportTicketDto) {
+    const message = clean(dto.message);
+    if (message.length < 2) throw new BadRequestException('Write your follow-up first.');
+    const ticket = await this.db.supportTicket.findUnique({where: {id}});
+    if (!ticket || ticket.userId !== userId) throw new NotFoundException('Support request not found');
+    const [reply] = await this.db.$transaction([
+      this.db.supportTicketReply.create({data: {ticketId: id, authorRole: SupportReplyAuthor.USER, message}}),
+      this.db.supportTicket.update({where: {id}, data: {status: SupportTicketStatus.OPEN}}),
+    ]);
+    return reply;
   }
 
   async listForAdmin(query: {status?: string; page?: string; limit?: string}) {
@@ -41,7 +56,8 @@ export class SupportService {
     const where = status ? {status: status as SupportTicketStatus} : {};
     const [rows, total] = await this.db.$transaction([
       this.db.supportTicket.findMany({where, orderBy: {createdAt: 'desc'}, skip, take: limit,
-        include: {user: {select: {displayName: true, phoneNumber: true, email: true}}}}),
+        include: {user: {select: {displayName: true, phoneNumber: true, email: true}},
+          replies: {orderBy: {createdAt: 'asc'}}}}),
       this.db.supportTicket.count({where}),
     ]);
     return {data: rows, meta: {page, limit, total, totalPages: Math.ceil(total / limit)}};
@@ -52,8 +68,12 @@ export class SupportService {
     if (reply.length < 2) throw new BadRequestException('Write a reply first.');
     const ticket = await this.db.supportTicket.findUnique({where: {id}});
     if (!ticket) throw new NotFoundException('Support request not found');
-    const updated = await this.db.supportTicket.update({where: {id},
-      data: {adminReply: reply, repliedAt: new Date(), status: SupportTicketStatus.ANSWERED}});
+    const [, updated] = await this.db.$transaction([
+      this.db.supportTicketReply.create({data: {ticketId: id, authorRole: SupportReplyAuthor.ADMIN, message: reply}}),
+      // adminReply stays as the latest-admin-reply mirror for older readers.
+      this.db.supportTicket.update({where: {id},
+        data: {adminReply: reply, repliedAt: new Date(), status: SupportTicketStatus.ANSWERED}}),
+    ]);
     await this.db.notification.create({data: {userId: ticket.userId, kind: 'support',
       title: 'Support replied', body: reply.slice(0, 140), data: {ticketId: id, destination: 'support'}}});
     await this.db.auditLog.create({data: {userId: adminUserId, entity: 'SupportTicket',

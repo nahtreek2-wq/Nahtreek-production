@@ -32,6 +32,7 @@ import {
 } from '../components/ui';
 import {ProviderCardSkeleton} from '../components/SkeletonLoader';
 import {useToast} from '../stores/toast';
+import {useListFilters} from '../stores/listFilters';
 import {
   queryKeys,
   useCancelRequest,
@@ -70,7 +71,8 @@ export function RequestsScreen() {
   const [reviewing, setReviewing] = useState<EngineerRequestDto | null>(null);
   const [rating, setRating] = useState('5');
   const [comment, setComment] = useState('');
-  const [filter, setFilter] = useState('All');
+  const filter = useListFilters(state => state.requestsFilter);
+  const setFilter = useListFilters(state => state.setRequestsFilter);
   const filteredRequests = useMemo(() => {
     if (filter === 'Active')
       return requestsQ.data.filter(request =>

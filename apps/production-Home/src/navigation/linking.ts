@@ -8,6 +8,9 @@ export const linking: LinkingOptions<RootStackParamList> = {
   config: {
     screens: {
       ProviderProfile: 'p/:professionalProfileId',
+      EngineerProfile: 'e/:engineerId',
+      RequestDetail: 'requests/:requestId',
+      AiPlanner: 'ai',
       Scan: 'scan',
     },
   },

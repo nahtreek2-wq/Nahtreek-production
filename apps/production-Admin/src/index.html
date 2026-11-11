@@ -76,6 +76,7 @@
           <p class="nav-caption" aria-hidden="true">Money</p>
           <button class="nav-item" type="button" data-view="payments"><span aria-hidden="true">₹</span><b>Payments</b></button>
           <button class="nav-item" type="button" data-view="memberships"><span aria-hidden="true">★</span><b>Memberships</b></button>
+          <button class="nav-item" type="button" data-view="tickets"><span aria-hidden="true">✉</span><b>Support</b></button>
           <p class="nav-caption" aria-hidden="true">System</p>
           <button class="nav-item" type="button" data-view="activity"><span aria-hidden="true">≋</span><b>Activity</b></button>
           <button class="nav-item" type="button" data-view="settings"><span aria-hidden="true">⚙</span><b>My account</b></button>
@@ -193,6 +194,31 @@
                 <div id="ai-membership-list" class="queue"></div>
               </div>
             </section>
+          </section>
+
+          <section id="tickets-view" class="page-view hidden">
+            <header class="topbar compact-topbar">
+              <div><p class="eyebrow gold">CUSTOMER CARE</p><h1>Support requests</h1><p class="muted">Read full threads, reply, and resolve client and professional tickets.</p></div>
+              <button id="ticket-refresh" class="button secondary refresh-button" type="button"><span aria-hidden="true">↻</span> Refresh</button>
+            </header>
+            <section class="review-layout">
+              <div class="queue-panel">
+                <div class="toolbar">
+                  <label><span>Status</span><select id="ticket-status-filter"><option value="">All tickets</option><option value="OPEN">Open</option><option value="ANSWERED">Answered</option><option value="RESOLVED">Resolved</option></select></label>
+                </div>
+                <div id="ticket-queue-status" class="muted status-line" aria-live="polite"></div>
+                <div id="ticket-queue" class="queue"></div>
+              </div>
+              <article id="ticket-detail" class="detail-panel"><div class="empty-detail"><div class="empty-icon" aria-hidden="true">✉</div><h2>Select a request</h2><p>Choose a support request to read the thread and reply.</p></div></article>
+            </section>
+            <form id="ticket-reply-form" class="reply-form">
+              <label for="ticket-reply-text">Reply to the selected request</label>
+              <textarea id="ticket-reply-text" maxlength="2000" placeholder="Write a clear, kind reply…"></textarea>
+              <div class="reply-actions">
+                <button class="button primary" type="submit">Send reply</button>
+                <button id="ticket-resolve" class="button secondary" type="button">Resolve ticket</button>
+              </div>
+            </form>
           </section>
 
           <section id="activity-view" class="page-view hidden">

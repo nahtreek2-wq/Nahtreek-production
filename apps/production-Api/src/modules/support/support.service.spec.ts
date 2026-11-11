@@ -14,6 +14,9 @@ function setup(tickets: any[] = []) {
       }),
       count: jest.fn(async () => tickets.length),
     },
+    supportTicketReply: {
+      create: jest.fn(async ({data}: any) => ({id: 'r1', createdAt: new Date(), ...data})),
+    },
     notification: {create: jest.fn()},
     auditLog: {create: jest.fn()},
   };
@@ -61,5 +64,35 @@ describe('support tickets', () => {
     const updated = await service.resolve('t1', 'admin');
     expect(updated.status).toBe('RESOLVED');
     expect(db.auditLog.create).toHaveBeenCalled();
+  });
+
+  it('appends admin replies to the thread instead of overwriting', async () => {
+    const rows = [{id: 't1', userId: 'u1', subject: 'A', message: 'message one here', status: 'OPEN', adminReply: null as string | null}];
+    const {db, service} = setup(rows);
+    await service.reply('t1', 'admin', {reply: 'First answer.'});
+    await service.reply('t1', 'admin', {reply: 'Second answer.'});
+    expect(db.supportTicketReply.create).toHaveBeenCalledTimes(2);
+    expect(db.supportTicketReply.create).toHaveBeenNthCalledWith(2,
+      {data: {ticketId: 't1', authorRole: 'ADMIN', message: 'Second answer.'}});
+    // Mirror kept for older readers.
+    expect(rows[0].adminReply).toBe('Second answer.');
+  });
+
+  it('lets the owner follow up and reopens the ticket', async () => {
+    const rows = [{id: 't1', userId: 'u1', subject: 'A', message: 'message one here', status: 'ANSWERED'}];
+    const {db, service} = setup(rows);
+    const reply = await service.followUp('t1', 'u1', {message: 'Still broken, please help.'});
+    expect(reply).toMatchObject({ticketId: 't1', authorRole: 'USER'});
+    expect(rows[0].status).toBe('OPEN');
+    expect(db.supportTicket.update).toHaveBeenCalledWith(
+      expect.objectContaining({where: {id: 't1'}, data: {status: 'OPEN'}}));
+  });
+
+  it('refuses follow-ups from strangers and empty text', async () => {
+    const rows = [{id: 't1', userId: 'u1', subject: 'A', message: 'message one here', status: 'OPEN'}];
+    const {service} = setup(rows);
+    await expect(service.followUp('t1', 'stranger', {message: 'hello there'})).rejects.toThrow('not found');
+    await expect(service.followUp('t1', 'u1', {message: 'x'})).rejects.toThrow('follow-up');
+    await expect(service.followUp('missing', 'u1', {message: 'hello there'})).rejects.toThrow('not found');
   });
 });

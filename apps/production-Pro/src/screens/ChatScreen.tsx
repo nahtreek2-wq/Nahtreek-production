@@ -321,7 +321,7 @@ export function ChatScreen() {
               title="Conversation could not load"
               message="Check your connection and try again."
             />
-            <Pressable onPress={() => messages.refetch()} style={styles.retry}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Retry loading messages" onPress={() => messages.refetch()} style={styles.retry}>
               <Text style={styles.retryText}>Try again</Text>
             </Pressable>
           </View>

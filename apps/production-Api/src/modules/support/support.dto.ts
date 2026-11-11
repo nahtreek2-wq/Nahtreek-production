@@ -26,3 +26,11 @@ export class ReplySupportTicketDto {
   @IsNotEmpty()
   reply: string;
 }
+
+export class FollowUpSupportTicketDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(2000)
+  @IsNotEmpty()
+  message: string;
+}

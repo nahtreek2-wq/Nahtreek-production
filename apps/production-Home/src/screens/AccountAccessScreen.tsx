@@ -353,6 +353,8 @@ export function AccountAccessScreen({
                 />
                 <Pressable
                   style={s.link}
+                  accessibilityRole="button"
+                  accessibilityLabel="Resend verification code"
                   disabled={busy}
                   onPress={() =>
                     void run(async () => {
@@ -468,6 +470,8 @@ export function AccountAccessScreen({
                 {mode === 'login' ? (
                   <Pressable
                     style={s.link}
+                    accessibilityRole="link"
+                    accessibilityLabel="Forgot password"
                     onPress={() => changeMode('reset')}
                     disabled={busy}>
                     <Text style={s.linkText}>Forgot password?</Text>
@@ -493,6 +497,8 @@ export function AccountAccessScreen({
                     </Pressable>
                     <Pressable
                       style={{flex: 1}}
+                      accessibilityRole="link"
+                      accessibilityLabel="Read the account data notice"
                       onPress={() => setNotice(true)}>
                       <Text style={s.noticeText}>
                         I agree to the{' '}

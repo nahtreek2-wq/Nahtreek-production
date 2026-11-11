@@ -1,13 +1,11 @@
 import React, {useState} from 'react';
-import {Alert, Image, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Image, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {launchImageLibrary} from 'react-native-image-picker';
 import {useQueryClient} from '@tanstack/react-query';
 import {BorderRadius, Colors, Spacing, Typography} from '@nahtreek/design-system';
-import {api} from '../services/apiClient';
-import {mediaUrl} from '../services/media';
-import {useProToast} from '../stores/proToast';
 import {PrimaryButton} from './PrimaryButton';
+import {usePortfolioPhotos} from '../hooks/usePortfolioPhotos';
+import {mediaUrl} from '../services/media';
 
 export type WorkPhotoItem = {
   id: string;
@@ -17,77 +15,12 @@ export type WorkPhotoItem = {
 };
 
 // Work gallery manager used during profile setup: shows the photos already on
-// the public profile and lets the professional add or remove them. Same API
-// contract as the public-profile preview screen.
+// the public profile and lets the professional add or remove them. Upload
+// rules live in usePortfolioPhotos, shared with the preview screen.
 export function WorkPhotosSection({items}: {items: WorkPhotoItem[]}) {
   const queryClient = useQueryClient();
-  const toast = useProToast();
-  const [photoTitle, setPhotoTitle] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
-
-  async function addWorkPhoto() {
-    if (uploading) {
-      return;
-    }
-    if (photoTitle.trim().length < 2) {
-      setUploadError('Add a short title for this work first.');
-      return;
-    }
-    setUploading(true);
-    setUploadError('');
-    try {
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
-        selectionLimit: 1,
-        includeBase64: true,
-        quality: 0.6,
-        maxWidth: 1000,
-        maxHeight: 1000,
-      });
-      if (result.didCancel) {
-        return;
-      }
-      const photo = result.assets?.[0];
-      if (result.errorCode || !photo?.base64 || !photo.type) {
-        throw new Error('Could not open this photo. Please choose another.');
-      }
-      if (photo.base64.length > 1_333_336) {
-        throw new Error('Choose a photo smaller than 1 MB.');
-      }
-      await api.post('/professionals/me/portfolio', {
-        title: photoTitle.trim(),
-        mimeType: photo.type,
-        contentBase64: photo.base64,
-      });
-      setPhotoTitle('');
-      await queryClient.invalidateQueries({queryKey: ['professional-profile']});
-      toast('Photo added to your public profile.', 'success');
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'Could not upload the photo.');
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  function removePhoto(id: string, title: string) {
-    Alert.alert('Remove work photo?', `"${title}" will no longer appear on your public profile.`, [
-      {text: 'Cancel', style: 'cancel'},
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.delete(`/professionals/me/portfolio/${id}`);
-            await queryClient.invalidateQueries({queryKey: ['professional-profile']});
-            toast('Photo removed.', 'success');
-          } catch (error) {
-            setUploadError(error instanceof Error ? error.message : 'Could not remove this photo.');
-          }
-        },
-      },
-    ]);
-  }
+  const {photoTitle, setPhotoTitle, uploading, uploadError, addWorkPhoto, removePhoto} =
+    usePortfolioPhotos(() => queryClient.invalidateQueries({queryKey: ['professional-profile']}));
 
   return (
     <View style={styles.root}>

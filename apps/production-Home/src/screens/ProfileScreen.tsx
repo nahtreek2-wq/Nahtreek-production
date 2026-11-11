@@ -389,6 +389,7 @@ export function ProfileScreen() {
                     style={[styles.row, i > 0 && styles.rowDivider]}
                     activeOpacity={0.6}
                     accessibilityRole="button"
+                    accessibilityLabel={r.label}
                     onPress={r.onPress}>
                     <Icon
                       name={r.icon}

@@ -22,6 +22,7 @@ import {EmptyState} from '../components/EmptyState';
 import {VerificationGate} from '../components/VerificationGate';
 import {api} from '../services/apiClient';
 import {useSessionStore} from '../stores/session';
+import {useListFilters} from '../stores/listFilters';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
@@ -172,7 +173,8 @@ export function RequestsScreen() {
     useNavigation<NativeStackNavigationProp<RequestsStackParamList>>();
   const tabs = navigation.getParent<BottomTabNavigationProp<MainTabParamList>>();
   const roles = useSessionStore(state => state.user?.roles ?? []);
-  const [filter, setFilter] = useState<Filter>('ALL');
+  const filter = useListFilters(state => state.requestsFilter);
+  const setFilter = useListFilters(state => state.setRequestsFilter);
   const [oldestFirst, setOldestFirst] = useState(false);
   const hasEngineer = roles.includes('ENGINEER');
   const hasService = roles.includes('SERVICE_PROVIDER');

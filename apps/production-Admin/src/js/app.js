@@ -8,12 +8,14 @@ import { ActivityController } from "./activity.js";
 import { MembershipsController } from "./memberships.js";
 import { PaymentsController } from "./payments.js";
 import { SettingsController } from "./settings.js";
+import { TicketsDesk } from "./tickets.js";
 
 const config = window.NAHTREEK_ADMIN_CONFIG || {};
 const api = new ApiClient(config.apiBaseUrl);
 const verification = new VerificationDesk(api);
 const users = new UsersController(api);
-const viewTitles = { overview: "Dashboard", verification: "Verifications", users: "Users", payments: "Payments", memberships: "Memberships", activity: "Activity", settings: "My account" };
+const tickets = new TicketsDesk(api);
+const viewTitles = { overview: "Dashboard", verification: "Verifications", users: "Users", payments: "Payments", memberships: "Memberships", tickets: "Support", activity: "Activity", settings: "My account" };
 let currentView = "overview";
 
 function setMenuState(open) {
@@ -44,6 +46,7 @@ function navigate(view) {
   if (view === "users") void users.load();
   if (view === "payments") void payments.load();
   if (view === "memberships") void memberships.load();
+  if (view === "tickets") void tickets.load();
   if (view === "activity") void activity.load();
   if (view === "settings") void settings.load();
   byId("mobile-page-title").textContent = viewTitles[view] || "Operations";
@@ -97,10 +100,12 @@ const PURGE_IDS = [
   "membership-list", "membership-detail", "ai-membership-list", "activity-list",
   "overview-summary", "attention-list", "role-breakdown", "summary",
   "payments-summary", "memberships-summary", "ai-memberships-summary",
+  "ticket-queue", "ticket-detail",
 ];
 
 function purgeDashboard() {
   verification.reset();
+  tickets.reset();
   document.querySelectorAll("dialog").forEach((dialog) => { if (dialog.open) dialog.close(); });
   PURGE_IDS.forEach((id) => byId(id).replaceChildren());
 }
@@ -136,6 +141,7 @@ verification.bind();
 users.bind();
 payments.bind();
 memberships.bind();
+tickets.bind();
 overview.bind();
 activity.bind();
 settings.bind();

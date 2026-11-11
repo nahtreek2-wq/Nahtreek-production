@@ -50,6 +50,7 @@ import {portraitFor} from '../assets/imagery';
 import type {RootStackParamList} from '../navigation/types';
 import {useSessionStore} from '../stores/session';
 import {useCity} from '../stores/city';
+import {useListFilters} from '../stores/listFilters';
 import {useServiceCategories} from '../services/platformQueries';
 import {ClientColors} from '../design-system/tokens';
 import {iconographyForService} from '../../../../packages/mobile-ui/serviceIconography';
@@ -113,9 +114,12 @@ export function EngineerDiscoveryScreen() {
   const isGuest = useSessionStore(state => state.isGuest);
   const updateProfile = useUpdateClientProfile();
   const cityName = city.split(',')[0]?.trim() || 'your area';
-  const [mode, setMode] = useState<'engineers' | 'services'>('engineers');
-  const [filter, setFilter] = useState('All');
-  const [sort, setSort] = useState('Top Rated');
+  const mode = useListFilters(state => state.discoveryMode);
+  const setMode = useListFilters(state => state.setDiscoveryMode);
+  const filter = useListFilters(state => state.discoveryFilter);
+  const setFilter = useListFilters(state => state.setDiscoveryFilter);
+  const sort = useListFilters(state => state.discoverySort);
+  const setSort = useListFilters(state => state.setDiscoverySort);
   const [geo, setGeo] = useState<{latitude: number; longitude: number} | undefined>();
   const [geoLoading, setGeoLoading] = useState(false);
   const pickSort = async (option: string) => {

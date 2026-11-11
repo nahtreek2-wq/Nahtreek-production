@@ -1,7 +1,13 @@
-# Production Android builds (signed, store-ready)
+# Production Android builds
 
-Empty until release: the deploy team generates the signed AAB/APK here
-(see `../../../PRODUCTION_DEPLOY_GUIDE.md`):
+Staged test builds (NOT store releases, 11 Nov):
+`Nahtreek-Home-v62.apk` + `Nahtreek-Pro-v35.apk` — `.internal`
+packages, vCodes 62/35, versionName `1.0`, preview API baked in,
+secret scan clean. Built from this tree for parity testing with
+the same-numbered preview builds.
+
+Store releases are still built by the deploy team (signed AAB/APK,
+see `../../../PRODUCTION_DEPLOY_GUIDE.md`):
 
 - `Nahtreek-Home.aab` (Play Store upload) + `Nahtreek-Home.apk`
 - `Nahtreek-Pro.aab` + `Nahtreek-Pro.apk`

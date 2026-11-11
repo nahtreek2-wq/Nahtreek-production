@@ -6,6 +6,7 @@ import {Colors} from '@nahtreek/design-system';
 import {Icon, ICONS} from './ui';
 import {fetchAiPlan, fetchAiSubscription, type AiPlanView} from '../services/aiBilling';
 import {inr} from '../utils/format';
+import {ClientColors} from '../design-system/tokens';
 import type {RootStackParamList} from '../navigation/types';
 
 /** Blinkit-style offer strip on booking sheets. Every number comes from the server plan card; hidden for Plus members and when offline. */
@@ -46,7 +47,7 @@ function PlusPerkStripInner({plan, consultFeePaisa}: {plan: AiPlanView; consultF
 }
 
 const styles = StyleSheet.create({
-  strip: {flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A'},
+  strip: {flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: ClientColors.accentSoft, borderWidth: 1, borderColor: ClientColors.accentBorder},
   pressed: {opacity: 0.85},
   copy: {flex: 1, gap: 2},
   title: {fontSize: 14, fontWeight: '700', color: Colors.navyDeep},

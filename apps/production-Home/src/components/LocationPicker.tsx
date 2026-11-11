@@ -2,6 +2,8 @@ import React, {useRef, useState} from 'react';
 import {Pressable, Text, View} from 'react-native';
 import {Button, Input} from './ui';
 import {currentLocation, searchLocations, type SelectedLocation} from '../services/location';
+import {Colors} from '@nahtreek/design-system';
+import {ClientColors} from '../design-system/tokens';
 
 export function LocationPicker({onSelect, onSearching}: {onSelect: (location: SelectedLocation) => void; onSearching?: () => void}) {
   const [query, setQuery] = useState('');
@@ -34,7 +36,7 @@ export function LocationPicker({onSelect, onSearching}: {onSelect: (location: Se
     <Button label="Use current location" variant="secondary" disabled={busy} onPress={() => void locate(true)} />
     <Input label="Search address or city" value={query} onChangeText={value => {selectionVersion.current++; pendingVersion.current = null; setBusy(false); setError(''); setQuery(value); setResults([]); onSearching?.();}} placeholder="Street, city or postal code" />
     <Button label={busy ? 'Finding location…' : 'Search places'} disabled={busy || query.trim().length < 3} onPress={() => void locate(false)} />
-    {error ? <Text accessibilityRole="alert" style={{color: '#D14343'}}>{error}</Text> : null}
-    {results.map((item, index) => <Pressable key={index} accessibilityRole="button" onPress={() => {selectionVersion.current++; pendingVersion.current = null; setBusy(false); onSelect(item); setResults([]);}} style={{padding: 16, minHeight: 48, borderBottomWidth: 1, borderColor: '#E6EAF0'}}><Text style={{color: '#172033'}}>{item.address}</Text></Pressable>)}
+    {error ? <Text accessibilityRole="alert" style={{color: Colors.error}}>{error}</Text> : null}
+    {results.map((item, index) => <Pressable key={index} accessibilityRole="button" onPress={() => {selectionVersion.current++; pendingVersion.current = null; setBusy(false); onSelect(item); setResults([]);}} style={{padding: 16, minHeight: 48, borderBottomWidth: 1, borderColor: Colors.slate100}}><Text style={{color: ClientColors.primaryText}}>{item.address}</Text></Pressable>)}
   </View>;
 }

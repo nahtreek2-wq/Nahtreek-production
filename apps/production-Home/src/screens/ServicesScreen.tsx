@@ -20,12 +20,14 @@ import {
   Spacing,
   Typography,
 } from '@nahtreek/design-system';
-import {AppHeader, Button, Icon, ICONS} from '../components/ui';
+import {AppHeader, Button, EmptyState, ErrorState, Icon, ICONS, SectionHeader} from '../components/ui';
+import {ProviderCardSkeleton} from '../components/SkeletonLoader';
 import {SERVICE_GROUPS} from '../features/services/catalogue';
 import {useServiceCategories} from '../services/platformQueries';
 import {workPhotoFor} from '../assets/imagery';
 import type {RootStackParamList} from '../navigation/types';
 import {useScrollMotion, ScrollMotionBar} from '../components/ScrollMotionBar';
+import {ClientColors} from '../design-system/tokens';
 
 class ServicesScreenBoundary extends Component<
   {children: React.ReactNode; onBack: () => void},
@@ -106,31 +108,32 @@ function ServicesScreenContent() {
           </View>
         ) : null}
         {categories.isPending ? (
-          <Text style={styles.title}>Loading home services…</Text>
+          <View accessibilityLabel="Loading home services">
+            <ProviderCardSkeleton />
+            <ProviderCardSkeleton />
+          </View>
         ) : null}
         {categories.isError ? (
-          <View style={styles.infoCard}>
-            <Text style={styles.title}>Could not load services</Text>
-            <Button
-              label="Try again"
-              variant="secondary"
-              onPress={() => void categories.refetch()}
-            />
-          </View>
+          <ErrorState
+            title="Could not load services"
+            message="Check your connection and try again."
+            actionLabel="Try again"
+            onAction={() => void categories.refetch()}
+          />
         ) : null}
         {!categories.isPending && !categories.isError && !services.length ? (
-          <Text style={styles.description}>
-            No services listed yet. Please check back later.
-          </Text>
+          <EmptyState
+            title="No services listed yet"
+            message="Please check back later."
+          />
         ) : null}
         {!categories.isPending && !categories.isError && requestedServiceId && !selected ? (
-          <View style={styles.infoCard}>
-            <Text style={styles.title}>This service is no longer available</Text>
-            <Text style={styles.description}>
-              Return to the list to choose another available service.
-            </Text>
-            <Button label="Back to services" variant="secondary" onPress={() => nav.goBack()} />
-          </View>
+          <EmptyState
+            title="This service is no longer available"
+            message="Return to the list to choose another available service."
+            actionLabel="Back to services"
+            onAction={() => nav.goBack()}
+          />
         ) : null}
         {selected ? (
           <View style={{gap: 20}}>
@@ -163,7 +166,7 @@ function ServicesScreenContent() {
             services.some(item => item.group === group),
           ).map(group => (
             <View key={group} style={{marginBottom: 24}}>
-              <Text style={styles.group}>{group}</Text>
+              <SectionHeader title={group} />
               {services
                 .filter(item => item.group === group)
                 .map(item => (
@@ -203,12 +206,11 @@ function ServicesScreenContent() {
   );
 }
 const styles = StyleSheet.create({
-  root: {flex: 1, backgroundColor: '#F3F5F8'},
+  root: {flex: 1, backgroundColor: ClientColors.lightBackground},
   body: {padding: 20, paddingBottom: 40},
   intro: {marginBottom: 24, gap: 8},
-  eyebrow: {fontSize: 11, fontWeight: '700', letterSpacing: 1.5, color: '#52627A'},
-  introTitle: {fontSize: 28, lineHeight: 34, fontWeight: '700', color: '#111F35'},
-  group: {fontSize: 18, lineHeight: 24, fontWeight: '700', color: '#111F35', marginBottom: 12},
+  eyebrow: {fontSize: 11, fontWeight: '700', letterSpacing: 1.5, color: ClientColors.iconSlate},
+  introTitle: {fontSize: 28, lineHeight: 34, fontWeight: '700', color: ClientColors.primaryNavy},
   card: {
     padding: 16,
     marginBottom: Spacing.md,
@@ -227,7 +229,7 @@ const styles = StyleSheet.create({
   },
   cardImageRadius: {borderRadius: BorderRadius.md},
   cardImageOverlay: {flex: 1},
-  title: {fontSize: 17, lineHeight: 23, fontWeight: '700', color: '#111F35', marginBottom: 4},
+  title: {fontSize: 17, lineHeight: 23, fontWeight: '700', color: ClientColors.primaryNavy, marginBottom: 4},
   description: {fontSize: 14, lineHeight: 21, color: Colors.slate500},
   detailHero: {
     minHeight: 280,
@@ -247,13 +249,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.white,
     marginTop: Spacing.xs,
-  },
-  infoCard: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.slate200,
-    padding: Spacing.md,
   },
   failure: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.md},
   failureTitle: {...Typography.h2, color: Colors.slate900, textAlign: 'center'},

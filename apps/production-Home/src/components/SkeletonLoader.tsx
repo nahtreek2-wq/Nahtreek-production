@@ -50,7 +50,7 @@ export function SkeletonItem({
           width,
           height,
           borderRadius,
-          backgroundColor: '#E6EAF0',
+          backgroundColor: Colors.slate100,
           overflow: 'hidden',
         },
         style,
@@ -61,7 +61,7 @@ export function SkeletonItem({
           transform: [{translateX}],
         }}>
         <LinearGradient
-          colors={['#E6EAF0', '#F7F9FC', '#FFFFFF', '#F7F9FC', '#E6EAF0']}
+          colors={[Colors.slate100, Colors.slate50, Colors.white, Colors.slate50, Colors.slate100]}
           start={{x: 0, y: 0.5}}
           end={{x: 1, y: 0.5}}
           style={{flex: 1}}
@@ -117,84 +117,45 @@ export function ProviderCardSkeleton() {
   );
 }
 
-/* ── Full-page Home skeleton: mirrors exact HomeScreen layout ── */
+/* ── Row skeleton for message/notification lists: avatar + two lines ── */
+
+export function MessageRowSkeleton() {
+  return (
+    <View style={styles.cardSkeleton}>
+      <View style={styles.row}>
+        <SkeletonItem width={44} height={44} borderRadius={22} />
+        <View style={{flex: 1, marginLeft: Spacing.md}}>
+          <SkeletonItem width="55%" height={16} />
+          <SkeletonItem width="80%" height={13} style={{marginTop: 6}} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/* ── Home "Top professionals" carousel placeholder ── */
 
 export function HomeSkeleton() {
   return (
-    <View style={styles.homeSkeleton}>
-      {/* Hero carousel placeholder */}
-      <SkeletonItem
-        width="100%"
-        height={200}
-        borderRadius={BorderRadius.xl}
-        style={{marginBottom: Spacing.md}}
-      />
-
-      {/* Carousel dots */}
-      <View style={styles.dotsRow}>
-        <SkeletonItem width={20} height={6} borderRadius={3} />
-        <SkeletonItem
-          width={6}
-          height={6}
-          borderRadius={3}
-          style={{marginLeft: 6}}
-        />
-        <SkeletonItem
-          width={6}
-          height={6}
-          borderRadius={3}
-          style={{marginLeft: 6}}
-        />
-      </View>
-
-      {/* Stats strip */}
-      <View style={styles.statsRow}>
-        <SkeletonItem width="28%" height={56} borderRadius={BorderRadius.lg} />
-        <SkeletonItem width="28%" height={56} borderRadius={BorderRadius.lg} />
-        <SkeletonItem width="28%" height={56} borderRadius={BorderRadius.lg} />
-      </View>
-
-      {/* Section title */}
+    <View
+      accessibilityLabel="Loading top professionals"
+      style={styles.homeSkeleton}>
       <SkeletonItem
         width="55%"
         height={20}
-        style={{marginBottom: Spacing.md, marginTop: Spacing.sm}}
+        style={{marginBottom: Spacing.md}}
       />
-
-      {/* Category grid (2x2) */}
-      <View style={styles.categoryGrid}>
-        <SkeletonItem
-          width="48%"
-          height={90}
-          borderRadius={BorderRadius.lg}
-        />
-        <SkeletonItem
-          width="48%"
-          height={90}
-          borderRadius={BorderRadius.lg}
-        />
+      <View style={styles.proSkeletonRow}>
+        {[0, 1].map(index => (
+          <View key={index} style={styles.proSkeletonCard}>
+            <SkeletonItem width={208} height={110} borderRadius={0} />
+            <View style={{padding: Spacing.md}}>
+              <SkeletonItem width="80%" height={16} />
+              <SkeletonItem width="60%" height={13} style={{marginTop: 8}} />
+            </View>
+          </View>
+        ))}
       </View>
-      <View style={styles.categoryGrid}>
-        <SkeletonItem
-          width="48%"
-          height={90}
-          borderRadius={BorderRadius.lg}
-        />
-        <SkeletonItem
-          width="48%"
-          height={90}
-          borderRadius={BorderRadius.lg}
-        />
-      </View>
-
-      {/* Provider cards */}
-      <SkeletonItem
-        width="48%"
-        height={18}
-        style={{marginTop: Spacing.lg, marginBottom: Spacing.md}}
-      />
-      <ProviderCardSkeleton />
-      <ProviderCardSkeleton />
     </View>
   );
 }
@@ -216,21 +177,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingTop: Spacing.xs,
   },
-  dotsRow: {
+  proSkeletonRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.md,
+    gap: 12,
+    paddingTop: 12,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.md,
-    paddingHorizontal: 4,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.sm,
+  proSkeletonCard: {
+    width: 208,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.slate200,
   },
 });

@@ -10,19 +10,20 @@ import {
   type ServiceRequest,
 } from '../services/platformQueries';
 import type {RootStackParamList} from '../navigation/types';
+import {ClientColors} from '../design-system/tokens';
 export const platformStyles = StyleSheet.create({
-  root: {flex: 1, backgroundColor: '#F7F9FC'},
+  root: {flex: 1, backgroundColor: ClientColors.lightBackground},
   body: {padding: 20, paddingBottom: 36},
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ClientColors.white,
     padding: 20,
     borderRadius: 16,
     marginBottom: 12,
     gap: 12,
   },
   row: {flexDirection: 'row', alignItems: 'center', gap: 12},
-  title: {fontSize: 20, fontWeight: '700', color: '#172033'},
-  text: {fontSize: 16, lineHeight: 24, color: '#667085'},
+  title: {fontSize: 20, fontWeight: '700', color: ClientColors.primaryText},
+  text: {fontSize: 16, lineHeight: 24, color: ClientColors.secondaryText},
 });
 export function PlatformHistoryScreen({
   activity = false,

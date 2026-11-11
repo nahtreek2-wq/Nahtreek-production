@@ -21,6 +21,7 @@ import {
   Typography,
 } from '@nahtreek/design-system';
 import {ScreenHeader} from '../components/ScreenHeader';
+import {ProButton} from '../components/ProButton';
 import {EmptyState} from '../components/EmptyState';
 import {KeyboardAwareView} from '../../../../packages/mobile-ui/KeyboardAwareView';
 import {DateTimeField} from '../../../../packages/mobile-ui/DateTimeField';
@@ -185,13 +186,7 @@ export function ScheduleScreen() {
                 : 'Check your connection and try again.'
             }
           />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading availability"
-            onPress={() => availability.refetch()}
-            style={styles.retry}>
-            <Text style={styles.retryText}>Try again</Text>
-          </Pressable>
+          <ProButton label="Try again" variant="secondary" onPress={() => void availability.refetch()} />
         </View>
       ) : null}
       {availability.data ? (
@@ -298,7 +293,7 @@ export function ScheduleScreen() {
               <View style={styles.customTimeWrap}><DateTimeField label="Ends at" accessibilityLabel="End time" mode="time" value={customEnd} onChange={setCustomEnd} /></View>
             </View>
             {customError ? <Text accessibilityRole="alert" style={styles.error}>{customError}</Text> : null}
-            <Pressable accessibilityRole="button" disabled={create.isPending} onPress={addCustom} style={styles.customSave}><Text style={styles.customSaveText}>{create.isPending ? 'Saving…' : 'Add available time'}</Text></Pressable>
+            <ProButton label="Add available time" loading={create.isPending} loadingLabel="Saving" disabled={create.isPending} onPress={addCustom} />
           </View> : null}
           {error ? (
             <Text accessibilityRole="alert" style={styles.error}>
@@ -451,10 +446,6 @@ const styles = StyleSheet.create({
   customTimes: {flexDirection: 'row', gap: 10},
   customTime: {flex: 1},
   customTimeWrap: {flex: 1},
-  customSave: {minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: ProColors.primary, borderRadius: 12},
-  customSaveText: {...ProType.action, color: ProColors.surface},
-  retry: {alignSelf: 'center', padding: 20},
-  retryText: {...Typography.button, lineHeight: 22, color: Colors.navyMid},
   statusCard: {
     alignItems: 'stretch',
     gap: Spacing.sm,

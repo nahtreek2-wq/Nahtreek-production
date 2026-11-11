@@ -18,7 +18,7 @@ import {
   ICONS,
   OfflineBanner,
 } from '../components/ui';
-import {EngineerCardSkeleton} from '../components/SkeletonLoader';
+import {MessageRowSkeleton} from '../components/SkeletonLoader';
 import {
   useNotificationsList,
   useMarkAllNotificationsRead,
@@ -96,7 +96,9 @@ export function NotificationsScreen() {
       ) : null}
       {query.isLoading && !items.length ? (
         <View style={styles.list}>
-          <EngineerCardSkeleton />
+          <MessageRowSkeleton />
+          <MessageRowSkeleton />
+          <MessageRowSkeleton />
         </View>
       ) : query.isError && !items.length ? (
         <ErrorState

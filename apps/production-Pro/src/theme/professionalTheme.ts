@@ -13,11 +13,12 @@ export const ProColors = {
   deep: '#071F3D',
   rich: '#103665',
   blueSoft: '#EAF2FF',
-  // Brand action language shared with the Home app: construction yellow for
-  // actions and selections. Blue remains for semantic info UI only.
-  accent: '#FFC107',
-  accentPressed: '#E5A800',
-  accentSoft: '#FFF6DD',
+  // Brand action language shared with the Home app (F-202 BrandYellow ramp,
+  // logo-checked). Blue remains for semantic info UI only.
+  accent: '#F5B82E',
+  accentPressed: '#D99A12',
+  accentSoft: '#FFF5D9',
+  accentBorder: '#E8C66F',
   accentIcon: '#7A6100',
   accentText: '#7A6100',
   onAccent: '#111F35',

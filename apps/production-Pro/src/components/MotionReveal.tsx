@@ -1,6 +1,7 @@
 import React, {useEffect, useRef} from 'react';
 import {Animated, type StyleProp, type ViewStyle} from 'react-native';
 import {useReducedMotion} from '../../../../packages/mobile-ui/useReducedMotion';
+import {Motion} from '../../../../packages/mobile-ui/motion';
 
 export function MotionReveal({children, delay = 0, style}: {
   children: React.ReactNode;
@@ -20,8 +21,8 @@ export function MotionReveal({children, delay = 0, style}: {
     opacity.setValue(0.88);
     offset.setValue(6);
     const animation = Animated.parallel([
-      Animated.timing(opacity, {toValue: 1, duration: 260, delay, useNativeDriver: true}),
-      Animated.timing(offset, {toValue: 0, duration: 260, delay, useNativeDriver: true}),
+      Animated.timing(opacity, {toValue: 1, duration: Motion.entrance, delay, useNativeDriver: true}),
+      Animated.timing(offset, {toValue: 0, duration: Motion.entrance, delay, useNativeDriver: true}),
     ]);
     animation.start();
     return () => animation.stop();

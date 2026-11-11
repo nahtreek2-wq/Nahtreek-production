@@ -94,10 +94,10 @@ function PrivateProfile() {
   );
 }
 const styles = StyleSheet.create({
-  gateRoot: {flex: 1, backgroundColor: '#F7F9FC'},
+  gateRoot: {flex: 1, backgroundColor: ClientColors.lightBackground},
   gateContent: {padding: 24, paddingTop: 32, gap: 16},
   gateHeading: {fontSize: 23, lineHeight: 29, fontWeight: '700', color: Colors.navyDeep},
-  gateMessage: {fontSize: 16, lineHeight: 24, color: '#667085'},
+  gateMessage: {fontSize: 16, lineHeight: 24, color: ClientColors.secondaryText},
 });
 function LoginRoute({
   route,

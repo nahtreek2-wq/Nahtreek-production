@@ -1,11 +1,12 @@
 import React from 'react';
-import {Animated, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Animated, StyleSheet, Text, View} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
 import {useQuery} from '@tanstack/react-query';
 import {BorderRadius, Colors, Spacing, Typography} from '@nahtreek/design-system';
-import {ProColors} from '../theme/professionalTheme';
 import {ScreenHeader} from '../components/ScreenHeader';
+import {stagger} from '../../../../packages/mobile-ui/motion';
+import {ProButton} from '../components/ProButton';
 import {ScreenLoading} from '../components/ScreenLoading';
 import {EmptyState} from '../components/EmptyState';
 import {MotionReveal} from '../components/MotionReveal';
@@ -55,9 +56,7 @@ export function ReviewsScreen() {
       {query.isError ? (
         <View style={styles.errorWrap}>
           <EmptyState icon="cloud-off-outline" title="Reviews could not load" message="Check your connection and try again." />
-          <Pressable accessibilityRole="button" onPress={() => query.refetch()} style={styles.retry}>
-            <Text style={styles.retryText}>Try again</Text>
-          </Pressable>
+          <ProButton label="Try again" variant="secondary" onPress={() => void query.refetch()} />
         </View>
       ) : null}
       {query.isSuccess ? (
@@ -94,7 +93,7 @@ export function ReviewsScreen() {
           </View>
           <Text style={styles.sectionTitle}>Recent feedback</Text>
           {reviews.length ? reviews.map((review, index) => (
-            <MotionReveal key={review.id} delay={Math.min(index * 35, 140)}>
+            <MotionReveal key={review.id} delay={stagger(index)}>
               <View style={styles.reviewCard}>
                 <View style={styles.reviewTop}>
                   <View style={styles.reviewAvatar}>
@@ -154,6 +153,4 @@ const styles = StyleSheet.create({
   comment: {fontSize: 15, lineHeight: 22, color: Colors.slate800},
   privacyNote: {fontSize: 12, lineHeight: 18, textAlign: 'center', color: Colors.slate500, marginTop: 4},
   errorWrap: {flex: 1, justifyContent: 'center', padding: Spacing.md, gap: 12},
-  retry: {minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: ProColors.accent},
-  retryText: {fontSize: 14, fontWeight: '700', color: ProColors.onAccent},
 });

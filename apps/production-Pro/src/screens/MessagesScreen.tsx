@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#DCE2EA',
+    borderBottomColor: ProColors.border,
   },
   pressed: {opacity: 0.82},
   avatar: {

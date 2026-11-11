@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {Motion} from '../../../../../packages/mobile-ui/motion';
 import {
   Colors,
   Typography,
@@ -67,13 +68,13 @@ function ToastCard({
   const opacity = useSharedValue(0);
   const dismiss = useCallback(() => onDismiss(), [onDismiss]);
   useEffect(() => {
-    opacity.value = withTiming(1, {duration: 160});
+    opacity.value = withTiming(1, {duration: Motion.feedback});
     translateY.value = withSpring(0, {damping: 20, stiffness: 260});
     const timer = setTimeout(() => {
-      opacity.value = withTiming(0, {duration: 140}, finished => {
+      opacity.value = withTiming(0, {duration: Motion.feedback}, finished => {
         if (finished) runOnJS(dismiss)();
       });
-      translateY.value = withTiming(12, {duration: 140});
+      translateY.value = withTiming(12, {duration: Motion.feedback});
     }, DURATIONS[item.kind]);
     return () => clearTimeout(timer);
   }, [dismiss, item.id, item.kind, opacity, translateY]);

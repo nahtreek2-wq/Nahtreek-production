@@ -394,7 +394,7 @@ export function ProfileScreen() {
                     <Icon
                       name={r.icon}
                       size={19}
-                      color={r.danger ? Colors.error : g.title === 'My home' || g.title === 'My activity' ? '#2563EB' : '#52627A'}
+                      color={r.danger ? Colors.error : g.title === 'My home' || g.title === 'My activity' ? Colors.interactiveBlue : ClientColors.iconSlate}
                       style={styles.rowIcon}
                     />
                     <Text
@@ -546,7 +546,7 @@ export function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F5F8',
+    backgroundColor: ClientColors.lightBackground,
   },
   header: {
     backgroundColor: Colors.navyDeep,
@@ -594,12 +594,12 @@ const styles = StyleSheet.create({
   group: {
     marginTop: 24,
   },
-  groupBody: {backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden'},
+  groupBody: {backgroundColor: ClientColors.white, borderRadius: 16, overflow: 'hidden'},
   groupTitle: {
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '700',
-    color: '#111F35',
+    color: ClientColors.primaryNavy,
     marginBottom: 12,
     marginLeft: 2,
   },
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     color: Colors.slate800,
     flex: 1,
   },
-  editBtnText: {fontSize: 14, fontWeight: '700', color: '#111F35'},
+  editBtnText: {fontSize: 14, fontWeight: '700', color: ClientColors.primaryNavy},
   editAvatarWrap: {
     alignItems: 'center',
     marginBottom: Spacing.lg,

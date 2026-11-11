@@ -16,6 +16,7 @@ import {useSessionStore} from '../stores/session';
 import {useQueryClient} from '@tanstack/react-query';
 import {queryKeys} from '../services/queries';
 import {isApiConfigured} from '../services/config';
+import {ClientColors} from '../design-system/tokens';
 
 type ChatRoute = RouteProp<RootStackParamList, 'Chat'>;
 
@@ -175,7 +176,7 @@ export function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F5F8',
+    backgroundColor: ClientColors.lightBackground,
   },
   flex: {
     flex: 1,

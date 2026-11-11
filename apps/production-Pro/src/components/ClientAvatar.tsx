@@ -6,9 +6,9 @@ import {mediaUrl} from '../services/media';
 // Soft deterministic tints so every client reads as a distinct person even
 // when they never uploaded a photo. Dark text on light tints only.
 const FALLBACK_TINTS = [
-  {background: '#EAF2FF', foreground: '#0B2D5B'},
-  {background: '#FFF6DD', foreground: '#7A6100'},
-  {background: '#EAF7EF', foreground: '#14663C'},
+  {background: ProColors.blueSoft, foreground: ProColors.primary},
+  {background: ProColors.accentSoft, foreground: ProColors.accentText},
+  {background: ProColors.successSoft, foreground: ProColors.success},
   {background: '#F3E8FF', foreground: '#6D28D9'},
   {background: '#FFEEDD', foreground: '#9A3412'},
   {background: '#E0F2F1', foreground: '#0F766E'},

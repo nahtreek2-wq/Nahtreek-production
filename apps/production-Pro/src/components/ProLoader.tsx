@@ -39,7 +39,7 @@ export function ProLoader({size = 44, label, tone = 'navy'}: {
   const rotation = spin.interpolate({inputRange: [0, 1], outputRange: ['0deg', '360deg']});
   const palette =
     tone === 'light'
-      ? {track: 'rgba(255,255,255,0.25)', arc: '#FFFFFF'}
+      ? {track: 'rgba(255,255,255,0.25)', arc: ProColors.surface}
       : tone === 'red'
       ? {track: 'rgba(180,35,24,0.14)', arc: ProColors.error}
       : {track: 'rgba(11,45,91,0.14)', arc: ProColors.primary};
@@ -80,5 +80,5 @@ const styles = StyleSheet.create({
   arc: {position: 'absolute', borderWidth: 4, borderLeftColor: 'transparent', borderBottomColor: 'transparent'},
   core: {position: 'absolute'},
   label: {...ProType.meta, color: ProColors.secondary, textAlign: 'center'},
-  labelLight: {color: '#FFFFFF'},
+  labelLight: {color: ProColors.surface},
 });

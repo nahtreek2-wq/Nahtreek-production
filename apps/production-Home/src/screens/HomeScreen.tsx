@@ -12,12 +12,14 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
+import {Motion} from '../../../../packages/mobile-ui/motion';
 import {useNavigation} from '@react-navigation/native';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Spacing} from '@nahtreek/design-system';
-import {Avatar, BottomSheet, Icon, ICONS} from '../components/ui';
+import {Colors, Spacing} from '@nahtreek/design-system';
+import {Avatar, BottomSheet, Icon, ICONS, SectionHeader} from '../components/ui';
 import {CATEGORY_SERVICE_IDS, CategoryGrid} from '../components/home/CategoryGrid';
+import {HomeSkeleton} from '../components/SkeletonLoader';
 import {ActiveBookingBar} from '../components/home/ActiveBookingBar';
 import {BookAgainStrip} from '../components/home/BookAgainStrip';
 import {TrustStrip} from '../components/home/TrustStrip';
@@ -54,8 +56,8 @@ const MUTED = ClientColors.secondaryText;
 const BORDER = ClientColors.border;
 const ACCENT_SOFT = ClientColors.accentSoft;
 const ICON_TONES = {
-  ai: {color: '#FFFFFF'},
-  engineers: {color: '#2563EB'},
+  ai: {color: ClientColors.white},
+  engineers: {color: Colors.interactiveBlue},
   saved: {color: '#C2415A'},
 } as const;
 
@@ -160,7 +162,7 @@ export function HomeScreen() {
               accessibilityLabel="Notifications"
               onPress={() => navigation.navigate('Notifications')}
               style={[styles.iconButton, compact && styles.compactIconButton]}>
-              <Icon name={ICONS.bell} size={compact ? 18 : 21} color="#FFFFFF" />
+              <Icon name={ICONS.bell} size={compact ? 18 : 21} color={ClientColors.white} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -178,12 +180,12 @@ export function HomeScreen() {
                 />
               ) : (
                 <View style={[styles.iconButton, compact && styles.compactIconButton]}>
-                  <Icon name={ICONS.profile} size={24} color="#FFFFFF" />
+                  <Icon name={ICONS.profile} size={24} color={ClientColors.white} />
                 </View>
               )}
             </Pressable>
           </View>
-          <Animated.View entering={FadeInDown.duration(340).delay(60).reduceMotion(ReduceMotion.System)}>
+          <Animated.View entering={FadeInDown.duration(Motion.entrance).delay(60).reduceMotion(ReduceMotion.System)}>
             <Text numberOfLines={1} style={[styles.greeting, compact && styles.compactGreeting]}>
               {user ? `Hello, ${profile.data?.fullName ?? user.fullName}` : 'Make yourself at home'}
             </Text>
@@ -243,7 +245,7 @@ export function HomeScreen() {
             items={bookAgainItems}
             onSelect={serviceId => navigation.navigate('Services', {serviceId})}
           />
-          <Section title="Your workspace" />
+          <View style={styles.sectionSpacer}><SectionHeader title="Your workspace" /></View>
           <View style={styles.workRow}>
             <Pressable
               accessibilityRole="button"
@@ -285,13 +287,15 @@ export function HomeScreen() {
               ) : null}
             </Pressable>
           </View>
-          {engineers.data.length ? (
+          {engineers.isLoading ? (
+            <View style={styles.sectionSpacer}><HomeSkeleton /></View>
+          ) : engineers.data.length ? (
             <>
-              <Section
+              <View style={styles.sectionSpacer}><SectionHeader
                 title="Top professionals"
-                action="View all"
+                actionLabel="View all"
                 onAction={openDiscovery}
-              />
+              /></View>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -338,7 +342,7 @@ export function HomeScreen() {
           ) : null}
           {!user ? (
             <>
-              <Section title="Save your work" />
+              <View style={styles.sectionSpacer}><SectionHeader title="Save your work" /></View>
               <View style={styles.actionStack}>
                 <Pressable
                   accessibilityRole="button"
@@ -408,31 +412,6 @@ export function HomeScreen() {
   );
 }
 
-function Section({
-  title,
-  action,
-  onAction,
-}: {
-  title: string;
-  action?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {action ? (
-        <Pressable
-          onPress={onAction}
-          accessibilityLabel={action}
-          style={styles.seeAll}>
-          <Text style={styles.seeAllText}>{action}</Text>
-          <Icon name={ICONS.chevronRight} size={16} color={NAVY} />
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: PAPER},
   header: {
@@ -442,9 +421,9 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 24,
   },
   compactHeader: {paddingHorizontal: 16, paddingBottom: 10},
-  greeting: {fontSize: 19, lineHeight: 25, fontWeight: '700', color: '#FFFFFF', marginTop: 10},
+  greeting: {fontSize: 19, lineHeight: 25, fontWeight: '700', color: ClientColors.white, marginTop: 10},
   compactGreeting: {marginTop: 6},
-  greetingText: {fontSize: 14, lineHeight: 20, color: '#DCE2EA', marginTop: 3},
+  greetingText: {fontSize: 14, lineHeight: 20, color: Colors.slate200, marginTop: 3},
   profileTarget: {minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center', alignSelf: 'center'},
   compactProfileTarget: {minWidth: 36},
   headerRow: {minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 8},
@@ -457,7 +436,7 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '800',
     letterSpacing: 1,
-    color: '#FFF',
+    color: ClientColors.white,
     includeFontPadding: false,
   },
   compactBrand: {fontSize: 17, lineHeight: 21, letterSpacing: 0.8},
@@ -465,7 +444,7 @@ const styles = StyleSheet.create({
   productName: {fontSize: 12, lineHeight: 16, fontWeight: '800', letterSpacing: 3, color: ClientColors.accent, includeFontPadding: false, flexShrink: 0},
   compactProductName: {fontSize: 11, lineHeight: 14, letterSpacing: 2},
   cityRow: {flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0},
-  city: {fontSize: 14, lineHeight: 19, color: '#FFF', flexShrink: 1, includeFontPadding: false},
+  city: {fontSize: 14, lineHeight: 19, color: ClientColors.white, flexShrink: 1, includeFontPadding: false},
   compactCity: {fontSize: 12, lineHeight: 17},
   iconButton: {
     width: 48,
@@ -512,7 +491,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 1.2,
-    color: '#FFFFFF',
+    color: ClientColors.white,
     marginBottom: 3,
     textShadowColor: 'rgba(7,31,61,0.9)',
     textShadowOffset: {width: 0, height: 1},
@@ -522,12 +501,12 @@ const styles = StyleSheet.create({
     fontSize: 19,
     lineHeight: 24,
     fontWeight: '800',
-    color: '#FFF',
+    color: ClientColors.white,
   },
   planSubtitle: {
     fontSize: 13,
     lineHeight: 18,
-    color: '#E2E8F0',
+    color: Colors.slate200,
     marginTop: 2,
   },
   planActions: {
@@ -561,7 +540,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  planSecondaryText: {fontSize: 13, fontWeight: '800', color: '#FFF', flexShrink: 1},
+  planSecondaryText: {fontSize: 13, fontWeight: '800', color: ClientColors.white, flexShrink: 1},
   workRow: {flexDirection: 'row', gap: 10, marginTop: 12},
   workTile: {
     flex: 1,
@@ -569,13 +548,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: BORDER,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ClientColors.white,
     paddingVertical: 12,
     paddingHorizontal: 6,
     alignItems: 'center',
     gap: 7,
   },
-  workTilePressed: {backgroundColor: '#F3F7FD'},
+  workTilePressed: {backgroundColor: ClientColors.veryLightBlue},
   workIcon: {
     width: 38,
     height: 38,
@@ -586,22 +565,7 @@ const styles = StyleSheet.create({
   workTitle: {fontSize: 12, lineHeight: 16, fontWeight: '800', color: TEXT, textAlign: 'center'},
   workCount: {fontSize: 11, lineHeight: 14, color: MUTED, textAlign: 'center'},
 
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  sectionKicker: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.3,
-    color: ClientColors.accentText,
-    marginBottom: 4,
-  },
-  sectionTitle: {fontSize: 20, lineHeight: 26, fontWeight: '800', color: TEXT, flex: 1},
-  seeAll: {minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 1},
-  seeAllText: {fontSize: 14, fontWeight: '800', color: NAVY},
+  sectionSpacer: {marginTop: 16},
 
   needCard: {
     flex: 1,
@@ -609,7 +573,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: BORDER,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ClientColors.white,
     padding: 14,
   },
   needCardTop: {
@@ -663,8 +627,8 @@ const styles = StyleSheet.create({
   proSpecialty: {fontSize: 13, lineHeight: 18, color: MUTED, marginTop: 4},
   proMeta: {flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8},
   proRating: {fontSize: 13, lineHeight: 18, fontWeight: '600', color: TEXT},
-  actionCardPressed: {backgroundColor: '#F3F7FD'},
-  actionStack: {marginTop: 12, backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden'},
+  actionCardPressed: {backgroundColor: ClientColors.veryLightBlue},
+  actionStack: {marginTop: 12, backgroundColor: ClientColors.white, borderRadius: 16, overflow: 'hidden'},
   actionCard: {
     minHeight: 70,
     flexDirection: 'row',
@@ -730,7 +694,7 @@ const styles = StyleSheet.create({
   },
   supportCopy: {flex: 1},
   supportTitle: {fontSize: 15, fontWeight: '800', color: '#FFF'},
-  supportText: {fontSize: 12, lineHeight: 17, color: '#FFF', marginTop: 3},
+  supportText: {fontSize: 12, lineHeight: 17, color: ClientColors.white, marginTop: 3},
   supportButton: {
     width: 34,
     height: 34,

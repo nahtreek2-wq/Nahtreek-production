@@ -16,7 +16,8 @@ import {
   Spacing,
   BorderRadius,
 } from '@nahtreek/design-system';
-import {AppHeader, Button, Card, Icon, ICONS, Input, SectionHeader} from '../components/ui';
+import {AppHeader, Button, Card, EmptyState, ErrorState, Icon, ICONS, Input, SectionHeader} from '../components/ui';
+import {MessageRowSkeleton} from '../components/SkeletonLoader';
 import {SupportThread, type SupportReplyView} from '../../../../packages/mobile-booking/SupportThread';
 import {api} from '../services/apiClient';
 import {useSessionStore} from '../stores/session';
@@ -154,15 +155,17 @@ export function HelpScreen() {
           <>
             <SectionHeader title="My support requests" />
             {tickets.isPending ? (
-              <Card style={styles.faq}><Text style={styles.faqA}>Loading your requests…</Text></Card>
+              <View accessibilityLabel="Loading your requests">
+                <MessageRowSkeleton />
+                <MessageRowSkeleton />
+              </View>
             ) : tickets.isError ? (
-              <Card style={styles.faq}>
-                <Text style={styles.faqA}>Could not load your requests.</Text>
-                <View style={styles.loginGap}>
-                  <Button label={tickets.isFetching ? 'Checking…' : 'Try again'} variant="secondary"
-                    onPress={() => void tickets.refetch()} />
-                </View>
-              </Card>
+              <ErrorState
+                title="Could not load your requests"
+                message="Check your connection and try again."
+                actionLabel={tickets.isFetching ? 'Checking…' : 'Try again'}
+                onAction={() => void tickets.refetch()}
+              />
             ) : tickets.data?.length ? tickets.data.map(ticket => {
               const draft = drafts[ticket.id] ?? '';
               const sending = followUp.isPending && replyingTo === ticket.id;
@@ -196,7 +199,10 @@ export function HelpScreen() {
               </Card>
               );
             }) : (
-              <Card style={styles.faq}><Text style={styles.faqA}>No support requests yet. Replies from the team appear here.</Text></Card>
+              <EmptyState
+                title="No support requests yet"
+                message="Replies from the team appear here."
+              />
             )}
           </>
         ) : null}

@@ -63,6 +63,19 @@ export const Colors = {
   overlayWhite35: 'rgba(255, 255, 255, 0.35)',
 };
 
+// F-202: the single documented NAHTREEK yellow ramp (checked against the logo
+// gold). Primary actions, selected states, and key highlights use `primary`;
+// pressed feedback uses `pressed`; soft fills and borders use `soft`/`border`.
+// Content on yellow is always dark navy (white fails AA). Rating stars keep
+// the separate `gold` semantics above — never swap the two.
+export const BrandYellow = {
+  primary: '#F5B82E',
+  pressed: '#D99A12',
+  soft: '#FFF5D9',
+  border: '#E8C66F',
+  onYellow: '#111F35',
+} as const;
+
 export const Gradients = {
   navyHero: ['#111F35', '#102E52'],
   amberShimmer: ['#E8AD43', '#FFF4D8', '#E8AD43'],

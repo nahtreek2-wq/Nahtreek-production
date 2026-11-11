@@ -397,11 +397,11 @@ export function RequestCard({
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#F3F5F8'},
+  container: {flex: 1, backgroundColor: ClientColors.lightBackground},
   serviceLink: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 16},
   serviceIcon: {width: 48, height: 48, alignItems: 'center', justifyContent: 'center'},
   serviceCopy: {flex: 1},
-  serviceTitle: {fontSize: 16, lineHeight: 22, fontWeight: '700', color: '#111F35'},
+  serviceTitle: {fontSize: 16, lineHeight: 22, fontWeight: '700', color: ClientColors.primaryNavy},
   detailsLink: {minHeight: 48, justifyContent: 'center'},
   loading: {padding: Spacing.lg},
   list: {padding: 20, gap: 12},
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   titlePressable: {flex: 1, minHeight: 48, justifyContent: 'center'},
-  title: {fontSize: 18, lineHeight: 24, fontWeight: '700', color: '#111F35'},
+  title: {fontSize: 18, lineHeight: 24, fontWeight: '700', color: ClientColors.primaryNavy},
   professional: {
     ...Typography.subtitle,
     color: Colors.navyDeep,
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     minHeight: 48,
     borderRadius: 14,
-    backgroundColor: '#FFF6DD',
+    backgroundColor: ClientColors.accentSoft,
     paddingHorizontal: Spacing.md,
   },
   ratedStars: {fontSize: 16, color: Colors.amber, includeFontPadding: false},

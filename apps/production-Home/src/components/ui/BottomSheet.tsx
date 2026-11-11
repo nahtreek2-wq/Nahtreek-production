@@ -11,6 +11,7 @@ import Animated, {
 import {Icon, ICONS} from './Icon';
 import {useFormKeyboardScroll} from '../../hooks/useFormKeyboardScroll';
 import {useReducedMotion} from '../../../../../packages/mobile-ui/useReducedMotion';
+import {Motion} from '../../../../../packages/mobile-ui/motion';
 
 interface BottomSheetProps {
   visible: boolean;
@@ -47,7 +48,7 @@ export function BottomSheet({visible, title, subtitle, onClose, children}: Botto
       animationType="none"
       statusBarTranslucent
       onShow={() => {
-        progress.value = withTiming(1, {duration: reducedMotion ? 0 : 220});
+        progress.value = withTiming(1, {duration: reducedMotion ? 0 : Motion.sheet});
       }}
       onRequestClose={onClose}>
       <KeyboardAwareView style={[styles.root, {paddingTop: insets.top + Spacing.md}]}>

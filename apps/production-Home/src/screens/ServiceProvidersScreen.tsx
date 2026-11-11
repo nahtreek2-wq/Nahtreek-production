@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {Animated as NativeAnimated, FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
+import {Motion, stagger} from '../../../../packages/mobile-ui/motion';
 import {Colors} from '@nahtreek/design-system';
 import {inr} from '../utils/format';
 import {ClientColors} from '../design-system/tokens';
@@ -159,7 +160,7 @@ export function ServiceProvidersScreen() {
           ) : null
         }
         renderItem={({item, index}) => (
-          <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index * 45, 225)).reduceMotion(ReduceMotion.System)} style={[s.card, styles.providerCard]}>
+          <Animated.View entering={FadeInDown.duration(Motion.entrance).delay(stagger(index)).reduceMotion(ReduceMotion.System)} style={[s.card, styles.providerCard]}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`View ${item.fullName} profile`}
@@ -207,7 +208,7 @@ export function ServiceProvidersScreen() {
                 longitude: item.baseLongitude,
                 address: `${item.fullName} · ${item.baseCity}`,
               })}>
-              <Icon name={ICONS.location} size={18} color="#2563EB" />
+              <Icon name={ICONS.location} size={18} color={Colors.interactiveBlue} />
               <Text style={styles.mapLabel}>View provider area</Text>
               <Icon name={ICONS.chevronRight} size={18} color={Colors.navyDeep} />
             </Pressable>
@@ -250,11 +251,11 @@ export function ServiceProvidersScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {backgroundColor: '#F3F5F8'},
+  root: {backgroundColor: ClientColors.lightBackground},
   planBanner: {marginHorizontal: 20, marginTop: 12, backgroundColor: ClientColors.accentSoft, borderRadius: 12, padding: 12},
   planBannerText: {fontSize: 14, lineHeight: 20, fontWeight: '600', color: ClientColors.accentText},
   body: {padding: 20, gap: 16},
-  providerCard: {padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E1E6ED'},
+  providerCard: {padding: 20, borderRadius: 16, borderWidth: 1, borderColor: ClientColors.border},
   cardPressed: {opacity: 0.85},
   nameRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
   name: {flexShrink: 1},
@@ -265,15 +266,15 @@ const styles = StyleSheet.create({
   copy: {flex: 1},
   availability: {flexDirection: 'row', alignItems: 'center', gap: 7},
   availabilityDot: {width: 8, height: 8, borderRadius: 4},
-  availabilityDotOn: {backgroundColor: '#166534'},
-  availabilityDotOff: {backgroundColor: '#667085'},
-  availabilityText: {fontSize: 13, lineHeight: 18, color: '#166534', fontWeight: '600'},
-  availabilityTextOff: {color: '#667085'},
-  addressTitle: {fontSize: 18, lineHeight: 24, color: '#111F35', fontWeight: '700'},
-  pricePanel: {backgroundColor: '#F3F5F8', borderRadius: 12, padding: 16, gap: 4},
-  price: {fontSize: 20, lineHeight: 27, fontWeight: '700', color: '#111F35'},
+  availabilityDotOn: {backgroundColor: ClientColors.success},
+  availabilityDotOff: {backgroundColor: ClientColors.secondaryText},
+  availabilityText: {fontSize: 13, lineHeight: 18, color: ClientColors.success, fontWeight: '600'},
+  availabilityTextOff: {color: ClientColors.secondaryText},
+  addressTitle: {fontSize: 18, lineHeight: 24, color: ClientColors.primaryNavy, fontWeight: '700'},
+  pricePanel: {backgroundColor: ClientColors.lightBackground, borderRadius: 12, padding: 16, gap: 4},
+  price: {fontSize: 20, lineHeight: 27, fontWeight: '700', color: ClientColors.primaryNavy},
   mapLink: {minHeight: 48, flexDirection: 'row', gap: 8, alignItems: 'center'},
-  mapLabel: {flex: 1, fontSize: 15, lineHeight: 22, fontWeight: '600', color: '#111F35'},
+  mapLabel: {flex: 1, fontSize: 15, lineHeight: 22, fontWeight: '600', color: ClientColors.primaryNavy},
   changeCityButton: {minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: ClientColors.accentSoft},
   changeCityText: {fontSize: 13, fontWeight: '700', color: Colors.navyDeep},
 });

@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
+import {Motion, stagger} from '../../../../packages/mobile-ui/motion';
 import {useQueryClient} from '@tanstack/react-query';
 import {launchImageLibrary} from 'react-native-image-picker';
 import Voice from '@react-native-voice/voice';
@@ -202,7 +203,7 @@ function ProjectChoice({project, index, busy, selected, onPress}: {
   onPress: () => void;
 }) {
   return (
-    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index * 45, 225)).reduceMotion(ReduceMotion.System)} style={styles.choiceOuter}>
+    <Animated.View entering={FadeInDown.duration(Motion.entrance).delay(stagger(index)).reduceMotion(ReduceMotion.System)} style={styles.choiceOuter}>
         <Pressable
           style={({pressed}) => [styles.choice, pressed && styles.choicePressed]}
           accessibilityRole="button"
@@ -1326,7 +1327,7 @@ function PlanCard({
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, backgroundColor: '#F3F5F8'},
+  root: {flex: 1, backgroundColor: ClientColors.lightBackground},
   scroll: {flex: 1},
   content: {padding: 20, paddingBottom: 40, gap: 16},
   strip: {

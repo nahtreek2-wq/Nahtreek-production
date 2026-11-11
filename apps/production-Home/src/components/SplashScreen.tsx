@@ -3,6 +3,7 @@ import {Animated, Image, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {BrandLogoReveal} from '../../../../packages/mobile-ui/BrandLogoReveal';
 import {useReducedMotion} from '../../../../packages/mobile-ui/useReducedMotion';
 import {BRAND} from '../theme/brand';
+import {Colors} from '@nahtreek/design-system';
 
 const MINIMUM_SPLASH_MS = 800;
 
@@ -85,6 +86,6 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.splashBackground,
   },
   mark: {width: 132, height: 132},
-  name: {color: '#FFFFFF', fontSize: 26, fontWeight: '800', letterSpacing: 4, marginTop: 16},
-  product: {color: '#E8AD3D', fontSize: 15, fontWeight: '700', letterSpacing: 6, marginTop: 6},
+  name: {color: Colors.white, fontSize: 26, fontWeight: '800', letterSpacing: 4, marginTop: 16},
+  product: {color: Colors.gold, fontSize: 15, fontWeight: '700', letterSpacing: 6, marginTop: 6},
 });

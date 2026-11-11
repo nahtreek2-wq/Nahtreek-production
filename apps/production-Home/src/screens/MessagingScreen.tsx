@@ -4,10 +4,11 @@ import {useNavigation} from '@react-navigation/native';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Animated, {FadeInDown, ReduceMotion} from 'react-native-reanimated';
+import {Motion} from '../../../../packages/mobile-ui/motion';
 import {Colors, Typography, Spacing} from '@nahtreek/design-system';
 import {ClientColors} from '../design-system/tokens';
 import {AppHeader, Avatar, Icon, ICONS, OfflineBanner} from '../components/ui';
-import {EngineerCardSkeleton} from '../components/SkeletonLoader';
+import {MessageRowSkeleton} from '../components/SkeletonLoader';
 import {useConversationsList} from '../services/queries';
 import type {RootStackParamList} from '../navigation/types';
 
@@ -31,7 +32,9 @@ export function MessagingScreen() {
       <OfflineBanner force={query.isOffline} onRetry={query.refetch} retrying={query.isRefetching} />
       {query.isLoading ? (
         <View style={styles.list}>
-          <EngineerCardSkeleton />
+          <MessageRowSkeleton />
+          <MessageRowSkeleton />
+          <MessageRowSkeleton />
         </View>
       ) : (
       <FlatList
@@ -43,7 +46,7 @@ export function MessagingScreen() {
         refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={query.refetch} tintColor={Colors.navyDeep} />}
         ListEmptyComponent={
           !query.isLoading ? (
-            <Animated.View entering={FadeInDown.duration(320).reduceMotion(ReduceMotion.System)} style={styles.emptyCard}>
+            <Animated.View entering={FadeInDown.duration(Motion.entrance).reduceMotion(ReduceMotion.System)} style={styles.emptyCard}>
               <View style={styles.emptyIcon}>
                 <Icon name={ICONS.messages} size={28} color={Colors.navyDeep} />
               </View>
@@ -102,7 +105,7 @@ export function MessagingScreen() {
                   <Icon name={ICONS.chevronRight} size={18} color={Colors.navyDeep} />
                 </TouchableOpacity>
                 <TouchableOpacity accessibilityRole="button" style={styles.footerBtn} onPress={() => navigation.navigate('EngineerDiscovery')}>
-                  <Icon name={ICONS.engineers} size={20} color="#2563EB" />
+                  <Icon name={ICONS.engineers} size={20} color={Colors.interactiveBlue} />
                   <Text style={styles.linkLabel}>Find engineers</Text>
                   <Icon name={ICONS.chevronRight} size={18} color={Colors.navyDeep} />
                 </TouchableOpacity>
@@ -138,7 +141,7 @@ const styles = StyleSheet.create({
   emptyText: {fontSize: 14, lineHeight: 21, color: Colors.slate600, marginTop: 8},
   container: {
     flex: 1,
-    backgroundColor: '#F3F5F8',
+    backgroundColor: ClientColors.lightBackground,
   },
   list: {
     paddingHorizontal: 20,
@@ -148,7 +151,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 88,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#DCE2EA',
+    borderBottomColor: Colors.slate200,
   },
   row: {
     flexDirection: 'row',
@@ -177,7 +180,7 @@ const styles = StyleSheet.create({
   name: {
     ...Typography.subtitle,
     fontWeight: '700',
-    color: '#111F35',
+    color: ClientColors.primaryNavy,
     flex: 1,
     flexShrink: 1,
   },
@@ -207,7 +210,7 @@ const styles = StyleSheet.create({
     minHeight: 24,
     paddingHorizontal: 6,
     borderRadius: 12,
-    backgroundColor: '#111F35',
+    backgroundColor: ClientColors.primaryNavy,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -220,7 +223,7 @@ const styles = StyleSheet.create({
   },
   footerIntro: {padding: 18, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.slate200, borderRadius: 18},
   helpCard: {marginTop: 12},
-  linkLabel: {flex: 1, fontSize: 15, lineHeight: 21, fontWeight: '600', color: '#111F35'},
+  linkLabel: {flex: 1, fontSize: 15, lineHeight: 21, fontWeight: '600', color: ClientColors.primaryNavy},
   footerTitle: {
     ...Typography.subtitle,
     fontWeight: '700',

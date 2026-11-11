@@ -27,6 +27,7 @@ import {
   validateRegistration,
   type ClientRegistration,
 } from '../services/localCredentials';
+import {Colors} from '@nahtreek/design-system';
 
 type Mode = 'login' | 'create' | 'reset';
 function Input(props: React.ComponentProps<typeof FormInput>) {
@@ -492,7 +493,7 @@ export function AccountAccessScreen({
                           form.acceptedTerms ? ICONS.check : ICONS.checkboxBlank
                         }
                         size={22}
-                        color={form.acceptedTerms ? '#198754' : '#667085'}
+                        color={form.acceptedTerms ? ClientColors.success : ClientColors.secondaryText}
                       />
                     </Pressable>
                     <Pressable
@@ -597,7 +598,7 @@ export function AccountAccessScreen({
   );
 }
 const s = StyleSheet.create({
-  root: {flex: 1, backgroundColor: '#F7F9FC'},
+  root: {flex: 1, backgroundColor: ClientColors.lightBackground},
   body: {flexGrow: 1},
   brandHeader: {
     backgroundColor: ClientColors.primaryNavy,
@@ -613,13 +614,13 @@ const s = StyleSheet.create({
     fontSize: 20,
     lineHeight: 27,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: ClientColors.white,
     marginTop: 16,
   },
   headerSubtitle: {
     fontSize: 14,
     lineHeight: 21,
-    color: '#E6EAF0',
+    color: Colors.slate100,
     marginTop: 4,
   },
   accountCard: {
@@ -636,12 +637,12 @@ const s = StyleSheet.create({
     marginBottom: 0,
   },
   logo: {width: 48, height: 48},
-  brand: {fontSize: 22, fontWeight: '800', letterSpacing: 2, color: '#FFFFFF'},
+  brand: {fontSize: 22, fontWeight: '800', letterSpacing: 2, color: ClientColors.white},
   tagline: {
     fontSize: 10,
     letterSpacing: 1.2,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: ClientColors.white,
     marginTop: 5,
   },
   tabs: {
@@ -649,7 +650,7 @@ const s = StyleSheet.create({
     marginBottom: 24,
     padding: 4,
     borderRadius: 16,
-    backgroundColor: '#E6EAF0',
+    backgroundColor: Colors.slate100,
   },
   tab: {
     flex: 1,
@@ -659,21 +660,21 @@ const s = StyleSheet.create({
     borderRadius: 10,
   },
   activeTab: {backgroundColor: ClientColors.accent},
-  tabText: {fontSize: 16, fontWeight: '600', color: '#667085'},
+  tabText: {fontSize: 16, fontWeight: '600', color: ClientColors.secondaryText},
   activeTabText: {color: ClientColors.onAccent, fontWeight: '800'},
   title: {
     fontSize: 26,
     lineHeight: 32,
     fontWeight: '800',
-    color: '#172033',
+    color: ClientColors.primaryText,
     marginBottom: 8,
   },
-  subtitle: {fontSize: 16, lineHeight: 24, color: '#667085', marginBottom: 20},
+  subtitle: {fontSize: 16, lineHeight: 24, color: ClientColors.secondaryText, marginBottom: 20},
   form: {gap: 12},
   field: {marginBottom: 4},
   link: {minHeight: 48, justifyContent: 'center', alignItems: 'flex-end'},
   linkText: {color: ClientColors.accentText, fontWeight: '700', fontSize: 16},
-  prefix: {fontSize: 16, color: '#172033', paddingRight: 8},
+  prefix: {fontSize: 16, color: ClientColors.primaryText, paddingRight: 8},
   eye: {
     minWidth: 48,
     minHeight: 48,
@@ -697,9 +698,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ClientColors.white,
   },
-  noticeText: {fontSize: 16, lineHeight: 24, color: '#667085'},
+  noticeText: {fontSize: 16, lineHeight: 24, color: ClientColors.secondaryText},
   guest: {marginTop: 16, marginHorizontal: 24},
   welcomeBody: {
     flexGrow: 1,
@@ -719,7 +720,7 @@ const s = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#EDF7F0',
+    backgroundColor: Colors.successBg,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 32,
@@ -729,13 +730,13 @@ const s = StyleSheet.create({
     fontSize: 28,
     lineHeight: 36,
     fontWeight: '800',
-    color: '#172033',
+    color: ClientColors.primaryText,
     textAlign: 'center',
   },
   welcomeSubtitle: {
     fontSize: 16,
     lineHeight: 24,
-    color: '#667085',
+    color: ClientColors.secondaryText,
     textAlign: 'center',
     marginTop: 10,
   },
@@ -763,14 +764,14 @@ const s = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#E6EAF0',
+    backgroundColor: Colors.slate100,
     alignItems: 'center',
     justifyContent: 'center',
   },
   currentDot: {backgroundColor: ClientColors.accentSoft},
   stepNumber: {fontSize: 14, fontWeight: '800', color: ClientColors.primaryNavy},
-  stepLabel: {fontSize: 13, fontWeight: '600', color: '#667085'},
-  stepLine: {flex: 1, height: 1, backgroundColor: '#E6EAF0'},
+  stepLabel: {fontSize: 13, fontWeight: '600', color: ClientColors.secondaryText},
+  stepLine: {flex: 1, height: 1, backgroundColor: Colors.slate100},
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(7,31,61,0.6)',
@@ -779,7 +780,7 @@ const s = StyleSheet.create({
   },
   noticeCard: {
     maxHeight: '85%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: ClientColors.white,
     borderRadius: 24,
     padding: 24,
     gap: 14,

@@ -507,7 +507,6 @@ model PayoutAccount {
   providerAccountRef    String?             @unique
   accountHolderName     String
   bankName              String?
-  accountNumber         String?
   ifsc                  String?
   upiId                 String?
   accountLast4          String?

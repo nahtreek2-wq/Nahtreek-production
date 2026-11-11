@@ -134,6 +134,20 @@ describe('payout account self-service', () => {
     expect(view.status).toBe('PENDING');
   });
 
+  it('never persists the full bank account number (F-001)', async () => {
+    const {service, db} = setup({account: null});
+    db.payoutAccount.upsert.mockResolvedValueOnce({id: 'acct', status: 'PENDING', accountHolderName: 'Veda',
+      bankName: 'HDFC', accountLast4: '9012', ifsc: 'HDFC0001234', upiId: null,
+      rejectionReason: null, updatedAt: new Date()});
+    await service.submitPayoutAccount('pro', {accountHolderName: 'Veda',
+      accountNumber: '123456789012', ifsc: 'HDFC0001234'});
+    const args = db.payoutAccount.upsert.mock.calls[0][0];
+    expect(args.create).not.toHaveProperty('accountNumber');
+    expect(args.update).not.toHaveProperty('accountNumber');
+    expect(args.create.accountLast4).toBe('9012');
+    expect(args.update.accountLast4).toBe('9012');
+  });
+
   it('reports NOT_SUBMITTED before the first submission', async () => {
     const {service} = setup({account: null});
     const view = await service.myPayoutAccount('pro');

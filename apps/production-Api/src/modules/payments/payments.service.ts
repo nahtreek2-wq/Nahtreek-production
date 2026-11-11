@@ -904,12 +904,16 @@ export class PaymentsService {
     // and go through verification without pausing payouts.
     const status = existing?.providerAccountRef && existing.status === PayoutAccountStatus.ACTIVE
       ? PayoutAccountStatus.ACTIVE : PayoutAccountStatus.PENDING;
+    // F-001: the full account number is validated (DTO) and reduced to its
+    // last4 here, then never persisted — no reader needs it (views show the
+    // mask, transfers use providerAccountRef, admin linking supplies its own
+    // reference). Keeping it in the DTO preserves the app contract.
     const account = await this.db.payoutAccount.upsert({where: {professionalProfileId: profile.id},
       create: {professionalProfileId: profile.id, provider: 'RAZORPAY_ROUTE',
-        accountHolderName: dto.accountHolderName.trim(), accountNumber: dto.accountNumber,
+        accountHolderName: dto.accountHolderName.trim(),
         ifsc, bankName: dto.bankName?.trim() || null, upiId: dto.upiId?.trim() || null,
         accountLast4, status: PayoutAccountStatus.PENDING},
-      update: {accountHolderName: dto.accountHolderName.trim(), accountNumber: dto.accountNumber,
+      update: {accountHolderName: dto.accountHolderName.trim(),
         ifsc, bankName: dto.bankName?.trim() || null, upiId: dto.upiId?.trim() || null,
         accountLast4, status, rejectionReason: null}});
     await this.db.auditLog.create({data: {userId, entity: 'PayoutAccount', entityId: account.id,

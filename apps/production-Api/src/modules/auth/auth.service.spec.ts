@@ -1,7 +1,3 @@
-jest.mock("bcrypt", () => ({
-  hash: jest.fn(async () => "$hashed-password"),
-  compare: jest.fn(async () => true),
-}));
 import { createHash, createHmac } from "crypto";
 import { AuthService, normalizePhone } from "./auth.service";
 // Stored OTP hashes are HMACs under a server-side pepper, so fixtures must
@@ -22,9 +18,9 @@ import {
   ProfessionalAccountType,
   ProfessionalRegisterDto,
 } from "./dto/professional-register.dto";
+import { VerifyOtpDto } from "./dto/verify-otp.dto";
 const registration: RegisterDto = {
   phoneNumber: "9000012345",
-  password: "Strong test password",
   fullName: "Client QA",
   email: "qa@example.com",
   address: "12 Test Street",
@@ -43,7 +39,6 @@ function harness() {
     deletedAt: null,
     authVersion: 0,
     isPhoneVerified: true,
-    passwordHash: "$hashed-password",
     roles: [{ role: "CLIENT" }],
     clientProfile: {
       fullName: "Client QA",
@@ -69,7 +64,7 @@ function harness() {
     otpChallenge: {
       findUnique: jest.fn().mockResolvedValue({
         codeHash: otpHash("345678"),
-        purpose: "SIGNUP",
+        purpose: "OTP_AUTH",
         attempts: 0,
         expiresAt: new Date(Date.now() + 300000),
       }),
@@ -94,7 +89,7 @@ function harness() {
   );
   return { service, prisma, tx, user, emailOtpService };
 }
-it("validates all required client and credential fields", () => {
+it("validates all required client fields", () => {
   expect(
     validateSync(Object.assign(new RegisterDto(), registration))
   ).toHaveLength(0);
@@ -108,11 +103,11 @@ it("validates all required client and credential fields", () => {
     )
   ).toHaveLength(3);
 });
-it("registers verified contact and client details, without storing plaintext password", async () => {
+it("registers verified contact and client details with no password stored", async () => {
   const { service, tx } = harness();
   const result = await service.register(registration);
-  expect(tx.user.create.mock.calls[0][0].data).toMatchObject({
-    passwordHash: "$hashed-password",
+  const created = tx.user.create.mock.calls[0][0].data;
+  expect(created).toMatchObject({
     isPhoneVerified: true,
     email: "qa@example.com",
     clientProfile: {
@@ -125,9 +120,8 @@ it("registers verified contact and client details, without storing plaintext pas
       },
     },
   });
-  expect(JSON.stringify(tx.user.create.mock.calls)).not.toContain(
-    registration.password
-  );
+  expect(created).not.toHaveProperty("passwordHash");
+  expect(JSON.stringify(tx.user.create.mock.calls)).not.toContain("password");
   expect(tx.session.create).toHaveBeenCalledWith({
     data: expect.objectContaining({userId: "client", authVersion: 0}),
   });
@@ -148,7 +142,7 @@ it("uses verified email and leaves mobile unverified in Preview", async () => {
   expect(tx.otpChallenge.deleteMany).toHaveBeenCalledWith({
     where: expect.objectContaining({
       identifier: "qa@example.com",
-      purpose: "SIGNUP",
+      purpose: "OTP_AUTH",
     }),
   });
 });
@@ -185,62 +179,80 @@ it("refuses to verify codes when no OTP pepper is configured", async () => {
     if (savedJwt !== undefined) process.env.JWT_SECRET = savedJwt;
   }
 });
-it("resets password and revokes every existing session for that user", async () => {
-  const { service, tx, prisma } = harness();
-  prisma.otpChallenge.findUnique.mockResolvedValue({
-    codeHash: otpHash("345678"),
-    purpose: "PASSWORD_RESET",
-    attempts: 0,
-    expiresAt: new Date(Date.now() + 300000),
+describe("preview demo-code sign-in", () => {
+  const DEMO_CODE = "123456";
+  function demoEnv(appEnv: string | undefined, demo: string | undefined) {
+    const savedApp = process.env.APP_ENV;
+    const savedDemo = process.env.PREVIEW_DEMO_OTP;
+    if (appEnv === undefined) delete process.env.APP_ENV;
+    else process.env.APP_ENV = appEnv;
+    if (demo === undefined) delete process.env.PREVIEW_DEMO_OTP;
+    else process.env.PREVIEW_DEMO_OTP = demo;
+    return () => {
+      if (savedApp === undefined) delete process.env.APP_ENV;
+      else process.env.APP_ENV = savedApp;
+      if (savedDemo === undefined) delete process.env.PREVIEW_DEMO_OTP;
+      else process.env.PREVIEW_DEMO_OTP = savedDemo;
+    };
+  }
+  it("accepts the demo code in preview when it is configured", async () => {
+    const restore = demoEnv("preview", DEMO_CODE);
+    try {
+      const { service, tx } = harness();
+      const result = await service.verifyOtp({
+        phoneNumber: "9000012345",
+        code: DEMO_CODE,
+      });
+      expect(result.accessToken).toBe("jwt");
+      expect(tx.otpChallenge.deleteMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          identifier: "+919000012345",
+          purpose: "OTP_AUTH",
+        }),
+      });
+      // Demo consumption never matches on a code hash.
+      expect(
+        tx.otpChallenge.deleteMany.mock.calls[0][0].where
+      ).not.toHaveProperty("codeHash");
+    } finally {
+      restore();
+    }
   });
-  await service.resetPassword({
-    phoneNumber: registration.phoneNumber,
-    code: registration.code,
-    password: registration.password,
+  it("rejects the demo code outside preview", async () => {
+    const restore = demoEnv("production", DEMO_CODE);
+    try {
+      const { service, tx } = harness();
+      await expect(
+        service.verifyOtp({ phoneNumber: "9000012345", code: DEMO_CODE })
+      ).rejects.toThrow("Incorrect verification code");
+      expect(tx.user.findUnique).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
   });
-  expect(tx.session.updateMany).toHaveBeenCalledWith({
-    where: { userId: "client", revokedAt: null },
-    data: { revokedAt: expect.any(Date) },
+  it("rejects the demo code in preview when it is not configured", async () => {
+    const restore = demoEnv("preview", undefined);
+    try {
+      const { service } = harness();
+      await expect(
+        service.verifyOtp({ phoneNumber: "9000012345", code: DEMO_CODE })
+      ).rejects.toThrow("Incorrect verification code");
+    } finally {
+      restore();
+    }
   });
-  expect(tx.user.update).toHaveBeenCalledWith({
-    where: { id: "client" },
-    data: expect.objectContaining({ authVersion: { increment: 1 } }),
+  it("still requires a live challenge row for the demo code", async () => {
+    const restore = demoEnv("preview", DEMO_CODE);
+    try {
+      const { service, prisma } = harness();
+      prisma.otpChallenge.findUnique.mockResolvedValue(null);
+      await expect(
+        service.verifyOtp({ phoneNumber: "9000012345", code: DEMO_CODE })
+      ).rejects.toThrow("expired");
+    } finally {
+      restore();
+    }
   });
-  expect(tx.auditLog.create).toHaveBeenCalledWith({
-    data: expect.objectContaining({
-      action: "PASSWORD_RESET",
-      userId: "client",
-    }),
-  });
-});
-it("never resets a password after the code is consumed elsewhere", async () => {
-  const { service, tx, prisma } = harness();
-  prisma.otpChallenge.findUnique.mockResolvedValue({
-    codeHash: otpHash("345678"),
-    purpose: "PASSWORD_RESET",
-    attempts: 0,
-    expiresAt: new Date(Date.now() + 300000),
-  });
-  tx.otpChallenge.deleteMany.mockResolvedValue({ count: 0 });
-  await expect(
-    service.resetPassword({
-      phoneNumber: registration.phoneNumber,
-      code: registration.code,
-      password: registration.password,
-    })
-  ).rejects.toThrow();
-  expect(tx.user.update).not.toHaveBeenCalled();
-  expect(tx.session.updateMany).not.toHaveBeenCalled();
-});
-it("rejects an unverified password account", async () => {
-  const { service, user } = harness();
-  user.isPhoneVerified = false;
-  await expect(
-    service.login({
-      phoneNumber: registration.phoneNumber,
-      password: registration.password,
-    })
-  ).rejects.toThrow("Verify your email or mobile");
 });
 
 it("registers a professional role without inventing a public profile", async () => {
@@ -248,7 +260,6 @@ it("registers a professional role without inventing a public profile", async () 
   const input: ProfessionalRegisterDto = {
     phoneNumber: "9000012345",
     email: "engineer@example.com",
-    password: "Strong test password",
     code: "345678",
     professionalType: ProfessionalAccountType.CIVIL_ENGINEER,
     acceptedTerms: true,
@@ -257,7 +268,6 @@ it("registers a professional role without inventing a public profile", async () 
     id: "professional",
     phoneNumber: "+919000012345",
     email: input.email,
-    passwordHash: "$hashed-password",
     authVersion: 0,
     status: "ACTIVE",
     isPhoneVerified: true,
@@ -282,22 +292,10 @@ it("registers a professional role without inventing a public profile", async () 
   });
 });
 
-it("does not issue a session to a client through professional login", async () => {
-  const { service, prisma } = harness();
-  await expect(
-    service.loginProfessional({
-      email: "qa@example.com",
-      password: registration.password,
-    })
-  ).rejects.toThrow("Client app");
-  expect(prisma.session.create).not.toHaveBeenCalled();
-});
-
 it("validates professional account type and consent", () => {
   const valid = Object.assign(new ProfessionalRegisterDto(), {
     phoneNumber: "9000012345",
     email: "engineer@example.com",
-    password: "Strong test password",
     code: "345678",
     professionalType: ProfessionalAccountType.SERVICE_PROFESSIONAL,
     acceptedTerms: true,
@@ -311,12 +309,6 @@ it("validates professional account type and consent", () => {
       })
     )
   ).toHaveLength(2);
-});
-it("rejects overlong UTF-8 passwords before bcrypt truncation", async () => {
-  const { service } = harness();
-  await expect(
-    service.register({ ...registration, password: "😀".repeat(30) })
-  ).rejects.toThrow("72 UTF-8");
 });
 it("normalizes Indian numbers and rejects invalid numbers", () => {
   expect(normalizePhone("90000 12345")).toBe("+919000012345");
@@ -337,7 +329,7 @@ it("limits repeated authentication attempts", async () => {
     switchToHttp: () => ({
       getRequest: () => ({
         method: "POST",
-        path: "/auth/login",
+        path: "/auth/otp/verify",
         ip: "test-ip",
         body: { email: "qa@example.com" },
       }),
@@ -349,7 +341,7 @@ it("limits repeated authentication attempts", async () => {
     "Too many attempts"
   );
 });
-it("rejects a refresh session issued concurrently with a password reset", async () => {
+it("rejects a refresh session after the account security version moved on", async () => {
   const { service, prisma, user } = harness();
   (prisma.session as any).findUnique = jest.fn().mockResolvedValue({
     authVersion: 0,
@@ -463,7 +455,7 @@ it("revokes the session on logout with the previous refresh secret", async () =>
     data: { revokedAt: expect.any(Date) },
   });
 });
-it("rejects access sessions from before a password reset, even if not yet marked revoked", async () => {
+it("rejects access sessions from before a revocation, even if not yet marked revoked", async () => {
   const previous = process.env.JWT_SECRET;
   process.env.JWT_SECRET = "unit-test-only-secret-at-least-32-characters";
   try {
@@ -482,7 +474,7 @@ it("rejects access sessions from before a password reset, even if not yet marked
         phoneNumber: registration.phoneNumber,
         roles: ["CLIENT"],
       })
-    ).rejects.toThrow("Password changed");
+    ).rejects.toThrow("Session revoked");
   } finally {
     if (previous === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previous;
@@ -548,5 +540,79 @@ describe("preview demo OTP fallback", () => {
       if (previous === undefined) delete process.env.APP_ENV;
       else process.env.APP_ENV = previous;
     }
+  });
+});
+
+describe("verifyOtp passwordless login", () => {
+  it("signs in by mobile and marks it verified in phone mode", async () => {
+    const { service, tx } = harness();
+    const result = await service.verifyOtp({
+      phoneNumber: "9000012345",
+      code: "345678",
+    });
+    expect(tx.user.findUnique).toHaveBeenCalledWith({
+      where: { phoneNumber: "+919000012345" },
+    });
+    expect(tx.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { isPhoneVerified: true } })
+    );
+    expect(result.accessToken).toBe("jwt");
+    expect(result.isNewUser).toBe(false);
+  });
+
+  it("signs in by email and marks it verified in Preview email-OTP mode", async () => {
+    const { service, tx, emailOtpService } = harness();
+    emailOtpService.isEnabled.mockReturnValue(true);
+    const result = await service.verifyOtp({
+      email: "QA@Example.com",
+      code: "345678",
+    });
+    expect(tx.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "qa@example.com" },
+    });
+    expect(tx.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { isEmailVerified: true } })
+    );
+    expect(result.accessToken).toBe("jwt");
+  });
+
+  it("rejects unknown users with the create-account message", async () => {
+    const { service, tx } = harness();
+    tx.user.findUnique.mockResolvedValueOnce(null);
+    await expect(
+      service.verifyOtp({ phoneNumber: "9000012345", code: "345678" })
+    ).rejects.toThrow("Create an account with your client details first");
+  });
+
+  it("requires the identifier matching the active OTP channel", async () => {
+    const { service, emailOtpService } = harness();
+    await expect(service.verifyOtp({ code: "345678" } as any)).rejects.toThrow(
+      "Provide a mobile number"
+    );
+    emailOtpService.isEnabled.mockReturnValue(true);
+    await expect(service.verifyOtp({ code: "345678" } as any)).rejects.toThrow(
+      "Provide an email address"
+    );
+  });
+
+  it("validates OTP identifier formats", () => {
+    expect(
+      validateSync(
+        Object.assign(new VerifyOtpDto(), { phoneNumber: "12", code: "345678" })
+      )
+    ).toHaveLength(1);
+    expect(
+      validateSync(
+        Object.assign(new VerifyOtpDto(), { email: "bad", code: "345678" })
+      )
+    ).toHaveLength(1);
+    expect(
+      validateSync(
+        Object.assign(new VerifyOtpDto(), {
+          email: "qa@example.com",
+          code: "345678",
+        })
+      )
+    ).toHaveLength(0);
   });
 });

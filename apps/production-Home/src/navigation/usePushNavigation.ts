@@ -51,7 +51,7 @@ export function routeForPushDestination(payload: PushDestinationPayload | null |
 
 // Handles notification taps: cold starts via getInitialNotification and
 // warm taps via the NahtreekPushOpened event. Only navigates for signed-in
-// users; guests land on login where the in-app bell keeps the same content.
+// users; signed-out users land on login where the in-app bell keeps the same content.
 export function usePushNavigation(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;

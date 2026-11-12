@@ -228,7 +228,7 @@ export function HomeScreen() {
         accessibilityLabel={introImageDescription}
       />
       <LinearGradient
-        colors={['rgba(7,31,61,0.02)', 'rgba(7,31,61,0.55)', 'rgba(7,31,61,0.94)']}
+        colors={['rgba(17, 31, 53,0.02)', 'rgba(17, 31, 53,0.55)', 'rgba(17, 31, 53,0.94)']}
         style={styles.introShade}
       />
       <View style={styles.introCopy}>

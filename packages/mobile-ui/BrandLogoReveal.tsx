@@ -37,7 +37,7 @@ export function BrandLogoReveal({
   name,
   product,
   tagline,
-  accentColor = '#E8AD3D',
+  accentColor = '#C4A639',
   size = 112,
   durationScale = 1,
 }: BrandLogoRevealProps) {

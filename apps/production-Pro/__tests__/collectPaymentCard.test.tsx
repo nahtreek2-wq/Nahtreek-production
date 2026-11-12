@@ -4,6 +4,18 @@ import {Text, TextInput} from 'react-native';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {CollectPaymentCard} from '../src/components/CollectPaymentCard';
 import type {CollectHooks, CollectStatusView} from '../src/components/CollectPaymentCard';
+import {api} from '../src/services/apiClient';
+
+jest.mock('../src/services/apiClient', () => ({
+  api: {get: jest.fn(), post: jest.fn()},
+  ApiError: class ApiError extends Error {
+    status: number;
+    constructor(status: number, message: string) {
+      super(message);
+      this.status = status;
+    }
+  },
+}));
 
 function setup(hooks: CollectHooks, onViewDues = jest.fn()) {
   const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
@@ -145,5 +157,25 @@ it('shows the consultation fee as the declare reference', async () => {
   const t = setup(hooks);
   await t.render();
   expect(t.texts()).toContain('Consultation fee ₹3,500');
+  t.done();
+});
+
+it('shows a scannable payment QR for the customer', async () => {
+  const hooks: CollectHooks = {
+    loadStatus: jest.fn().mockResolvedValue(null),
+    declare: jest.fn(),
+  };
+  (api.get as jest.Mock).mockResolvedValue({
+    qrPng: 'data:image/png;base64,QR',
+    title: 'Wall crack',
+    expectedAmountPaisa: 350000,
+  });
+  const t = setup(hooks);
+  await t.render();
+  await t.press('Show payment QR');
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(api.get).toHaveBeenCalledWith('/payments/collect-qr?engineerRequestId=req');
+  expect(t.texts()).toContain('Customer scan to pay');
+  expect(t.texts()).toContain('₹3,500 due');
   t.done();
 });

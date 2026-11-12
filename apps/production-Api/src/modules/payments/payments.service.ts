@@ -6,6 +6,7 @@ import {TERMINAL_STAGES} from '../platform/journey.rules';
 import {PushService} from '../notifications/push.service';
 import {ReceiptEmailService} from '../notifications/receipt-email.service';
 import {ChatGateway} from '../chat/chat.gateway';
+import * as QRCode from 'qrcode';
 import {RazorpayError, RazorpayProvider} from './razorpay.provider';
 import {MembershipsService} from '../memberships/memberships.service';
 import {DUES_BLOCK_Paisa, MEMBER_DUES_BLOCK_Paisa, MEMBER_FEE_BPS, MEMBER_FREE_JOBS_PER_MONTH, PLATFORM_FEE_BPS, duesLimitPaisa, plusDiscountPaisa} from './commission';
@@ -334,8 +335,12 @@ export class PaymentsService {
     if (!Number.isFinite(amountPaisa) || amountPaisa < 100) throw new BadRequestException('Enter the amount received (minimum ₹1)');
     const member = (await this.memberships?.isEffectiveByProfile(request.engineer.professionalProfileId).catch(() => false)) ?? false;
     const {platformFeePaisa, professionalAmountPaisa} = await this.feeSplitFor(request.engineer.professionalProfileId, amountPaisa, member);
+    // NOTE: Payment has no collected* columns (the service path keeps those on
+    // ServiceJourney). The declared amount persists as amountPaisa; the method
+    // travels in-memory to the receipt below. Do not re-add phantom fields —
+    // Prisma rejects them at runtime (P2012/validation) and mocks won't catch it.
     const data = {amountPaisa, platformFeePaisa, professionalAmountPaisa, collectionMode: CollectionMode.AT_HOME,
-      collectedAmountPaisa: amountPaisa, collectedMethod: dto.method, status: PaymentStatus.COLLECTED_UNSETTLED,
+      status: PaymentStatus.COLLECTED_UNSETTLED,
       providerOrderId: null, providerPaymentId: null, providerTransferId: null};
     const row = existing
       ? await this.db.payment.update({where: {id: existing.id}, data})
@@ -350,6 +355,26 @@ export class PaymentsService {
       proName: request.engineer.profile.fullName, online: false, method: dto.method, held: false});
     await this.receipt(request.client.userId, declaredReceipt.subject, declaredReceipt.lines);
     return this.viewOf(row);
+  }
+
+  // Booking payment QR: the engineer shows it at the customer's home; the
+  // customer scans it with the Home app and lands on this booking's online
+  // checkout. Same window as direct collection (work started, unpaid).
+  async collectQr(proUserId: string, engineerRequestId: string) {
+    if (!/^[0-9a-fA-F-]{36}$/.test(engineerRequestId ?? ''))
+      throw new NotFoundException('Booking not found');
+    const request = await this.engineerPartyRequest(engineerRequestId);
+    if (request.engineer.profile.userId !== proUserId) throw new NotFoundException('Booking not found');
+    if (!['IN_PROGRESS', 'COMPLETED'].includes(request.status))
+      throw new ConflictException('Payment QR is available once the work starts');
+    const existing = await this.db.payment.findUnique({where: {engineerRequestId}});
+    if (existing?.providerPaymentId) throw new ConflictException('This booking was already paid online');
+    if (existing && ([PaymentStatus.COLLECTED_UNSETTLED, PaymentStatus.SETTLED] as PaymentStatus[]).includes(existing.status as PaymentStatus))
+      throw new ConflictException('Direct collection was already recorded for this booking');
+    const payUrl = `nahtreek://pay/${request.id}`;
+    const qrPng = await QRCode.toDataURL(payUrl, {width: 512, margin: 2, errorCorrectionLevel: 'M'});
+    return {payUrl, qrPng, title: request.projectTitle,
+      expectedAmountPaisa: existing?.amountPaisa ?? request.engineer.consultationFeePaisa ?? undefined};
   }
 
   // Plus speed-SLA penalty. Posted when a Plus booking runs slow (ignored

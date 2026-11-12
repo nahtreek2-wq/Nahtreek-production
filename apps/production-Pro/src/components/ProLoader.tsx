@@ -42,7 +42,7 @@ export function ProLoader({size = 44, label, tone = 'navy'}: {
       ? {track: 'rgba(255,255,255,0.25)', arc: ProColors.surface}
       : tone === 'red'
       ? {track: 'rgba(180,35,24,0.14)', arc: ProColors.error}
-      : {track: 'rgba(11,45,91,0.14)', arc: ProColors.primary};
+      : {track: 'rgba(17, 31, 53,0.14)', arc: ProColors.primary};
   const ring = Math.max(24, size);
   const core = Math.round(ring * 0.28);
   return (

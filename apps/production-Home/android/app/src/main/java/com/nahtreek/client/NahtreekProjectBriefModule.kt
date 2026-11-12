@@ -78,7 +78,7 @@ class NahtreekProjectBriefModule(private val context: ReactApplicationContext) :
     val section = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(15, 118, 110); textSize = 13f; typeface = android.graphics.Typeface.DEFAULT_BOLD }
     val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(52, 64, 84); textSize = 10.5f; typeface = android.graphics.Typeface.DEFAULT }
     val small = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(102, 112, 133); textSize = 8.5f; typeface = android.graphics.Typeface.DEFAULT }
-    val rule = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(232, 173, 67); strokeWidth = 3f }
+    val rule = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(196, 166, 57); strokeWidth = 3f }
 
     fun finishPage() {
       canvas.drawLine(margin, height - 32f, width - margin, height - 32f, rule)

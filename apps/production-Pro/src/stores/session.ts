@@ -1,5 +1,4 @@
 import {create} from 'zustand';
-import {clearPersistedNavigationState} from '../navigation/navigationPersistence';
 import {secureSession} from '../services/secureSession';
 import {isApiConfigured} from '../config/runtime';
 
@@ -84,8 +83,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
   clear: () => {
     set({accessToken: null, refreshToken: null, user: null, storageError: null, sessionEpoch: get().sessionEpoch + 1});
-    // A signed-out pro must never resume into the previous account's screens.
-    void clearPersistedNavigationState();
     secureSession.clear().catch(() => undefined);
   },
 }));

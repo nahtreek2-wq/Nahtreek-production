@@ -3,18 +3,16 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtPayload } from "../../common/strategies/jwt.strategy";
 import { AuthService } from "./auth.service";
-import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
-import {
-  EmailResetPasswordDto,
-  RegisterDto,
-  ResetPasswordDto,
-} from "./dto/register.dto";
+import { RegisterDto } from "./dto/register.dto";
 import { EmailOtpRequestDto, RequestOtpDto } from "./dto/request-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { AuthThrottleGuard } from "./auth-throttle.guard";
 import { ProfessionalRegisterDto } from "./dto/professional-register.dto";
 
+// OTP-only auth: account creation and sign-in both run through
+// otp/request + otp/verify (+ the email variants). There are no password
+// endpoints; account deletion takes a fresh OTP code as presence proof.
 @Controller("auth")
 @UseGuards(AuthThrottleGuard)
 export class AuthController {
@@ -28,35 +26,6 @@ export class AuthController {
   @Post("professionals/register")
   async registerProfessional(@Body() body: ProfessionalRegisterDto) {
     return this.authService.registerProfessional(body);
-  }
-
-  @Post("login")
-  async login(@Body() body: LoginDto) {
-    return this.authService.login(body);
-  }
-
-  @Post("professionals/login")
-  async loginProfessional(@Body() body: LoginDto) {
-    return this.authService.loginProfessional(body);
-  }
-
-  @Post("password-reset/request")
-  requestReset(@Body() body: RequestOtpDto) {
-    return this.authService.requestPasswordReset(body);
-  }
-
-  @Post("password-reset/email/request")
-  requestEmailReset(@Body() body: EmailOtpRequestDto) {
-    return this.authService.requestEmailPasswordReset(body);
-  }
-
-  @Post("password-reset/email/confirm")
-  resetEmailPassword(@Body() body: EmailResetPasswordDto) {
-    return this.authService.resetPasswordByEmail(body);
-  }
-  @Post("password-reset/confirm")
-  reset(@Body() body: ResetPasswordDto) {
-    return this.authService.resetPassword(body);
   }
 
   @Post("otp/request")
@@ -92,7 +61,7 @@ export class AuthController {
 
   @Delete("me")
   @UseGuards(JwtAuthGuard)
-  async deleteMe(@CurrentUser() user: JwtPayload, @Body() body: {password?: string}) {
-    return this.authService.deleteAccount(user.sub, body?.password);
+  async deleteMe(@CurrentUser() user: JwtPayload, @Body() body: {code?: string}) {
+    return this.authService.deleteAccount(user.sub, body?.code);
   }
 }

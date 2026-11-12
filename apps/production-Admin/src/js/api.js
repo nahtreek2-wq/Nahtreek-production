@@ -69,7 +69,7 @@ export class ApiClient {
     });
     // Silent refresh: access tokens live 15 minutes, so a 401 mid-session
     // retries once with a fresh pair instead of dumping the admin to login.
-    // Auth endpoints never retry (a 401 there means bad credentials).
+    // Auth endpoints never retry (a 401 there means a bad code).
     if (response.status === 401 && retry && this.refreshToken && !path.startsWith("/auth/")) {
       if (await this.tryRefresh()) return this.request(path, options, false);
     }

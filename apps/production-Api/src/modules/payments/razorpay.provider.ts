@@ -8,7 +8,7 @@ export class RazorpayError extends Error {
 }
 
 export type RazorpayPlan = {id: string; amount: number; currency: string; period: string};
-export type RazorpaySubscription = {id: string; status: string; short_url?: string; current_start?: number; current_end?: number};
+export type RazorpaySubscription = {id: string; status: string; short_url?: string; current_start?: number; current_end?: number; plan_id?: string};
 export type RazorpayOrder = {id: string; amount: number; currency: string; status: string};
 export type RazorpayPayment = {id: string; order_id: string; amount: number; currency: string; status: string};
 export type RazorpayTransfer = {id: string; status?: string; on_hold?: boolean};

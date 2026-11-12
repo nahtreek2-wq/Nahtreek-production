@@ -38,11 +38,11 @@ import {HelpScreen} from '../features/services';
 import {ProfileScreen} from '../features/profile';
 import {SearchScreen} from '../features/search';
 import {RequestDetailScreen} from '../screens/RequestDetailScreen';
+import {LoanScreen} from '../screens/LoanScreen';
 import {SettingsScreen} from '../screens/SettingsScreen';
 import {AiPlannerScreen} from '../screens/AiPlannerScreen';
 import {ProfileSetupModal} from '../components/ProfileSetupModal';
 import {navigationRef, usePushNavigation} from './usePushNavigation';
-import {usePersistedNavigationState} from './navigationPersistence';
 import type {RootStackParamList, MainTabParamList} from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -200,23 +200,22 @@ function MainTabs() {
 
 export function AppNavigator() {
   const [splashFinished, setSplashFinished] = useState(false);
-  const hasSession = useSessionStore(s => !!s.accessToken || s.isGuest);
+  const hasSession = useSessionStore(s => !!s.accessToken);
   const isHydrated = useSessionStore(s => s.isHydrated);
   const hydrateSession = useSessionStore(s => s.hydrateSession);
   const token = useSessionStore(s => s.accessToken);
   const accountKey = useSessionStore(s => s.user?.id ?? 'guest');
-  const persistedNav = usePersistedNavigationState(accountKey, isHydrated, true);
   usePushNavigation(splashFinished && !!token);
 
   React.useEffect(() => {
     void hydrateSession();
   }, [hydrateSession]);
 
-  if (!splashFinished || !isHydrated || !persistedNav.ready) {
+  if (!splashFinished || !isHydrated) {
     return (
       <SplashScreen
-        isReady={isHydrated && persistedNav.ready}
-        instant={!!persistedNav.initialState}
+        isReady={isHydrated}
+        instant={false}
         onFinish={() => setSplashFinished(true)}
       />
     );
@@ -230,9 +229,7 @@ export function AppNavigator() {
     <NavigationContainer
       key={accountKey}
       ref={navigationRef}
-      linking={linking}
-      initialState={persistedNav.initialState}
-      onStateChange={persistedNav.onStateChange}>
+      linking={linking}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -262,6 +259,7 @@ export function AppNavigator() {
         />
         <Stack.Screen name="Login" component={LoginRoute} />
         <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
+        <Stack.Screen name="Loan" component={LoanScreen} />
         <Stack.Screen name="MapPreview" component={MapPreviewScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen

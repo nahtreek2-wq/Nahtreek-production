@@ -92,8 +92,14 @@ test("build contains official branding and generated environment config", async 
   assert.match(html, /connect-src 'self'/);
   assert.match(html, /object-src 'none'/);
   assert.match(html, /upgrade-insecure-requests/);
-  assert.match(html, /id="password-toggle"/);
-  assert.match(html, /id="caps-warning"/);
+  assert.match(html, /id="login-identifier-step"/);
+  assert.match(html, /id="login-code-step"/);
+  assert.match(html, /id="login-code"/);
+  assert.match(html, /autocomplete="one-time-code"/);
+  assert.match(html, /id="login-resend"/);
+  assert.match(html, /id="login-back"/);
+  assert.doesNotMatch(html, /id="password-toggle"/);
+  assert.doesNotMatch(html, /id="caps-warning"/);
   assert.match(html, /id="money-confirm"/);
   assert.match(html, /id="idle-dialog"/);
   assert.match(html, /id="idle-stay"/);
@@ -249,7 +255,7 @@ test("ApiClient never refreshes on auth-endpoint failures", async () => {
   let loggedOut = false;
   api.onUnauthorized = () => { loggedOut = true; };
   api.setTokens("access-stale", "refresh-unused");
-  await assert.rejects(() => api.request("/auth/login", { method: "POST", body: "{}" }));
+  await assert.rejects(() => api.request("/auth/otp/verify", { method: "POST", body: "{}" }));
   assert.equal(refreshCalls, 0);
   assert.equal(loggedOut, true);
 });

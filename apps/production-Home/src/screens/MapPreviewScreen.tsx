@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
-import {ActivityIndicator, Alert, Image, Linking, NativeModules, Pressable, requireNativeComponent, StyleSheet, Text, View, type StyleProp, type ViewStyle} from 'react-native';
+import {ActivityIndicator, Alert, Image, Linking, NativeModules, Pressable, StyleSheet, Text, View} from 'react-native';
+import {WebView} from 'react-native-webview';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -12,16 +13,14 @@ import {headerStyles} from '../../../../packages/mobile-ui/headerStyles';
 import {api} from '../services/apiClient';
 
 type Route = RouteProp<RootStackParamList, 'MapPreview'>;
-const mapBridge = NativeModules.NahtreekRuntimeConfig as {getStaticMapUrl?: (latitude: number, longitude: number) => Promise<string>};
-// The interactive view exists only where the native manager is linked —
-// require it lazily so a missing view degrades to the static map instead of
-// crashing the screen at import.
-let GeoapifyMapView: React.ComponentType<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}> | null = null;
-try {
-  GeoapifyMapView = requireNativeComponent<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}>('GeoapifyMapView');
-} catch {
-  GeoapifyMapView = null;
-}
+const mapBridge = NativeModules.NahtreekRuntimeConfig as {
+  getStaticMapUrl?: (latitude: number, longitude: number) => Promise<string>;
+  getMapHtml?: (latitude: number, longitude: number) => Promise<string>;
+} | null;
+// Interactive maps render where the native HTML supplier exists (Android
+// builds with the map module); everywhere else the screen stays on the
+// static image plus Google Maps directions.
+const canInteract = typeof mapBridge?.getMapHtml === 'function';
 
 type JourneyTracking = {latitude: number; longitude: number; updatedAt: string; stale: boolean};
 type JourneyView = {stage: string; tracking?: JourneyTracking | null};
@@ -82,9 +81,10 @@ export function MapPreviewScreen() {
   const centerLongitude = liveTracking ? liveTracking.longitude : params.longitude;
   const centerHasCoordinates = validCoords(centerLatitude, centerLongitude);
   const [mapUrl, setMapUrl] = useState<string | null>(null);
+  const [mapHtml, setMapHtml] = useState<string | null>(null);
   const [mapError, setMapError] = useState('');
   const [mapLoading, setMapLoading] = useState(true);
-  const [interactive, setInteractive] = useState(false);
+  const [interactive, setInteractive] = useState(canInteract);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -95,14 +95,23 @@ export function MapPreviewScreen() {
       if (active) {setMapLoading(false); setMapError(mapError => mapError || 'Map is taking too long. Check your connection and retry.');}
     }, 15000);
     setMapUrl(null);
+    setMapHtml(null);
     setMapError('');
     setMapLoading(true);
-    setInteractive(false);
+    setInteractive(canInteract);
     if (!centerHasCoordinates || !mapBridge?.getStaticMapUrl) {
       clearTimeout(watchdog);
       setMapLoading(false);
       if (centerHasCoordinates) setMapError('Map view is unavailable in this build. Use directions below.');
       return () => {active = false;};
+    }
+    if (canInteract && mapBridge.getMapHtml) {
+      mapBridge.getMapHtml(centerLatitude!, centerLongitude!)
+        .then(html => {if (active) {clearTimeout(watchdog); setMapHtml(html); setMapLoading(false);}})
+        .catch(() => {
+          // Interactive HTML failed: fall back to the static image below.
+          if (active) setInteractive(false);
+        });
     }
     mapBridge.getStaticMapUrl(centerLatitude!, centerLongitude!)
       .then(url => {if (active) {clearTimeout(watchdog); setMapUrl(url);}})
@@ -157,13 +166,18 @@ export function MapPreviewScreen() {
         </View>
       ) : null}
       <View style={styles.map}>
-        {interactive && centerHasCoordinates && GeoapifyMapView ? (
-          <GeoapifyMapView latitude={centerLatitude!} longitude={centerLongitude!} style={styles.mapImage} />
+        {interactive && mapHtml ? (
+          <WebView
+            accessibilityLabel="Interactive job map"
+            source={{html: mapHtml, baseUrl: 'https://nahtreek.local/'}}
+            style={styles.mapImage}
+            onShouldStartLoadWithRequest={() => false}
+          />
         ) : mapUrl && !mapError ? <><Image source={{uri: mapUrl}} style={styles.mapImage} resizeMode="cover"
           onLoad={() => setMapLoading(false)} onError={() => {setMapLoading(false); setMapError('Map image could not load. Use directions below.');}} />
           {!mapLoading ? <View style={[styles.pin, liveTracking && styles.livePin]} accessibilityLabel={liveTracking ? 'Professional live location' : 'Pinned location'} /> : null}</> : null}
-        {mapLoading && !mapError && !interactive ? <ActivityIndicator size="large" color={ClientColors.accentIcon} /> : null}
-        {!interactive && (mapError || !centerHasCoordinates) ? <View style={styles.emptyWrap}>
+        {mapLoading && !mapError ? <ActivityIndicator size="large" color={ClientColors.accentIcon} /> : null}
+        {(!interactive || !centerHasCoordinates) && (mapError || !centerHasCoordinates) ? <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>
             {mapError || 'A map pin is not available for this address yet.'}
           </Text>
@@ -177,9 +191,9 @@ export function MapPreviewScreen() {
         {liveTracking ? (
           <Text style={styles.liveFooter} numberOfLines={2}>Heading to {params.address}</Text>
         ) : null}
-        {centerHasCoordinates && GeoapifyMapView ? (
+        {centerHasCoordinates && canInteract ? (
           <Pressable accessibilityRole="button" onPress={() => setInteractive(value => !value)} style={styles.mapMode}>
-            <Text style={styles.mapModeText}>{interactive ? 'Show map' : 'Explore interactive map'}</Text>
+            <Text style={styles.mapModeText}>{interactive ? 'Show static map' : 'Explore interactive map'}</Text>
           </Pressable>
         ) : null}
         <Pressable accessibilityRole="button" onPress={openDirections} style={styles.action}>

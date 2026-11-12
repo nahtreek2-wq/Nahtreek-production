@@ -173,7 +173,7 @@ describe('EngineerRow targets', () => {
     expect(mockNavigate).toHaveBeenCalledWith('EngineerProfile', {engineerId: 'eng-1'});
   });
 
-  it('sends guests to login for consult and save actions', () => {
+  it('sends signed-out users to login for consult and save actions', () => {
     const screen = renderDiscovery();
     const consult = screen.root.findByProps({accessibilityLabel: 'Request consultation'});
     renderer.act(() => consult.props.onPress());

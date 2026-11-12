@@ -1,12 +1,14 @@
 import {NativeModules} from 'react-native';
 import {runtimeConfig} from '../config/runtime';
 import {isApiConfigured} from './config';
-import {useSessionStore} from '../stores/session';
 import {
   getOfflineClientProfile,
   updateOfflineClientProfile,
 } from '../data/offlineCatalogue';
 
+// OTP-only: device-local test profiles carry no credentials at all. They
+// exist solely for unconfigured staging builds; every configured build
+// authenticates against the server with one-time codes.
 export interface ClientRegistration {
   fullName: string;
   address: string;
@@ -15,33 +17,22 @@ export interface ClientRegistration {
   postalCode: string;
   phoneNumber: string;
   email: string;
-  password: string;
   acceptedTerms: boolean;
 }
-interface StoredAccount extends Omit<ClientRegistration, 'password'> {
-  salt: string;
-  hash: string;
+interface StoredAccount extends ClientRegistration {
   createdAt: string;
 }
 type Accounts = Record<string, StoredAccount>;
 type Bridge = {
   getLocalAccounts(): Promise<string | null>;
   setLocalAccounts(payload: string): Promise<void>;
-  hashLocalPassword(password: string): Promise<{salt: string; hash: string}>;
-  verifyLocalPassword(
-    password: string,
-    salt: string,
-    hash: string,
-  ): Promise<boolean>;
-  confirmLocalPasswordReset(): Promise<boolean>;
 };
 function bridge(): Bridge {
   const native = NativeModules.NahtreekRuntimeConfig as Bridge | undefined;
   if (
     isApiConfigured ||
     runtimeConfig.environment !== 'staging' ||
-    !native?.getLocalAccounts ||
-    !native?.hashLocalPassword
+    !native?.getLocalAccounts
   )
     throw new Error(
       'Local account storage is unavailable. Connect the authentication service.',
@@ -53,6 +44,15 @@ export function normalizeMobile(raw: string): string {
   if (!/^([6-9]\d{9}|91[6-9]\d{9})$/.test(digits))
     throw new Error('Enter a valid 10-digit Indian mobile number');
   return '+91' + digits.slice(-10);
+}
+// Single email rule for the whole app: local@domain.tld shape, no spaces,
+// no consecutive dots, alpha TLD of 2+ chars, max 254 chars — matching the
+// server validator. Wrong-pattern addresses are rejected at the field
+// before any request leaves the device.
+export function isValidEmail(raw: string): boolean {
+  const value = raw.trim();
+  if (value.length === 0 || value.length > 254 || value.includes('..')) return false;
+  return /^[^\s@]+@([^\s@.]+\.)+[A-Za-z]{2,}$/.test(value);
 }
 export function validateClientDetails(
   input: Pick<
@@ -75,10 +75,8 @@ export function validateRegistration(input: ClientRegistration): string | null {
   } catch {
     return 'Enter a valid 10-digit mobile number';
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim()))
+  if (!isValidEmail(input.email))
     return 'Enter a valid email address';
-  if (input.password.length < 8 || input.password.length > 72)
-    return 'Use a password with 8 to 72 characters';
   if (!input.acceptedTerms)
     return 'Please read and accept the account data notice';
   return null;
@@ -128,17 +126,14 @@ export function registerLocalAccount(input: ClientRegistration) {
       throw new Error(
         'An account with this mobile or email already exists. Please sign in.',
       );
-    const {password, ...details} = input;
-    const credentials = await bridge().hashLocalPassword(password);
     const account: StoredAccount = {
-      ...details,
-      fullName: details.fullName.trim() || 'New Client',
-      address: details.address.trim(),
-      city: details.city.trim(),
-      state: details.state.trim(),
+      ...input,
+      fullName: input.fullName.trim() || 'New Client',
+      address: input.address.trim(),
+      city: input.city.trim(),
+      state: input.state.trim(),
       phoneNumber,
       email,
-      ...credentials,
       createdAt: new Date().toISOString(),
     };
     const result = session(account);
@@ -155,7 +150,7 @@ export function registerLocalAccount(input: ClientRegistration) {
     return result;
   });
 }
-export function loginLocalAccount(identifier: string, password: string) {
+export function loginLocalAccount(identifier: string) {
   return serial(async () => {
     const accounts = await load();
     const normalized = identifier.includes('@')
@@ -164,15 +159,8 @@ export function loginLocalAccount(identifier: string, password: string) {
     const account = identifier.includes('@')
       ? Object.values(accounts).find(a => a.email === normalized)
       : accounts[normalized];
-    if (
-      !account ||
-      !(await bridge().verifyLocalPassword(
-        password,
-        account.salt,
-        account.hash,
-      ))
-    )
-      throw new Error('Mobile/email or password is incorrect');
+    if (!account)
+      throw new Error('No device account found. Please create one first.');
     const result = session(account);
     const profile = await getOfflineClientProfile(result.user);
     return {
@@ -206,7 +194,7 @@ export function syncLocalAccountProfile(
     const account = Object.values(accounts).find(
       item => session(item).user.id === userId,
     );
-    if (!account) return; // Earlier internal profiles do not have password credentials.
+    if (!account) return; // Earlier internal profiles predate local storage.
     const email = patch.email?.trim().toLowerCase() ?? account.email;
     if (
       Object.values(accounts).some(
@@ -225,29 +213,5 @@ export function syncLocalAccountProfile(
       postalCode: patch.postalCode ?? account.postalCode,
     };
     await bridge().setLocalAccounts(JSON.stringify(accounts));
-  });
-}
-export function resetLocalPassword(
-  phone: string,
-  email: string,
-  password: string,
-) {
-  return serial(async () => {
-    const accounts = await load();
-    const phoneNumber = normalizeMobile(phone);
-    const account = accounts[phoneNumber];
-    if (!account || account.email !== email.trim().toLowerCase())
-      throw new Error(
-        'No matching password account. Older phone-only test profiles must be replaced with a new password account.',
-      );
-    if (password.length < 8 || password.length > 72)
-      throw new Error('Use a password with 8 to 72 characters');
-    if (!(await bridge().confirmLocalPasswordReset()))
-      throw new Error('Device confirmation is required');
-    const credentials = await bridge().hashLocalPassword(password);
-    accounts[phoneNumber] = {...account, ...credentials};
-    await bridge().setLocalAccounts(JSON.stringify(accounts));
-    if (useSessionStore.getState().user?.id === session(account).user.id)
-      useSessionStore.getState().clearSession();
   });
 }

@@ -27,10 +27,10 @@ import {useProfessionalDraft} from '../stores/professional';
 import {useSessionStore, type ProfessionalUser} from '../stores/session';
 import {isApiConfigured, runtimeConfig} from '../config/runtime';
 import {
+  isValidEmail,
   loginLocalProfessional,
   openDemoProfessional,
   registerLocalProfessional,
-  resetLocalProfessionalPassword,
 } from '../services/localAccounts';
 
 type AuthResponse = {
@@ -46,16 +46,13 @@ export function AccountAccessScreen() {
     state => state.professionalType,
   );
   const setSession = useSessionStore(state => state.setSession);
-  const [mode, setMode] = useState<'login' | 'create' | 'forgot'>('create');
+  const [mode, setMode] = useState<'login' | 'create'>('create');
   const [identifier, setIdentifier] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [code, setCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [accepted, setAccepted] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const localPreview = !isApiConfigured;
@@ -80,30 +77,59 @@ export function AccountAccessScreen() {
 
   const login = () =>
     run(async () => {
-      if (!identifier.trim() || !password) {
-        throw new ApiError(
-          400,
-          'Enter your mobile number or email and password.',
-        );
+      if (!identifier.trim()) {
+        throw new ApiError(400, 'Enter your mobile number or email.');
       }
       if (localPreview) {
-        setSession(await loginLocalProfessional(identifier, password));
+        setSession(await loginLocalProfessional(identifier));
         return;
       }
-      const key = identifier.includes('@') ? 'email' : 'phoneNumber';
-      const result = await api.post<AuthResponse>('/auth/professionals/login', {
-        [key]: identifier.trim(),
-        password,
-      });
-      setSession(result);
+      if (codeSent) {
+        await verifyLoginCode();
+        return;
+      }
+      await sendLoginCode();
     });
+
+  const sendLoginCode = async () => {
+    const raw = identifier.trim();
+    if (previewEmailOtp) {
+      if (!isValidEmail(raw)) {
+        throw new ApiError(400, 'Enter your registered email address.');
+      }
+      await api.post('/auth/email-otp/request', {
+        email: raw.toLowerCase(),
+      });
+      setEmail(raw.toLowerCase());
+    } else {
+      if (raw.replace(/\D/g, '').length !== 10) {
+        throw new ApiError(400, 'Enter a valid 10-digit mobile number.');
+      }
+      await api.post('/auth/otp/request', {phoneNumber: raw});
+      setPhone(raw);
+    }
+    setCodeSent(true);
+  };
+
+  const verifyLoginCode = async () => {
+    if (!/^\d{6}$/.test(code)) {
+      throw new ApiError(400, 'Enter the 6-digit verification code.');
+    }
+    const result = await api.post<AuthResponse>(
+      '/auth/otp/verify',
+      previewEmailOtp
+        ? {email: email.trim().toLowerCase(), code}
+        : {phoneNumber: phone, code},
+    );
+    setSession(result);
+  };
 
   const sendCode = () =>
     run(async () => {
       if (phone.replace(/\D/g, '').length !== 10) {
         throw new ApiError(400, 'Enter a valid 10-digit mobile number.');
       }
-      if (previewEmailOtp && !email.includes('@')) {
+      if (!isValidEmail(email)) {
         throw new ApiError(400, 'Enter a valid email address.');
       }
       if (localPreview) {
@@ -124,14 +150,8 @@ export function AccountAccessScreen() {
       if (!professionalType) {
         throw new ApiError(400, 'Choose your professional type first.');
       }
-      if (!email.includes('@')) {
+      if (!isValidEmail(email)) {
         throw new ApiError(400, 'Enter a valid email address.');
-      }
-      if (password.length < 8) {
-        throw new ApiError(400, 'Use at least 8 characters for your password.');
-      }
-      if (password !== confirm) {
-        throw new ApiError(400, 'The passwords do not match.');
       }
       if (!localPreview && !/^\d{6}$/.test(code)) {
         throw new ApiError(400, 'Enter the 6-digit verification code.');
@@ -144,89 +164,33 @@ export function AccountAccessScreen() {
           await registerLocalProfessional({
             phoneNumber: phone,
             email,
-            password,
             professionalType,
           }),
         );
         return;
       }
       const normalizedEmail = email.trim().toLowerCase();
+      // Registration consumes the code; if the response is lost but the
+      // account exists (409), the same code still verifies (the failed
+      // transaction rolls the consumption back).
       const result = await registerWithRecovery(
         () =>
           api.post<AuthResponse>('/auth/professionals/register', {
             phoneNumber: phone,
             email: normalizedEmail,
-            password,
             code,
             professionalType,
             acceptedTerms: true,
           }),
         () =>
-          api.post<AuthResponse>('/auth/professionals/login', {
-            email: normalizedEmail,
-            password,
-          }),
+          api.post<AuthResponse>(
+            '/auth/otp/verify',
+            previewEmailOtp
+              ? {email: normalizedEmail, code}
+              : {phoneNumber: phone, code},
+          ),
       );
       setSession(result);
-    });
-
-  const requestReset = () =>
-    run(async () => {
-      if (
-        previewEmailOtp
-          ? !email.includes('@')
-          : phone.replace(/\D/g, '').length !== 10
-      ) {
-        throw new ApiError(
-          400,
-          previewEmailOtp
-            ? 'Enter your registered email address.'
-            : 'Enter a valid 10-digit mobile number.',
-        );
-      }
-      if (localPreview) {
-        setCodeSent(true);
-        return;
-      }
-      await api.post(
-        previewEmailOtp
-          ? '/auth/password-reset/email/request'
-          : '/auth/password-reset/request',
-        previewEmailOtp
-          ? {email: email.trim().toLowerCase()}
-          : {phoneNumber: phone},
-      );
-      setCodeSent(true);
-    });
-
-  const resetPassword = () =>
-    run(async () => {
-      if (!localPreview && !/^\d{6}$/.test(code)) {
-        throw new ApiError(400, 'Enter the 6-digit verification code.');
-      }
-      if (password.length < 8) {
-        throw new ApiError(400, 'Use at least 8 characters for your password.');
-      }
-      if (password !== confirm) {
-        throw new ApiError(400, 'The passwords do not match.');
-      }
-      if (localPreview) {
-        await resetLocalProfessionalPassword(phone, password);
-      } else {
-        await api.post(
-          previewEmailOtp
-            ? '/auth/password-reset/email/confirm'
-            : '/auth/password-reset/confirm',
-          previewEmailOtp
-            ? {email: email.trim().toLowerCase(), code, password}
-            : {phoneNumber: phone, code, password},
-        );
-      }
-      setIdentifier(previewEmailOtp ? email.trim().toLowerCase() : phone);
-      setMode('login');
-      setCodeSent(false);
-      setCode('');
-      setConfirm('');
     });
 
   const openDemo = (kind: 'engineer' | 'service') =>
@@ -272,6 +236,7 @@ export function AccountAccessScreen() {
               onPress={() => {
                 setMode(item);
                 setCodeSent(false);
+                setCode('');
                 setError('');
               }}
               style={[styles.tab, mode === item && styles.tabActive]}>
@@ -285,22 +250,14 @@ export function AccountAccessScreen() {
           ))}
         </View>
         <Text style={styles.title}>
-          {mode === 'login'
-            ? 'Welcome back'
-            : mode === 'forgot'
-            ? 'Reset your password'
-            : 'Create your work account'}
+          {mode === 'login' ? 'Welcome back' : 'Create your work account'}
         </Text>
         <Text style={styles.subtitle}>
           {mode === 'login'
-            ? 'Manage requests, schedule and messages.'
-            : mode === 'forgot'
-            ? `Verify your registered ${
-                previewEmailOtp ? 'email address' : 'mobile number'
-              }, then choose a new password.`
-            : `Secure your account with ${
-                previewEmailOtp ? 'email verification' : 'mobile verification'
-              }. We will collect your professional details next.`}
+            ? 'Sign in with a one-time code — no password needed.'
+            : `Verify with ${
+                previewEmailOtp ? 'an email' : 'a mobile'
+              } code. We will collect your professional details next.`}
         </Text>
         {localPreview ? (
           <View style={styles.preview}>
@@ -319,133 +276,65 @@ export function AccountAccessScreen() {
           {mode === 'login' ? (
             <>
               <Field
-                label="Mobile number or email"
+                label={
+                  previewEmailOtp ? 'Email address' : 'Mobile number'
+                }
                 value={identifier}
                 onChangeText={setIdentifier}
+                keyboardType={previewEmailOtp ? 'email-address' : 'phone-pad'}
                 autoCapitalize="none"
-                placeholder="Mobile number or email"
+                placeholder={
+                  previewEmailOtp
+                    ? 'you@example.com'
+                    : '10-digit mobile number'
+                }
               />
-              <PasswordField
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                visible={showPassword}
-                toggle={() => setShowPassword(value => !value)}
-              />
-              <Pressable
-                accessibilityRole="link"
-                accessibilityLabel="Forgot password"
-                onPress={() => {
-                  setMode('forgot');
-                  if (identifier.includes('@')) {
-                    setEmail(identifier);
-                  } else {
-                    setPhone(identifier);
+              {!localPreview && codeSent ? (
+                <Field
+                  label="Verification code"
+                  value={code}
+                  onChangeText={value =>
+                    setCode(value.replace(/\D/g, '').slice(0, 6))
                   }
-                  setCodeSent(false);
-                  setError('');
-                }}>
-                <Text style={styles.link}>Forgot password?</Text>
-              </Pressable>
+                  keyboardType="number-pad"
+                  placeholder="6-digit code"
+                  maxLength={6}
+                  autoComplete="sms-otp"
+                  textContentType="oneTimeCode"
+                />
+              ) : null}
               {error ? (
                 <Text accessibilityRole="alert" style={styles.error}>
                   {error}
                 </Text>
               ) : null}
               <PrimaryButton
-                label={busy ? 'Signing in…' : 'Login'}
+                label={
+                  busy
+                    ? codeSent
+                      ? 'Verifying…'
+                      : 'Sending…'
+                    : localPreview
+                    ? 'Login'
+                    : codeSent
+                    ? 'Verify and login'
+                    : 'Send verification code'
+                }
                 disabled={busy}
                 onPress={login}
               />
-            </>
-          ) : mode === 'forgot' ? (
-            <>
-              {previewEmailOtp ? (
-                <Field
-                  label="Registered email address"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  placeholder="you@example.com"
-                />
-              ) : (
-                <Field
-                  label="Registered mobile number"
-                  value={phone}
-                  onChangeText={setPhone}
-                  keyboardType="phone-pad"
-                  placeholder="10-digit mobile number"
-                  maxLength={10}
-                />
-              )}
-              {!codeSent ? (
-                <PrimaryButton
-                  label={
-                    busy
-                      ? 'Checking…'
-                      : localPreview
-                      ? 'Continue with device security'
-                      : 'Send reset code'
-                  }
+              {!localPreview && codeSent ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Send code again"
                   disabled={busy}
-                  onPress={requestReset}
-                />
-              ) : (
-                <>
-                  {!localPreview ? (
-                    <Field
-                      label="Verification code"
-                      value={code}
-                      onChangeText={setCode}
-                      keyboardType="number-pad"
-                      placeholder="6-digit code"
-                      maxLength={6}
-                    />
-                  ) : null}
-                  <PasswordField
-                    label="New password"
-                    value={password}
-                    onChangeText={setPassword}
-                    visible={showPassword}
-                    toggle={() => setShowPassword(value => !value)}
-                  />
-                  <Field
-                    label="Confirm new password"
-                    value={confirm}
-                    onChangeText={setConfirm}
-                    secureTextEntry={!showPassword}
-                    placeholder="Enter the password again"
-                  />
-                  <Pressable accessibilityRole="button" accessibilityLabel="Send code again" disabled={busy} onPress={requestReset}>
-                    <Text style={styles.link}>Send code again</Text>
-                  </Pressable>
-                  {error ? (
-                    <Text accessibilityRole="alert" style={styles.error}>
-                      {error}
-                    </Text>
-                  ) : null}
-                  <PrimaryButton
-                    label={busy ? 'Updating password…' : 'Update password'}
-                    disabled={busy}
-                    onPress={resetPassword}
-                  />
-                </>
-              )}
-              {!codeSent && error ? (
-                <Text accessibilityRole="alert" style={styles.error}>
-                  {error}
-                </Text>
+                  onPress={() => {
+                    setCodeSent(false);
+                    setCode('');
+                  }}>
+                  <Text style={styles.link}>Send code again</Text>
+                </Pressable>
               ) : null}
-              <Pressable
-                accessibilityRole="link"
-                accessibilityLabel="Back to login"
-                onPress={() => {
-                  setMode('login');
-                  setError('');
-                }}>
-                <Text style={styles.backLink}>Back to login</Text>
-              </Pressable>
             </>
           ) : (
             <>
@@ -483,10 +372,14 @@ export function AccountAccessScreen() {
                     <Field
                       label="Verification code"
                       value={code}
-                      onChangeText={setCode}
+                      onChangeText={value =>
+                        setCode(value.replace(/\D/g, '').slice(0, 6))
+                      }
                       keyboardType="number-pad"
                       placeholder="6-digit code"
                       maxLength={6}
+                      autoComplete="sms-otp"
+                      textContentType="oneTimeCode"
                     />
                   ) : null}
                   <Pressable disabled={busy} onPress={sendCode}>
@@ -494,20 +387,6 @@ export function AccountAccessScreen() {
                   </Pressable>
                 </>
               )}
-              <PasswordField
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                visible={showPassword}
-                toggle={() => setShowPassword(value => !value)}
-              />
-              <Field
-                label="Confirm password"
-                value={confirm}
-                onChangeText={setConfirm}
-                secureTextEntry={!showPassword}
-                placeholder="Enter the password again"
-              />
               <Pressable
                 accessibilityRole="checkbox"
                 accessibilityState={{checked: accepted}}
@@ -598,50 +477,6 @@ function Field({label, ...props}: FieldProps) {
     </View>
   );
 }
-function PasswordField({
-  label,
-  value,
-  onChangeText,
-  visible,
-  toggle,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  visible: boolean;
-  toggle: () => void;
-}) {
-  const onFocus = useFormFieldFocus();
-  return (
-    <View>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.passwordRow}>
-        <TextInput
-          accessibilityLabel={label}
-          onFocus={onFocus}
-          value={value}
-          onChangeText={onChangeText}
-          secureTextEntry={!visible}
-          placeholder="At least 8 characters"
-          placeholderTextColor={Colors.slate500}
-          style={styles.passwordInput}
-        />
-        <Pressable
-          style={styles.passwordToggle}
-          accessibilityRole="button"
-          accessibilityLabel={visible ? 'Hide password' : 'Show password'}
-          onPress={toggle}>
-          <MaterialCommunityIcons
-            name={visible ? 'eye-off-outline' : 'eye-outline'}
-            size={24}
-            color={Colors.slate500}
-          />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: Colors.offWhite},
   content: {flexGrow: 1, padding: 20, paddingBottom: Spacing.xxl},
@@ -707,28 +542,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.slate200,
     borderRadius: BorderRadius.md,
-    paddingHorizontal: Spacing.md,
-  },
-  passwordRow: {
-    minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.slate200,
-    borderRadius: BorderRadius.md,
-    paddingRight: 4,
-  },
-  passwordToggle: {
-    minWidth: 48,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  passwordInput: {
-    ...Typography.body,
-    flex: 1,
-    color: Colors.slate900,
     paddingHorizontal: Spacing.md,
   },
   link: {

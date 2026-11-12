@@ -142,7 +142,7 @@ function ServicesScreenContent() {
               style={styles.detailHero}
               imageStyle={styles.detailHeroImage}>
               <LinearGradient
-                colors={['rgba(7,31,61,0.12)', 'rgba(7,31,61,0.92)']}
+                colors={['rgba(17, 31, 53,0.12)', 'rgba(17, 31, 53,0.92)']}
                 style={styles.detailOverlay}>
                 <Text style={styles.detailGroup}>{selected.group}</Text>
                 <Text style={styles.detailTitle}>{selected.title}</Text>
@@ -181,7 +181,7 @@ function ServicesScreenContent() {
                       style={styles.cardImage}
                       imageStyle={styles.cardImageRadius}>
                       <LinearGradient
-                        colors={['rgba(7,31,61,0)', 'rgba(7,31,61,0.62)']}
+                        colors={['rgba(17, 31, 53,0)', 'rgba(17, 31, 53,0.62)']}
                         style={styles.cardImageOverlay}
                       />
                     </ImageBackground>

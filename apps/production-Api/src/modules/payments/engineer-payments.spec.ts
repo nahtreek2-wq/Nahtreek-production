@@ -1,3 +1,4 @@
+import {Prisma} from '@prisma/client';
 import {PaymentsService} from './payments.service';
 
 const engRequest = (over: Record<string, unknown> = {}) => ({id: 'eng-req', status: 'COMPLETED',
@@ -282,8 +283,13 @@ describe('engineer direct collection', () => {
       {engineerRequestId: 'eng-req', amount: 3500, method: 'CASH'});
     expect(db.payment.create).toHaveBeenCalledWith(expect.objectContaining({data: expect.objectContaining({
       engineerRequestId: 'eng-req', amountPaisa: 350000, platformFeePaisa: 35000,
-      professionalAmountPaisa: 315000, collectionMode: 'AT_HOME', collectedMethod: 'CASH',
+      professionalAmountPaisa: 315000, collectionMode: 'AT_HOME',
       status: 'COLLECTED_UNSETTLED'})}));
+    // Regression guard: every written key must exist on the real Payment model.
+    // Mocks accept phantom fields; Postgres 500s on them (live declare outage).
+    const written = db.payment.create.mock.calls[0][0].data;
+    const scalars = new Set(Object.values(Prisma.PaymentScalarFieldEnum));
+    for (const key of Object.keys(written)) expect(scalars.has(key as never)).toBe(true);
     expect(result).toMatchObject({status: 'COLLECTED_UNSETTLED', amountPaisa: 350000});
     expect(realtime.emitUserUpdate).toHaveBeenCalledWith('client', 'requests');
     expect(realtime.emitUserUpdate).toHaveBeenCalledWith('eng-user', 'requests');

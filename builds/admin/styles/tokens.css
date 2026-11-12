@@ -2,11 +2,11 @@
   color-scheme: light;
   /* Brand. Amber is the single accent: primary actions, active states and
      attention markers only. Everything else stays neutral navy/slate. */
-  --navy: #0b2d5b;
-  --deep-navy: #071f3d;
+  --navy: #111F35;
+  --deep-navy: #111F35;
   --ink: #16213a;
-  --yellow: #f2b84b;
-  --yellow-pressed: #d9a125;
+  --yellow: #C4A639;
+  --yellow-pressed: #C4A639;
   --soft-yellow: #fdf3dc;
   --white: #ffffff;
   --background: #f3f5f9;
@@ -23,13 +23,13 @@
   --error-bg: #fdecec;
   --warning: #8a5a00;
   --warning-bg: #fdf3dc;
-  --info: #0b2d5b;
+  --info: #111F35;
   --info-bg: #e9eff8;
   --skeleton: #e4e9f1;
   --skeleton-shine: #f1f4f9;
-  --shadow-sm: 0 1px 2px rgba(7, 31, 61, 0.07), 0 4px 14px rgba(7, 31, 61, 0.06);
-  --shadow-md: 0 2px 4px rgba(7, 31, 61, 0.08), 0 10px 28px rgba(7, 31, 61, 0.1);
-  --shadow-lg: 0 18px 55px rgba(7, 31, 61, 0.22);
+  --shadow-sm: 0 1px 2px rgba(17, 31, 53, 0.07), 0 4px 14px rgba(17, 31, 53, 0.06);
+  --shadow-md: 0 2px 4px rgba(17, 31, 53, 0.08), 0 10px 28px rgba(17, 31, 53, 0.1);
+  --shadow-lg: 0 18px 55px rgba(17, 31, 53, 0.22);
   /* Shape lock: 8px small elements (avatars, icons, toggles),
      10px inputs/buttons/cards, 999px chips/badges/pills. Nothing else. */
   --radius-sm: 8px;

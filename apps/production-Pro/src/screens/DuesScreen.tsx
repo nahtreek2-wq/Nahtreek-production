@@ -312,8 +312,8 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
           ) : null}
           {!view.isMember && view.jobs.length > 0 ? (
             <View style={styles.savings}>
-              <Text style={styles.savingsTitle}>Members would have saved up to {rupees(view.jobs.reduce((sum, job, index) => sum + (index === 0 ? Math.floor((job.amountPaisa * 1000) / 10000) : Math.floor((job.amountPaisa * 1000) / 10000) - Math.floor((job.amountPaisa * 700) / 10000)), 0))} here</Text>
-              <Text style={styles.savingsBody}>Pro membership makes the first job each month free and bills the rest at 7% instead of 10%.</Text>
+              <Text style={styles.savingsTitle}>Members would have saved up to {rupees(view.jobs.reduce((sum, job, index) => sum + (index === 0 ? Math.floor((job.amountPaisa * terms.standardFeeBps) / 10000) : Math.floor((job.amountPaisa * terms.standardFeeBps) / 10000) - Math.floor((job.amountPaisa * terms.memberFeeBps) / 10000)), 0))} here</Text>
+              <Text style={styles.savingsBody}>Pro membership makes the first job each month free and bills the rest at {terms.memberFeeBps / 100}% instead of {terms.standardFeeBps / 100}%.</Text>
               <Pressable accessibilityRole="button" accessibilityLabel="View Pro membership" onPress={() => (navigation as {navigate: (route: string) => void}).navigate('Membership')} style={styles.savingsLink}>
                 <Text style={styles.savingsLinkText}>View Pro membership</Text>
               </Pressable>

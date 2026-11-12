@@ -134,7 +134,8 @@ function showLogin(reason) {
   hideBoot();
   byId("dashboard-view").classList.add("hidden");
   byId("login-view").classList.remove("hidden");
-  byId("password").value = "";
+  byId("login-code").value = "";
+  auth.showIdentifierStep();
   if (reason === "idle") {
     byId("login-error").textContent = "Signed out after 15 minutes of inactivity. Sign in again to continue.";
   }
@@ -158,7 +159,7 @@ byId("menu-close").addEventListener("click", closeMenu);
 byId("sidebar-backdrop").addEventListener("click", closeMenu);
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
 window.addEventListener("resize", closeMenu);
-byId("login-form").addEventListener("submit", (event) => auth.login(event));
+auth.bindLogin();
 byId("logout-button").addEventListener("click", () => auth.logout());
 byId("idle-stay").addEventListener("click", () => {
   auth.resetIdleTimers();
@@ -170,19 +171,7 @@ byId("idle-logout").addEventListener("click", () => auth.logout());
 ["pointerdown", "keydown"].forEach((name) => document.addEventListener(name, () => {
   if (byId("idle-dialog").open) closeIdleDialog();
 }, { passive: true }));
-byId("password-toggle").addEventListener("click", () => {
-  const field = byId("password");
-  const button = byId("password-toggle");
-  const show = field.type === "password";
-  field.type = show ? "text" : "password";
-  button.textContent = show ? "Hide" : "Show";
-  button.setAttribute("aria-pressed", String(show));
-  field.focus();
-});
-byId("password").addEventListener("keyup", (event) => {
-  const caps = event.getModifierState?.("CapsLock");
-  byId("caps-warning").classList.toggle("hidden", !caps);
-});
+
 // Press "/" anywhere in the console to jump to the visible search box.
 document.addEventListener("keydown", (event) => {
   if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;

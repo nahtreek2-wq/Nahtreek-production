@@ -139,7 +139,8 @@ export class MembershipsService {
       const updated = await this.applyRemote(m, remote);
       return {...this.viewOf(updated), keyId: this.provider.keyId, subscriptionId: m.providerSubscriptionId, shortUrl: null};
     }
-    if (['created', 'authenticated', 'pending'].includes(remote.status)) {
+    if (['created', 'authenticated', 'pending'].includes(remote.status)
+      && await this.remotePlanMatches(remote, MEMBERSHIP_FEE_PAISE)) {
       // A resubscribe swaps in a pending mandate while the paid tail still
       // runs — keep the row (and its benefits) untouched until the new
       // mandate actually confirms; only cold rows take the remote status.
@@ -147,6 +148,16 @@ export class MembershipsService {
       return {...this.viewOf(updated), keyId: this.provider.keyId, subscriptionId: m.providerSubscriptionId, shortUrl: remote.short_url ?? null};
     }
     return null;
+  }
+
+  // Resumed checkouts must bill the CURRENT plan: a stale mandate minted
+  // under a retired test plan would otherwise open Razorpay for the wrong
+  // amount (live incident: ₹5 checkout on a ₹399 plan). Unreadable plans
+  // fail closed to a fresh guarded checkout below.
+  private async remotePlanMatches(remote: {plan_id?: string}, feePaisa: number): Promise<boolean> {
+    if (!remote.plan_id) return false;
+    const plan = await this.provider.fetchPlan(remote.plan_id).catch(() => null);
+    return !!plan && plan.amount === feePaisa && plan.currency === 'INR' && plan.period === 'monthly';
   }
 
   async subscribe(userId: string) {
@@ -612,7 +623,8 @@ export class MembershipsService {
           return {...this.aiViewOf(updated), keyId: this.provider.keyId, subscriptionId: row.providerSubscriptionId, shortUrl: null as string | null};
         }
       }
-      if (!stale && remote && ['created', 'authenticated', 'pending'].includes(remote.status)) {
+      if (!stale && remote && ['created', 'authenticated', 'pending'].includes(remote.status)
+        && await this.remotePlanMatches(remote, AI_SUBSCRIPTION_FEE_PAISE)) {
         // A live checkout resumes on its short URL — but an effective row
         // (demo, or a paid tail with a resubscribe pending) keeps its status
         // until the real mandate actually confirms.

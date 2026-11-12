@@ -7,7 +7,7 @@ import {BrandYellow, Colors} from '@nahtreek/design-system';
 export const ClientColors = {
   primaryNavy: '#111F35',
   deepNavy: '#111F35',
-  richNavy: '#103665',
+  richNavy: '#111F35',
   accent: BrandYellow.primary,
   accentPressed: BrandYellow.pressed,
   accentSoft: BrandYellow.soft,

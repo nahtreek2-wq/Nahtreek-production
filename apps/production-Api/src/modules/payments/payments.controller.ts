@@ -55,6 +55,11 @@ export class PaymentsController {
     return this.service.declareEngineerCollection(user.sub, dto);
   }
 
+  @Get('collect-qr') @Roles(Role.ENGINEER)
+  collectQr(@CurrentUser() user: JwtPayload, @Query('engineerRequestId') engineerRequestId: string) {
+    return this.service.collectQr(user.sub, engineerRequestId);
+  }
+
   @Post('release') @Roles(Role.ADMIN)
   release(@CurrentUser() user: JwtPayload, @Body() dto: ReleasePaymentDto) {
     if (dto.engineerRequestId) return this.service.releaseForEngineerRequest(dto.engineerRequestId, user.sub);

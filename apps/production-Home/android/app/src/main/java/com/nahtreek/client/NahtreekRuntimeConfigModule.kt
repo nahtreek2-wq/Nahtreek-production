@@ -69,6 +69,71 @@ class NahtreekRuntimeConfigModule(reactContext: ReactApplicationContext) :
     promise.resolve(url)
   }
 
+  @ReactMethod
+  fun getMapHtml(latitude: Double, longitude: Double, promise: Promise) {
+    if (!latitude.isFinite() || !longitude.isFinite() || latitude !in -90.0..90.0 || longitude !in -180.0..180.0) {
+      promise.reject("MAP_COORDINATES", "This location is not available yet."); return
+    }
+    val key = BuildConfig.GEOAPIFY_API_KEY
+    if (key.isBlank()) { promise.reject("MAP_CONFIG", "Map is not configured in this build."); return }
+    val staticMap = Uri.parse("https://maps.geoapify.com/v1/staticmap").buildUpon()
+        .appendQueryParameter("style", "carto")
+        .appendQueryParameter("width", "600")
+        .appendQueryParameter("height", "800")
+        .appendQueryParameter("center", "lonlat:$longitude,$latitude")
+        .appendQueryParameter("zoom", "15")
+        .appendQueryParameter("apiKey", key)
+        .build().toString()
+    promise.resolve(buildMapHtml(latitude, longitude, key, staticMap))
+  }
+
+  private fun assetText(name: String): String {
+    // Leaflet ships inside the app (no CDN): the map stays interactive on any network.
+    return try { reactApplicationContext.assets.open(name).bufferedReader().use { it.readText() } } catch (e: Exception) { "" }
+  }
+
+  private fun buildMapHtml(lat: Double, lon: Double, key: String, staticMap: String): String {
+    val body = """
+      <style>${assetText("leaflet.css")}</style>
+      <div id="map"></div><div id="fallback"><img id="static-map" alt="Map of the selected address" /><div id="pin"></div></div><div id="message">Loading map…</div>
+      <script>${assetText("leaflet.js")}</script>
+      <script>
+        function showFallback() {
+          document.getElementById('map').style.display = 'none';
+          document.getElementById('fallback').style.display = 'block';
+          var preview = document.getElementById('static-map');
+          preview.onload = function() { document.getElementById('message').hidden = true; };
+          preview.onerror = function() { document.getElementById('message').textContent = 'Map unavailable. Use Get directions below.'; };
+          if (!preview.src) preview.src = ${JSONObject.quote(staticMap)};
+        }
+        if (typeof L === 'undefined') {
+          showFallback();
+        } else {
+          var lat = $lat, lon = $lon;
+          var map = L.map('map', {zoomControl: true, scrollWheelZoom: false}).setView([lat, lon], 16);
+          var tiles = L.tileLayer('https://maps.geoapify.com/v1/tile/carto/{z}/{x}/{y}.png?apiKey=' + encodeURIComponent(${JSONObject.quote(key)}), {
+            maxZoom: 20,
+            attribution: 'Powered by <a href="https://www.geoapify.com/">Geoapify</a> | <a href="https://www.openstreetmap.org/copyright">&copy; OpenStreetMap contributors</a>'
+          });
+          tiles.on('tileerror', function() { showFallback(); });
+          tiles.on('tileload', function() { document.getElementById('message').hidden = true; });
+          tiles.addTo(map);
+          L.circleMarker([lat, lon], {radius: 9, color: '#111F35', weight: 4, fillColor: '#C4A639', fillOpacity: 1}).addTo(map);
+        }
+      </script>
+      """.trimIndent()
+    return """
+      <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+      <style>html,body,#map,#fallback{width:100%;height:100%;margin:0}body{font-family:sans-serif;background:#f7f9fc}
+      #fallback{display:none;position:relative}#static-map{width:100%;height:100%;object-fit:cover}
+      #pin{position:absolute;top:50%;left:50%;width:22px;height:22px;border-radius:50%;background:#C4A639;
+      border:4px solid #111F35;box-shadow:0 2px 8px #0005;transform:translate(-50%,-50%)}
+      #message{position:absolute;bottom:26px;left:12px;right:12px;padding:12px;border-radius:10px;
+      background:#fff;color:#111F35;text-align:center;box-shadow:0 2px 12px #0002;z-index:1000}
+      #message[hidden]{display:none}</style></head><body>$body</body></html>
+    """.trimIndent()
+  }
+
   private fun localOnly() {
     check(BuildConfig.NAHTREEK_ENVIRONMENT == "staging" && BuildConfig.NAHTREEK_API_BASE_URL.isBlank()) { "Local accounts are available only in unconfigured internal builds" }
   }

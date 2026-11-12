@@ -143,3 +143,52 @@ describe('resubscribe during the cancelled paid tail', () => {
     expect(view.effective).toBe(true);
   });
 });
+
+describe('stale mandate resume guard', () => {
+  // A pending mandate minted under a retired test plan must never resume its
+  // checkout: the customer would pay the wrong amount (live ₹5 incident).
+  function priced(provider: any) {
+    provider.fetchPlan.mockImplementation(async (id: string) =>
+      id === 'plan_old_5rs'
+        ? {id, amount: 500, currency: 'INR', period: 'monthly'}
+        : id === AI_PLAN_ID
+        ? {id, amount: 12900, currency: 'INR', period: 'monthly'}
+        : {id, amount: 39900, currency: 'INR', period: 'monthly'});
+  }
+  it('Pro: refuses a stale mandate and mints a fresh checkout', async () => {
+    const {service, provider} = setup({membership: {providerSubscriptionId: 'sub_old', status: 'PENDING'},
+      subs: {sub_old: {id: 'sub_old', status: 'created', short_url: 'https://rzp.io/i/old', plan_id: 'plan_old_5rs'}}});
+    priced(provider);
+    const view = await service.subscribe('pro');
+    expect(provider.createSubscription).toHaveBeenCalled();
+    expect(view.subscriptionId).toBe('sub_new');
+    expect(view.shortUrl).toBe('https://rzp.io/i/new');
+  });
+  it('Pro: resumes a pending mandate on the current plan', async () => {
+    const {service, provider} = setup({membership: {providerSubscriptionId: 'sub_old', status: 'PENDING'},
+      subs: {sub_old: {id: 'sub_old', status: 'created', short_url: 'https://rzp.io/i/old', plan_id: PLAN_ID}}});
+    priced(provider);
+    const view = await service.subscribe('pro');
+    expect(provider.createSubscription).not.toHaveBeenCalled();
+    expect(view.subscriptionId).toBe('sub_old');
+    expect(view.shortUrl).toBe('https://rzp.io/i/old');
+  });
+  it('AI: refuses a stale mandate and mints a fresh checkout', async () => {
+    const {service, provider} = setup({ai: {providerSubscriptionId: 'sub_old', status: 'PENDING'},
+      subs: {sub_old: {id: 'sub_old', status: 'created', short_url: 'https://rzp.io/i/old', plan_id: 'plan_old_5rs'}}});
+    priced(provider);
+    const view = await service.aiSubscribe('client');
+    expect(provider.createSubscription).toHaveBeenCalled();
+    expect(view.subscriptionId).toBe('sub_new');
+    expect(view.shortUrl).toBe('https://rzp.io/i/new');
+  });
+  it('AI: resumes a pending mandate on the current plan', async () => {
+    const {service, provider} = setup({ai: {providerSubscriptionId: 'sub_old', status: 'PENDING'},
+      subs: {sub_old: {id: 'sub_old', status: 'created', short_url: 'https://rzp.io/i/old', plan_id: AI_PLAN_ID}}});
+    priced(provider);
+    const view = await service.aiSubscribe('client');
+    expect(provider.createSubscription).not.toHaveBeenCalled();
+    expect(view.subscriptionId).toBe('sub_old');
+    expect(view.shortUrl).toBe('https://rzp.io/i/old');
+  });
+});

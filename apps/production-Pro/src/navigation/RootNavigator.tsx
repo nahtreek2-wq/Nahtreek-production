@@ -99,6 +99,14 @@ function MainTabs() {
         name="Requests"
         component={RequestsNavigator}
         options={{tabBarLabel: 'Jobs'}}
+        listeners={({navigation}) => ({
+          tabPress: e => {
+            // The Jobs tab always opens the inbox list — never a stale
+            // detail screen from earlier browsing.
+            e.preventDefault();
+            navigation.navigate('Requests', {screen: 'RequestInbox'});
+          },
+        })}
       />
       <Tabs.Screen
         name="Schedule"

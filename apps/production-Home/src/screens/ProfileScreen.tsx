@@ -40,7 +40,7 @@ import {isApiConfigured} from '../services/config';
 import {fetchAiSubscription, type AiSubscriptionView} from '../services/aiBilling';
 import {stateForCity} from '../services/geography';
 import {DistrictLocationPicker} from '../components/DistrictLocationPicker';
-import {validateClientDetails} from '../services/localCredentials';
+import {isValidEmail, validateClientDetails} from '../services/localCredentials';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 const DEFAULT_CLIENT_NAME = 'NAHTREEK Client';
@@ -168,7 +168,7 @@ export function ProfileScreen() {
       toast(detailsError, 'error');
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail.trim())) {
+    if (!isValidEmail(editEmail)) {
       toast('Enter a valid email address', 'error');
       return;
     }

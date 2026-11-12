@@ -4,11 +4,11 @@
 
 | Role | Value | Use |
 |---|---:|---|
-| Primary Navy | `#0B2D5B` | Brand, primary CTA, major anchors |
-| Deep Navy | `#071F3D` | High-emphasis headers and navigation |
-| Rich Navy | `#103665` | Layered navy surfaces |
-| Construction Yellow | `#F2B84B` | Primary actions, active navigation and progress |
-| Pressed Yellow | `#DCA329` | Pressed interactive state |
+| Primary Navy | `#111F35` | Brand, primary CTA, major anchors |
+| Deep Navy | `#111F35` | High-emphasis headers and navigation |
+| Rich Navy | `#111F35` | Layered navy surfaces |
+| Construction Yellow | `#C4A639` | Primary actions, active navigation and progress |
+| Pressed Yellow | `#C4A639` | Pressed interactive state |
 | Soft Yellow | `#FFF4D8` | Selected and highlighted backgrounds |
 | Accessible Accent Text | `#9A6700` | Yellow-family text on white surfaces |
 | Very Light Blue | `#F3F7FD` | Quiet supporting surfaces |

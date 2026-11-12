@@ -9,7 +9,7 @@ const session = {accessToken: 'access', refreshToken: 'refresh', user: {id: 'cli
 beforeEach(() => {
   jest.clearAllMocks();
   useCity.setState({city: ''});
-  useSessionStore.setState({accessToken: null, refreshToken: null, user: null, isHydrated: false, isGuest: false, sessionEpoch: 0, storageError: null});
+  useSessionStore.setState({accessToken: null, refreshToken: null, user: null, isHydrated: false, sessionEpoch: 0, storageError: null});
 });
 it('replaces a previous account city immediately on sign-in and clears it on sign-out', () => {
   useCity.getState().setCity('Patna');

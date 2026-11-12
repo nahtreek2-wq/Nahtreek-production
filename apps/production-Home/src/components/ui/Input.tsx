@@ -36,6 +36,8 @@ interface InputProps {
   dark?: boolean;
   maxLength?: number;
   onFocus?: TextInputProps['onFocus'];
+  autoComplete?: TextInputProps['autoComplete'];
+  textContentType?: TextInputProps['textContentType'];
 }
 
 export function Input({
@@ -57,6 +59,8 @@ export function Input({
   dark,
   maxLength,
   onFocus,
+  autoComplete,
+  textContentType,
 }: InputProps) {
   const [focused, setFocused] = useState(false);
   return (
@@ -90,6 +94,8 @@ export function Input({
             autoCorrect ??
             (keyboardType !== 'email-address' && !secureTextEntry)
           }
+          autoComplete={autoComplete}
+          textContentType={textContentType}
           onFocus={event => {
             setFocused(true);
             onFocus?.(event);

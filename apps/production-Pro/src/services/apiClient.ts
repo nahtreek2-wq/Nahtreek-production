@@ -73,7 +73,7 @@ function messageFor(status: number): string {
 
 async function timedFetch(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();
-  const auth = /\/auth\/(professionals\/register|email-otp\/request|password-reset\/email\/confirm)$/.test(url)
+  const auth = /\/auth\/(professionals\/register|email-otp\/request|otp\/request|otp\/verify)$/.test(url)
     ? 45_000
     : /\/auth\/(login|professionals\/login|refresh)$/.test(url) ? 35_000 : undefined;
   const timeout = setTimeout(() => controller.abort(), auth ?? (init.method && init.method !== 'GET' ? 25_000 : 12_000));

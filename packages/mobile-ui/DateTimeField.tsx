@@ -116,7 +116,7 @@ export function DateTimeField({label, value, onChange, minimumDate, maximumDate,
 
 const styles = StyleSheet.create({
   wrap: {gap: 6},
-  label: {fontSize: 14, fontWeight: '600', color: '#33415C'},
+  label: {fontSize: 14, fontWeight: '600', color: '#111F35'},
   field: {minHeight: 52, paddingHorizontal: 12, justifyContent: 'center', borderWidth: 1, borderColor: '#D7DEE8', borderRadius: 12, backgroundColor: '#FFFFFF'},
   fieldText: {fontSize: 16, color: '#111F35'},
   placeholder: {color: '#8A94A6'},

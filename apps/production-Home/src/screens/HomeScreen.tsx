@@ -49,7 +49,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 const NAVY = ClientColors.deepNavy;
 const PRIMARY_NAVY = ClientColors.primaryNavy;
 const ACCENT = ClientColors.accent;
-const STAR_GOLD = '#E8AD43';
+const STAR_GOLD = '#C4A639';
 const PAPER = ClientColors.lightBackground;
 const TEXT = ClientColors.primaryText;
 const MUTED = ClientColors.secondaryText;
@@ -82,7 +82,6 @@ export function HomeScreen() {
   const city = useCity(state => state.city);
   const selectedState = useCity(state => state.state);
   const setCity = useCity(state => state.setCity);
-  const isGuest = useSessionStore(state => state.isGuest);
   const user = useSessionStore(state => state.user);
   const profile = useClientProfile();
   const updateProfile = useUpdateClientProfile();
@@ -104,7 +103,7 @@ export function HomeScreen() {
   const openDiscovery = () => navigation.navigate('EngineerDiscovery');
   const openSearch = () => navigation.navigate('Search');
   const selectCity = (nextCity: string, nextState?: string) => {
-    if (!user || isGuest) {
+    if (!user) {
       setCity(nextCity, nextState);
       setLocationOpen(false);
       return;
@@ -208,7 +207,7 @@ export function HomeScreen() {
               style={styles.planImage}
               imageStyle={styles.planImageRadius}>
               <LinearGradient
-                colors={['rgba(7,31,61,0.25)', 'rgba(7,31,61,0.88)']}
+                colors={['rgba(17, 31, 53,0.25)', 'rgba(17, 31, 53,0.88)']}
                 style={styles.planOverlay}>
                 <Text style={styles.planEyebrow}>{hero.eyebrow}</Text>
                 <Text style={styles.planTitle}>{hero.title}</Text>
@@ -240,6 +239,7 @@ export function HomeScreen() {
               navigation.navigate('Services', serviceId ? {serviceId} : undefined);
             }}
             onSelectEngineers={openDiscovery}
+            onSelectLoans={() => navigation.navigate('Loan')}
           />
           <BookAgainStrip
             items={bookAgainItems}
@@ -376,7 +376,7 @@ export function HomeScreen() {
               toast('Please choose a location with a city', 'error');
               return;
             }
-            if (!user || isGuest) {
+            if (!user) {
               setCity(item.city, item.state);
               setLocationOpen(false);
               return;
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     color: ClientColors.white,
     marginBottom: 3,
-    textShadowColor: 'rgba(7,31,61,0.9)',
+    textShadowColor: 'rgba(17, 31, 53,0.9)',
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3,
   },

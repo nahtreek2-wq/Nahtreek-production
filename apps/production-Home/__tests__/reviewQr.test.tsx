@@ -3,7 +3,7 @@ import renderer from 'react-test-renderer';
 import {Text} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
-import {parseReviewQr, ScanScreen} from '../src/screens/ScanScreen';
+import {parsePayQr, parseReviewQr, ScanScreen} from '../src/screens/ScanScreen';
 import {ProviderProfileScreen} from '../src/screens/ProviderProfileScreen';
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -40,6 +40,18 @@ describe('parseReviewQr', () => {
     expect(parseReviewQr('https://evil.example.com/p/abc12345')).toBe('abc12345');
     expect(parseReviewQr('https://nahtreek-website.vercel.app/about')).toBeNull();
     expect(parseReviewQr('not a url')).toBeNull();
+    expect(parseReviewQr('nahtreek://pay/9b2f4c1a-3d4e-4f5a-8b6c-7d8e9f0a1b2c')).toBeNull();
+  });
+});
+
+describe('parsePayQr', () => {
+  it('accepts booking payment links and rejects the rest', () => {
+    expect(parsePayQr('nahtreek://pay/9b2f4c1a-3d4e-4f5a-8b6c-7d8e9f0a1b2c'))
+      .toBe('9b2f4c1a-3d4e-4f5a-8b6c-7d8e9f0a1b2c');
+    expect(parsePayQr('  nahtreek://pay/abc12345/  ')).toBe('abc12345');
+    expect(parsePayQr('nahtreek://p/abc12345')).toBeNull();
+    expect(parsePayQr('https://nahtreek-website.vercel.app/p/abc12345')).toBeNull();
+    expect(parsePayQr('not a url')).toBeNull();
   });
 });
 

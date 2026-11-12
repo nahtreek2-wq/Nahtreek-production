@@ -34,6 +34,12 @@ class GeoapifyMapWebView(context: ThemedReactContext) : WebView(context) {
     }
   }
 
+  private fun assetText(name: String): String {
+    // Leaflet ships inside the app (no CDN): the map stays interactive on
+    // any network. Missing assets degrade to the static fallback below.
+    return try { context.assets.open(name).bufferedReader().use { it.readText() } } catch (e: Exception) { "" }
+  }
+
   fun showLocation() {
     val lat = latitude ?: return
     val lon = longitude ?: return
@@ -54,9 +60,9 @@ class GeoapifyMapWebView(context: ThemedReactContext) : WebView(context) {
       "<div id='message'>Map is not configured in this build.</div>"
     } else {
       """
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
+      <style>${assetText("leaflet.css")}</style>
       <div id="map"></div><div id="fallback"><img id="static-map" alt="Map of the selected address" /><div id="pin"></div></div><div id="message">Loading map…</div>
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+      <script>${assetText("leaflet.js")}</script>
       <script>
         function showFallback() {
           document.getElementById('map').style.display = 'none';
@@ -80,7 +86,7 @@ class GeoapifyMapWebView(context: ThemedReactContext) : WebView(context) {
           });
           tiles.on('tileload', function() { document.getElementById('message').hidden = true; });
           tiles.addTo(map);
-          L.marker([lat, lon]).addTo(map);
+          L.circleMarker([lat, lon], {radius: 9, color: '#111F35', weight: 4, fillColor: '#C4A639', fillOpacity: 1}).addTo(map);
         }
       </script>
       """.trimIndent()
@@ -89,10 +95,10 @@ class GeoapifyMapWebView(context: ThemedReactContext) : WebView(context) {
       <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       <style>html,body,#map,#fallback{width:100%;height:100%;margin:0}body{font-family:sans-serif;background:#f7f9fc}
       #fallback{display:none;position:relative}#static-map{width:100%;height:100%;object-fit:cover}
-      #pin{position:absolute;top:50%;left:50%;width:22px;height:22px;border-radius:50%;background:#E8AD43;
+      #pin{position:absolute;top:50%;left:50%;width:22px;height:22px;border-radius:50%;background:#C4A639;
       border:4px solid #111F35;box-shadow:0 2px 8px #0005;transform:translate(-50%,-50%)}
       #message{position:absolute;bottom:26px;left:12px;right:12px;padding:12px;border-radius:10px;
-      background:#fff;color:#102a43;text-align:center;box-shadow:0 2px 12px #0002;z-index:1000}
+      background:#fff;color:#111F35;text-align:center;box-shadow:0 2px 12px #0002;z-index:1000}
       #message[hidden]{display:none}</style></head><body>$body</body></html>
     """.trimIndent()
     loadDataWithBaseURL("https://nahtreek.local/", html, "text/html", "UTF-8", null)

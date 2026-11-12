@@ -44,7 +44,7 @@ jest.mock('../src/stores/city', () => ({
 }));
 jest.mock('../src/stores/session', () => ({
   useSessionStore: (selector: (state: object) => unknown) =>
-    selector({accessToken: 'token', user: {id: 'client-1'}, isGuest: false}),
+    selector({accessToken: 'token', user: {id: 'client-1'}}),
 }));
 jest.mock('../src/services/queries', () => ({
   useUpdateClientProfile: () => ({mutate: jest.fn()}),

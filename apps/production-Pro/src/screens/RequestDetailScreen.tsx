@@ -591,6 +591,7 @@ function RequestContent({
       <Section title="What the customer needs" icon="clipboard-text" tone="blue">
         <Text style={styles.body}>{request.description}</Text>
       </Section>
+      {!showTravel ? (
       <Section title="Where to go" icon="map-marker" tone="navy">
         <Pressable
           accessibilityRole="link"
@@ -613,30 +614,11 @@ function RequestContent({
           Tap above to view the map and get directions
         </Text>
       </Section>
+      ) : null}
       {actionError ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {actionError}
         </Text>
-      ) : null}
-      {['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) ? (
-        <Pressable
-          accessibilityRole="button"
-          disabled={messaging}
-          onPress={onMessage}
-          style={styles.messageButton}>
-          <MaterialCommunityIcons
-            name="message-text-outline"
-            size={23}
-            color={Colors.navyMid}
-          />
-          <Text style={styles.messageButtonText}>
-            {messaging
-              ? 'Opening chat…'
-              : serviceProvider
-              ? 'Ask the customer'
-              : 'Chat with customer'}
-          </Text>
-        </Pressable>
       ) : null}
       {kind === 'engineering' &&
       ['IN_PROGRESS', 'COMPLETED'].includes(request.status) ? (
@@ -727,6 +709,26 @@ function RequestContent({
             )}
           </View>
         ))}
+      {['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) ? (
+        <Pressable
+          accessibilityRole="button"
+          disabled={messaging}
+          onPress={onMessage}
+          style={styles.messageButton}>
+          <MaterialCommunityIcons
+            name="message-text-outline"
+            size={23}
+            color={Colors.navyMid}
+          />
+          <Text style={styles.messageButtonText}>
+            {messaging
+              ? 'Opening chat…'
+              : serviceProvider
+              ? 'Ask the customer'
+              : 'Chat with customer'}
+          </Text>
+        </Pressable>
+      ) : null}
       <Section title="Job updates" icon="timeline-text" tone="slate">
         <View style={styles.timeline}>
           {request.history.length ? (

@@ -21,11 +21,31 @@ const savePreferences = (value: Partial<{requestUpdates: boolean; messages: bool
 export function SettingsScreen() {
   const navigation = useNavigation<Nav>();
   const clearSession = useSessionStore(state => state.clearSession);
-  const [password, setPassword] = useState('');
+  const sessionUser = useSessionStore(state => state.user);
+  const [deleteCode, setDeleteCode] = useState('');
   const [confirmDelete, setConfirmDelete] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  const canDelete = password.length > 0 && confirmDelete.trim() === 'DELETE' && !deleting;
+  const canDelete = /^\d{6}$/.test(deleteCode) && confirmDelete.trim() === 'DELETE' && !deleting;
+  const sendDeleteCode = () => {
+    const identifier = sessionUser?.email?.includes('@')
+      ? {email: sessionUser.email}
+      : sessionUser?.phoneNumber
+      ? {phoneNumber: sessionUser.phoneNumber}
+      : null;
+    if (!identifier) {
+      setDeleteError('Your contact details are missing. Please sign in again.');
+      return;
+    }
+    setSendingCode(true);
+    setDeleteError('');
+    api.post('email' in identifier ? '/auth/email-otp/request' : '/auth/otp/request', identifier)
+      .then(() => setCodeSent(true))
+      .catch(error => setDeleteError(error instanceof Error ? error.message : 'Could not send the code.'))
+      .finally(() => setSendingCode(false));
+  };
   const deleteAccount = () => {
     if (!canDelete) return;
     Alert.alert('Delete account?', 'This signs you out on all devices and closes your NAHTREEK account. Bookings and payment history are kept for records.', [
@@ -33,7 +53,7 @@ export function SettingsScreen() {
       {text: 'Delete', style: 'destructive', onPress: () => {
         setDeleting(true);
         setDeleteError('');
-        api.delete<{deleted: boolean}>('/auth/me', {password})
+        api.delete<{deleted: boolean}>('/auth/me', {code: deleteCode})
           .then(() => clearSession())
           .catch(error => {
             setDeleting(false);
@@ -64,8 +84,7 @@ export function SettingsScreen() {
             <Text style={styles.infoTitle}>Your session is protected</Text>
             <Text style={styles.infoText}>
               On Android, access and refresh tokens are encrypted with the
-              device Keystore. Personal profile data is not shared in guest
-              mode.
+              device Keystore. Personal profile data stays on your account.
             </Text>
           </View>
         </Card>
@@ -73,17 +92,29 @@ export function SettingsScreen() {
         <Text style={styles.sectionTitle}>Delete account</Text>
         <Card style={styles.deleteCard}>
           <Text style={styles.deleteText}>
-            Closing your account signs you out everywhere. Enter your password and type DELETE to confirm.
+            Closing your account signs you out everywhere. Verify with a code and type DELETE to confirm.
           </Text>
-          <TextInput
-            accessibilityLabel="Account password"
-            style={styles.deleteInput}
-            value={password}
-            onChangeText={value => {setPassword(value); setDeleteError('');}}
-            placeholder="Password"
-            placeholderTextColor={Colors.slate400}
-            secureTextEntry
-          />
+          {!codeSent ? (
+            <Button
+              label={sendingCode ? 'Sending…' : 'Send verification code'}
+              variant="secondary"
+              onPress={sendDeleteCode}
+              disabled={sendingCode}
+            />
+          ) : (
+            <TextInput
+              accessibilityLabel="Deletion verification code"
+              style={styles.deleteInput}
+              value={deleteCode}
+              onChangeText={value => {setDeleteCode(value.replace(/\D/g, '').slice(0, 6)); setDeleteError('');}}
+              placeholder="6-digit code"
+              placeholderTextColor={Colors.slate400}
+              keyboardType="numeric"
+              maxLength={6}
+              autoComplete="sms-otp"
+              textContentType="oneTimeCode"
+            />
+          )}
           <TextInput
             accessibilityLabel="Type DELETE to confirm"
             style={styles.deleteInput}

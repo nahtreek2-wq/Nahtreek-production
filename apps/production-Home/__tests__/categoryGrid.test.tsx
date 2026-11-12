@@ -3,14 +3,22 @@ import renderer from 'react-test-renderer';
 import {Pressable} from 'react-native';
 import {CATEGORY_SERVICE_IDS, CategoryGrid} from '../src/components/home/CategoryGrid';
 
-function renderGrid(onSelectService = jest.fn(), onSelectEngineers = jest.fn()) {
+function renderGrid(
+  onSelectService = jest.fn(),
+  onSelectEngineers = jest.fn(),
+  onSelectLoans = jest.fn(),
+) {
   let screen!: renderer.ReactTestRenderer;
   renderer.act(() => {
     screen = renderer.create(
-      <CategoryGrid onSelectService={onSelectService} onSelectEngineers={onSelectEngineers} />,
+      <CategoryGrid
+        onSelectService={onSelectService}
+        onSelectEngineers={onSelectEngineers}
+        onSelectLoans={onSelectLoans}
+      />,
     );
   });
-  return {screen, onSelectService, onSelectEngineers};
+  return {screen, onSelectService, onSelectEngineers, onSelectLoans};
 }
 
 afterEach(() => jest.restoreAllMocks());
@@ -39,6 +47,20 @@ it('Routes the engineers tile to discovery instead of services', () => {
       .find(tile => tile.props.accessibilityLabel === 'Engineers')!;
     renderer.act(() => engineers.props.onPress());
     expect(onSelectEngineers).toHaveBeenCalledTimes(1);
+    expect(onSelectService).not.toHaveBeenCalled();
+  } finally {
+    renderer.act(() => screen.unmount());
+  }
+});
+
+it('Routes the loans tile to the loan desk instead of services', () => {
+  const {screen, onSelectService, onSelectLoans} = renderGrid();
+  try {
+    const loans = screen.root
+      .findAllByType(Pressable)
+      .find(tile => tile.props.accessibilityLabel === 'Home Loans')!;
+    renderer.act(() => loans.props.onPress());
+    expect(onSelectLoans).toHaveBeenCalledTimes(1);
     expect(onSelectService).not.toHaveBeenCalled();
   } finally {
     renderer.act(() => screen.unmount());

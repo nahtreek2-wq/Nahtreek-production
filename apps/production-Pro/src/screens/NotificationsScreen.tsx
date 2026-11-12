@@ -78,10 +78,14 @@ export function NotificationsScreen() {
   const markRead = useMutation({
     mutationFn: (id: string) => api.patch(`/notifications/${id}/read`),
     onSuccess: refresh,
+    // Read-receipts stay silent by design (no toast spam); retry instead so
+    // a single network blip does not leave badges stuck unread.
+    retry: 2,
   });
   const markAll = useMutation({
     mutationFn: () => api.patch('/notifications/mark-all-read'),
     onSuccess: refresh,
+    retry: 2,
   });
   const open = (item: NotificationItem) => {
     if (!item.isRead) {

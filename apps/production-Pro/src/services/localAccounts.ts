@@ -7,25 +7,20 @@ type StoredAccount = {
   phoneNumber: string;
   email: string;
   professionalType: ProfessionalType;
-  salt: string;
-  hash: string;
   createdAt: string;
 };
 type Accounts = Record<string, StoredAccount>;
 type Bridge = {
   getLocalAccounts(): Promise<string | null>;
   setLocalAccounts(payload: string): Promise<void>;
-  hashLocalPassword(password: string): Promise<{salt: string; hash: string}>;
-  verifyLocalPassword(password: string, salt: string, hash: string): Promise<boolean>;
-  confirmLocalPasswordReset(): Promise<boolean>;
 };
 
 function bridge(): Bridge {
   const native = NativeModules.NahtreekRuntimeConfig as Bridge | undefined;
-  // Device-local password accounts exist only for unconfigured internal
-  // builds. Configured builds must always use server authentication (the
-  // native side enforces the same rule).
-  if (isApiConfigured || runtimeConfig.environment !== 'staging' || !native?.getLocalAccounts || !native.hashLocalPassword) {
+  // Device-local test profiles carry no credentials and exist only for
+  // unconfigured internal builds. Configured builds must always use server
+  // OTP authentication (the native side enforces the same rule).
+  if (isApiConfigured || runtimeConfig.environment !== 'staging' || !native?.getLocalAccounts) {
     throw new Error('Secure device accounts are unavailable in this build.');
   }
   return native;
@@ -35,6 +30,16 @@ function phone(raw: string) {
   const digits = raw.replace(/\D/g, '');
   if (!/^([6-9]\d{9}|91[6-9]\d{9})$/.test(digits)) {throw new Error('Enter a valid 10-digit Indian mobile number.');}
   return `+91${digits.slice(-10)}`;
+}
+
+// Single email rule for the whole app: local@domain.tld shape, no spaces,
+// no consecutive dots, alpha TLD of 2+ chars, max 254 chars — matching the
+// server validator. Wrong-pattern addresses are rejected at the field
+// before any request leaves the device.
+export function isValidEmail(raw: string): boolean {
+  const value = raw.trim();
+  if (value.length === 0 || value.length > 254 || value.includes('..')) return false;
+  return /^[^\s@]+@([^\s@.]+\.)+[A-Za-z]{2,}$/.test(value);
 }
 
 async function load(): Promise<Accounts> {
@@ -67,44 +72,29 @@ function serial<T>(operation: () => Promise<T>): Promise<T> {
   return result;
 }
 
-export function registerLocalProfessional(input: {phoneNumber: string; email: string; password: string; professionalType: ProfessionalType}) {
+export function registerLocalProfessional(input: {phoneNumber: string; email: string; professionalType: ProfessionalType}) {
   return serial(async () => {
     const phoneNumber = phone(input.phoneNumber);
     const email = input.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {throw new Error('Enter a valid email address.');}
-    if (input.password.length < 8 || input.password.length > 72) {throw new Error('Use a password with 8 to 72 characters.');}
+    if (!isValidEmail(email)) {throw new Error('Enter a valid email address.');}
     const accounts = await load();
     if (accounts[phoneNumber] || Object.values(accounts).some(account => account.email === email)) {throw new Error('An account with this mobile number or email already exists. Please log in.');}
-    const credentials = await bridge().hashLocalPassword(input.password);
-    const account: StoredAccount = {phoneNumber, email, professionalType: input.professionalType, ...credentials, createdAt: new Date().toISOString()};
+    const account: StoredAccount = {phoneNumber, email, professionalType: input.professionalType, createdAt: new Date().toISOString()};
     accounts[phoneNumber] = account;
     await bridge().setLocalAccounts(JSON.stringify(accounts));
     return session(account);
   });
 }
 
-export function loginLocalProfessional(identifier: string, password: string) {
+export function loginLocalProfessional(identifier: string) {
   return serial(async () => {
     const accounts = await load();
     const normalized = identifier.includes('@') ? identifier.trim().toLowerCase() : phone(identifier);
     const account = identifier.includes('@') ? Object.values(accounts).find(item => item.email === normalized) : accounts[normalized];
-    if (!account || !(await bridge().verifyLocalPassword(password, account.salt, account.hash))) {throw new Error('Mobile/email or password is incorrect.');}
+    if (!account) {throw new Error('No device account was found. Please create one first.');}
     const result = session(account);
     const profile = await readLocalProfessionalProfile(result.user.id);
     return { ...result, user: {...result.user, fullName: profile?.fullName ?? '', city: profile?.baseCity, state: profile?.baseState, avatarUrl: profile?.avatarUrl, verificationStatus: profile?.verificationStatus ?? 'NOT_SUBMITTED', needsProfessionalProfile: !profile?.fullName} };
-  });
-}
-
-export function resetLocalProfessionalPassword(phoneNumber: string, password: string) {
-  return serial(async () => {
-    const accounts = await load();
-    const normalized = phone(phoneNumber);
-    const account = accounts[normalized];
-    if (!account) {throw new Error('No device account was found for this mobile number.');}
-    if (password.length < 8 || password.length > 72) {throw new Error('Use a password with 8 to 72 characters.');}
-    if (!(await bridge().confirmLocalPasswordReset())) {throw new Error('Device confirmation is required.');}
-    accounts[normalized] = {...account, ...(await bridge().hashLocalPassword(password))};
-    await bridge().setLocalAccounts(JSON.stringify(accounts));
   });
 }
 

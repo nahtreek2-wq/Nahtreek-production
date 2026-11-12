@@ -31,6 +31,12 @@ export function parseReviewQr(value: string): string | null {
   return null;
 }
 
+export function parsePayQr(value: string): string | null {
+  const text = value.trim();
+  const scheme = text.match(/^nahtreek:\/\/pay\/([0-9a-fA-F-]{8,36})\/?$/);
+  return scheme ? scheme[1] : null;
+}
+
 export function ScanScreen() {
   const navigation = useNavigation<Nav>();
   const toast = useToast();
@@ -38,6 +44,9 @@ export function ScanScreen() {
   const [permission, setPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   const open = useCallback((professionalProfileId: string) => {
     navigation.navigate('ProviderProfile', {professionalProfileId});
+  }, [navigation]);
+  const openPayment = useCallback((requestId: string) => {
+    navigation.navigate('RequestDetail', {requestId});
   }, [navigation]);
 
   useEffect(() => {
@@ -64,7 +73,7 @@ export function ScanScreen() {
   return <KeyboardAwareView style={styles.root}>
     <AppHeader title="Scan pro QR" onBack={() => navigation.goBack()} />
     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-      {VisionCamera ? <LiveScanner permission={permission} onDetect={open} /> : (
+      {VisionCamera ? <LiveScanner permission={permission} onDetect={open} onPayDetect={openPayment} /> : (
         <Card>
           <Text style={styles.title}>Point your phone camera at the QR</Text>
           <Text style={styles.text}>Use your normal camera app — the link opens this professional&apos;s ratings page directly. No separate scanner needed.</Text>
@@ -83,12 +92,18 @@ export function ScanScreen() {
   </KeyboardAwareView>;
 }
 
-function LiveScanner({permission, onDetect}: {permission: string; onDetect: (id: string) => void}) {
+function LiveScanner({permission, onDetect, onPayDetect}: {permission: string; onDetect: (id: string) => void; onPayDetect: (requestId: string) => void}) {
   const device = VisionCamera!.useCameraDevice('back');
   const handled = React.useRef(new Set<string>());
   const scanner = VisionCamera!.useCodeScanner({codeTypes: ['qr'], onCodeScanned: (codes: {value?: string}[]) => {
     for (const item of codes) {
       if (!item.value || handled.current.has(item.value)) continue;
+      const payId = parsePayQr(item.value);
+      if (payId) {
+        handled.current.add(item.value);
+        onPayDetect(payId);
+        return;
+      }
       const id = parseReviewQr(item.value);
       if (!id) continue;
       handled.current.add(item.value);

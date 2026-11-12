@@ -108,11 +108,30 @@ export function ProfileScreen() {
   const clear = useSessionStore(state => state.clear);
   const refreshToken = useSessionStore(state => state.refreshToken);
   const [signingOut, setSigningOut] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteCode, setDeleteCode] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  const canDelete = deletePassword.length > 0 && deleteConfirm.trim() === 'DELETE' && !deleting;
+  const canDelete = /^\d{6}$/.test(deleteCode) && deleteConfirm.trim() === 'DELETE' && !deleting;
+  const sendDeleteCode = () => {
+    const identifier = user?.email?.includes('@')
+      ? {email: user.email}
+      : user?.phoneNumber
+      ? {phoneNumber: user.phoneNumber}
+      : null;
+    if (!identifier) {
+      setDeleteError('Your contact details are missing. Please sign in again.');
+      return;
+    }
+    setSendingCode(true);
+    setDeleteError('');
+    api.post('email' in identifier ? '/auth/email-otp/request' : '/auth/otp/request', identifier)
+      .then(() => setCodeSent(true))
+      .catch(error => setDeleteError(error instanceof Error ? error.message : 'Could not send the code.'))
+      .finally(() => setSendingCode(false));
+  };
   const deleteAccount = () => {
     if (!canDelete) return;
     Alert.alert('Delete account?', 'This signs you out on all devices and closes your NAHTREEK account. Settle any commission dues first — deletion is blocked while money is owed.', [
@@ -120,7 +139,7 @@ export function ProfileScreen() {
       {text: 'Delete', style: 'destructive', onPress: () => {
         setDeleting(true);
         setDeleteError('');
-        api.delete<{deleted: boolean}>('/auth/me', {password: deletePassword})
+        api.delete<{deleted: boolean}>('/auth/me', {code: deleteCode})
           .then(() => clear())
           .catch(error => {
             setDeleting(false);
@@ -512,7 +531,7 @@ export function ProfileScreen() {
               icon="crown-outline"
               tone="amber"
               title="Pro membership"
-              description="7% commission, top discovery, member badge"
+              description="Lower commission, top discovery, member badge"
               onPress={() => navigation.navigate('Membership')}
             />
             <ProfileActionRow
@@ -558,17 +577,31 @@ export function ProfileScreen() {
         <Text style={styles.groupLabel}>DANGER ZONE</Text>
         <View style={styles.deleteCard}>
           <Text style={styles.deleteText}>
-            Closing your account signs you out everywhere. Enter your password and type DELETE to confirm.
+            Closing your account signs you out everywhere. Verify with a code and type DELETE to confirm.
           </Text>
-          <TextInput
-            accessibilityLabel="Account password"
-            style={styles.deleteInput}
-            value={deletePassword}
-            onChangeText={value => {setDeletePassword(value); setDeleteError('');}}
-            placeholder="Password"
-            placeholderTextColor={ProColors.muted}
-            secureTextEntry
-          />
+          {!codeSent ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send deletion code"
+              disabled={sendingCode}
+              onPress={sendDeleteCode}
+              style={({pressed}) => [styles.sendCodeButton, pressed && {opacity: 0.7}]}>
+              <Text style={styles.sendCodeText}>{sendingCode ? 'Sending…' : 'Send verification code'}</Text>
+            </Pressable>
+          ) : (
+            <TextInput
+              accessibilityLabel="Deletion verification code"
+              style={styles.deleteInput}
+              value={deleteCode}
+              onChangeText={value => {setDeleteCode(value.replace(/\D/g, '').slice(0, 6)); setDeleteError('');}}
+              placeholder="6-digit code"
+              placeholderTextColor={ProColors.muted}
+              keyboardType="numeric"
+              maxLength={6}
+              autoComplete="sms-otp"
+              textContentType="oneTimeCode"
+            />
+          )}
           <TextInput
             accessibilityLabel="Type DELETE to confirm"
             style={styles.deleteInput}
@@ -618,7 +651,7 @@ const styles = StyleSheet.create({
   avatarInitial: {fontSize: 28, lineHeight: 34, fontWeight: '700', color: Colors.white},
   avatarImage: {width: '100%', height: '100%', borderRadius: 36},
   camera: {position: 'absolute', right: -2, bottom: -2, width: 25, height: 25, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: ProColors.accent, borderWidth: 2, borderColor: ProColors.surface},
-  photoBusy: {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(7,31,61,0.65)'},
+  photoBusy: {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(17, 31, 53,0.65)'},
   name: {...ProType.section, color: ProColors.text},
   identityMeta: {flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0},
   meta: {...ProType.meta, color: ProColors.secondary, flexShrink: 1},
@@ -662,6 +695,9 @@ const styles = StyleSheet.create({
   deleteButton: {backgroundColor: ProColors.errorSoft, borderRadius: 12, minHeight: 50,
     alignItems: 'center', justifyContent: 'center'},
   deleteButtonText: {...ProType.action, color: ProColors.error},
+  sendCodeButton: {backgroundColor: ProColors.accentSoft, borderRadius: 12, minHeight: 50,
+    alignItems: 'center', justifyContent: 'center'},
+  sendCodeText: {...ProType.action, color: ProColors.primary},
   signOut: {minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, borderWidth: 1, borderColor: '#F0D2D0', backgroundColor: ProColors.surface},
   signOutText: {...ProType.action, color: ProColors.error},
 });

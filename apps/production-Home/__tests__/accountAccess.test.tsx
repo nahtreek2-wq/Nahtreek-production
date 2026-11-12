@@ -28,8 +28,7 @@ afterEach(async () => {
   await renderer.act(async () => screen.unmount());
   jest.restoreAllMocks();
 });
-it('creates credentials first and opens profile setup after registration', async () => {
-  useSessionStore.getState().enterGuestMode();
+it('creates a credential-free account and opens profile setup after registration', async () => {
   jest.spyOn(credentials, 'registerLocalAccount').mockResolvedValue({
     accessToken: 'offline.qa',
     refreshToken: 'offline.qa',
@@ -48,15 +47,7 @@ it('creates credentials first and opens profile setup after registration', async
   await renderer.act(async () => {
     input('Mobile number', '9000012345');
     input('Email address', 'qa@example.com');
-    input('Password', 'Correct test password');
-    input('Confirm password', 'Correct test password');
   });
-  expect(
-    screen.root
-      .findAllByType(Input)
-      .filter(node => /password/i.test(node.props.label))
-      .every(node => node.props.secureTextEntry),
-  ).toBe(true);
   const checkbox = screen.root.find(
     node => node.props.accessibilityRole === 'checkbox' && node.props.onPress,
   );
@@ -79,22 +70,16 @@ function press(label: string) {
     .find(node => node.props.label === label)!
     .props.onPress();
 }
-it('starts with only mobile, email, and password credentials', () => {
+it('starts with only mobile and email contact fields and no password', () => {
   expect(
     screen.root.findAllByType(Input).map(node => node.props.label),
-  ).toEqual([
-    'Mobile number',
-    'Email address',
-    'Password',
-    'Confirm password',
-  ]);
+  ).toEqual(['Mobile number', 'Email address']);
+  expect(JSON.stringify(screen.toJSON())).not.toMatch(/password/i);
 });
-it('rejects mismatched passwords before creating the account', async () => {
+it('requires a valid mobile number before creating the account', async () => {
   await renderer.act(async () => {
-    input('Mobile number', '9000012345');
+    input('Mobile number', '123');
     input('Email address', 'qa@example.com');
-    input('Password', 'Correct test password');
-    input('Confirm password', 'Different test password');
   });
   const checkbox = screen.root.find(
     node => node.props.accessibilityRole === 'checkbox' && node.props.onPress,
@@ -102,6 +87,6 @@ it('rejects mismatched passwords before creating the account', async () => {
   await renderer.act(async () => checkbox.props.onPress());
   await renderer.act(async () => press('Create account'));
   expect(JSON.stringify(screen.toJSON())).toContain(
-    'The passwords do not match',
+    'Enter a valid 10-digit mobile number',
   );
 });

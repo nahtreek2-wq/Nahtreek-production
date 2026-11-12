@@ -112,7 +112,6 @@ export function EngineerDiscoveryScreen() {
   const selectedState = useCity(state => state.state);
   const setCity = useCity(state => state.setCity);
   const user = useSessionStore(state => state.user);
-  const isGuest = useSessionStore(state => state.isGuest);
   const updateProfile = useUpdateClientProfile();
   const cityName = city.split(',')[0]?.trim() || 'your area';
   const mode = useListFilters(state => state.discoveryMode);
@@ -512,7 +511,7 @@ export function EngineerDiscoveryScreen() {
         district={city}
         onClose={() => setCityPickerOpen(false)}
         onSelect={(nextState, nextDistrict) => {
-          if (!user || isGuest) {
+          if (!user) {
             setCity(nextDistrict, nextState);
             setCityPickerOpen(false);
             return;

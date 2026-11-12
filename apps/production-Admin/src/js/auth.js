@@ -30,21 +30,126 @@ export class AuthController {
       sessionStorage.setItem(TOKEN_KEY, accessToken);
       sessionStorage.setItem(REFRESH_KEY, refreshToken);
     };
+    this.codeStep = false;
+    this.identifier = "";
+    this.byEmail = true;
+    this.resendAt = 0;
   }
 
-  async login(event) {
-    event.preventDefault();
-    const button = byId("login-button");
+  // OTP-only sign-in. Preview verifies the admin email address; production
+  // verifies the admin mobile number. No passwords exist anywhere.
+  bindLogin() {
+    this.byEmail =
+      (window.NAHTREEK_ADMIN_CONFIG || {}).environment !== "production";
+    byId("login-identifier-label").textContent = this.byEmail
+      ? "Email address"
+      : "Mobile number";
+    byId("login-identifier").setAttribute(
+      "inputmode",
+      this.byEmail ? "email" : "tel"
+    );
+    byId("login-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (this.codeStep) void this.verifyCode();
+      else void this.sendCode();
+    });
+    byId("login-resend").addEventListener("click", () => void this.sendCode());
+    byId("login-back").addEventListener("click", () => this.showIdentifierStep());
+    byId("login-code").addEventListener("input", (event) => {
+      const clean = event.target.value.replace(/\D/g, "").slice(0, 6);
+      if (clean !== event.target.value) event.target.value = clean;
+    });
+  }
+
+  showIdentifierStep() {
+    this.codeStep = false;
+    this.identifier = "";
+    byId("login-code").value = "";
     byId("login-error").textContent = "";
-    setBusy(button, true, "Signing in…");
+    byId("login-code-error").textContent = "";
+    byId("login-code-step").classList.add("hidden");
+    byId("login-identifier-step").classList.remove("hidden");
+    byId("login-identifier").focus();
+  }
+
+  showCodeStep() {
+    this.codeStep = true;
+    byId("login-error").textContent = "";
+    byId("login-code-error").textContent = "";
+    byId("login-code-hint").textContent = `Enter the 6-digit code sent to ${
+      this.byEmail ? this.identifier : `mobile ending ${this.identifier.slice(-4)}`
+    }.`;
+    byId("login-identifier-step").classList.add("hidden");
+    byId("login-code-step").classList.remove("hidden");
+    byId("login-code").focus();
+  }
+
+  readIdentifier() {
+    const raw = byId("login-identifier").value.trim();
+    if (this.byEmail) {
+      if (
+        raw.length > 254 ||
+        raw.includes("..") ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)
+      )
+        throw new Error("Enter a valid email address.");
+      return raw.toLowerCase();
+    }
+    if (raw.replace(/\D/g, "").length < 10)
+      throw new Error("Enter a valid mobile number.");
+    return raw;
+  }
+
+  async sendCode() {
+    const button = byId("login-send-code");
+    if (Date.now() < this.resendAt) {
+      byId(this.codeStep ? "login-code-error" : "login-error").textContent =
+        "Please wait 30 seconds before sending another code.";
+      return;
+    }
+    setBusy(button, true, "Sending…");
+    try {
+      if (!this.codeStep) this.identifier = this.readIdentifier();
+      await this.api.request(
+        this.byEmail ? "/auth/email-otp/request" : "/auth/otp/request",
+        {
+          method: "POST",
+          body: JSON.stringify(
+            this.byEmail
+              ? { email: this.identifier }
+              : { phoneNumber: this.identifier }
+          ),
+        }
+      );
+      this.resendAt = Date.now() + 30_000;
+      this.failedAttempts = 0;
+      this.showCodeStep();
+    } catch (error) {
+      byId(this.codeStep ? "login-code-error" : "login-error").textContent =
+        error.message;
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async verifyCode() {
+    const button = byId("login-verify");
+    const code = byId("login-code").value.trim();
+    byId("login-code-error").textContent = "";
+    if (!/^\d{6}$/.test(code)) {
+      byId("login-code-error").textContent = "Enter the 6-digit verification code.";
+      return;
+    }
+    setBusy(button, true, "Verifying…");
     let failed = false;
     try {
-      const result = await this.api.request("/auth/login", {
+      const result = await this.api.request("/auth/otp/verify", {
         method: "POST",
-        body: JSON.stringify({
-          email: byId("email").value.trim(),
-          password: byId("password").value,
-        }),
+        body: JSON.stringify(
+          this.byEmail
+            ? { email: this.identifier, code }
+            : { phoneNumber: this.identifier, code }
+        ),
       });
       this.requireAdministrator(result.user);
       this.api.setTokens(result.accessToken, result.refreshToken);
@@ -55,22 +160,22 @@ export class AuthController {
     } catch (error) {
       failed = true;
       this.failedAttempts += 1;
-      byId("password").value = "";
-      byId("login-error").textContent = error.message;
+      byId("login-code").value = "";
+      byId("login-code-error").textContent = error.message;
     } finally {
       setBusy(button, false);
     }
     if (!failed) return;
     // Gentle client-side throttle on top of the server guard: slow down
-    // rapid credential replay without locking out a mistyped password.
+    // rapid code guessing without locking out a mistyped code.
     // Runs after setBusy restores the label so the countdown text survives.
     const cooldown = loginCooldownMs(this.failedAttempts);
     button.disabled = true;
     button.textContent = `Try again in ${Math.ceil(cooldown / 1000)}s`;
     window.setTimeout(() => {
       button.disabled = false;
-      button.textContent = button.dataset.label || "Sign in securely";
-      byId("password").focus();
+      button.textContent = button.dataset.label || "Verify and sign in";
+      byId("login-code").focus();
     }, cooldown);
   }
 

@@ -4,7 +4,6 @@ import {
   Role,
   VerificationStatus,
 } from "@prisma/client";
-import * as bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
@@ -17,23 +16,19 @@ function required(name: string): string {
 async function upsertUser(input: {
   email: string;
   phoneNumber: string;
-  password: string;
   role: Role;
 }) {
-  const passwordHash = await bcrypt.hash(input.password, 12);
   const user = await prisma.user.upsert({
     where: { email: input.email },
     create: {
       email: input.email,
       phoneNumber: input.phoneNumber,
-      passwordHash,
       status: AccountStatus.ACTIVE,
       isPhoneVerified: true,
       isEmailVerified: true,
     },
     update: {
       phoneNumber: input.phoneNumber,
-      passwordHash,
       status: AccountStatus.ACTIVE,
       isPhoneVerified: true,
       isEmailVerified: true,
@@ -46,11 +41,10 @@ async function upsertUser(input: {
   return user;
 }
 
-async function seedClient(password: string) {
+async function seedClient() {
   const user = await upsertUser({
     email: "client.demo@nahtreek.example",
     phoneNumber: "+919999990101",
-    password,
     role: Role.CLIENT,
   });
   const profile = await prisma.clientProfile.upsert({
@@ -80,11 +74,10 @@ async function seedClient(password: string) {
   return { user, profile };
 }
 
-async function seedEngineer(password: string) {
+async function seedEngineer() {
   const user = await upsertUser({
     email: "engineer.demo@nahtreek.example",
     phoneNumber: "+919999990102",
-    password,
     role: Role.ENGINEER,
   });
   const profile = await prisma.professionalProfile.upsert({
@@ -176,11 +169,10 @@ async function seedEngineer(password: string) {
   return { user, profile, engineer };
 }
 
-async function seedProvider(password: string) {
+async function seedProvider() {
   const user = await upsertUser({
     email: "provider.demo@nahtreek.example",
     phoneNumber: "+919999990103",
-    password,
     role: Role.SERVICE_PROVIDER,
   });
   const profile = await prisma.professionalProfile.upsert({
@@ -245,9 +237,9 @@ async function main() {
       "Demo accounts are forbidden in the production environment"
     );
   }
-  const client = await seedClient(required("DEMO_CLIENT_PASSWORD"));
-  const engineer = await seedEngineer(required("DEMO_ENGINEER_PASSWORD"));
-  const provider = await seedProvider(required("DEMO_PROVIDER_PASSWORD"));
+  const client = await seedClient();
+  const engineer = await seedEngineer();
+  const provider = await seedProvider();
   await prisma.auditLog.createMany({
     data: [client.user.id, engineer.user.id, provider.user.id].map(
       (userId) => ({

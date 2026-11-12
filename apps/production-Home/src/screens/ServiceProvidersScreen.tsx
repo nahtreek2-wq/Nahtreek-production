@@ -37,7 +37,6 @@ export function ServiceProvidersScreen() {
   const setCity = useCity(state => state.setCity);
   const token = useSessionStore(state => state.accessToken);
   const user = useSessionStore(state => state.user);
-  const isGuest = useSessionStore(state => state.isGuest);
   const updateProfile = useUpdateClientProfile();
   const toast = useToast();
   const providers = useServiceProviders(city, route.params.serviceId, selectedState);
@@ -58,7 +57,7 @@ export function ServiceProvidersScreen() {
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const bookingServiceAvailable = isApiConfigured && !providers.isError;
   const chooseCity = (nextCity: string, nextState: string) => {
-    if (!user || isGuest) {
+    if (!user) {
       setCity(nextCity, nextState);
       setCityPickerOpen(false);
       return;

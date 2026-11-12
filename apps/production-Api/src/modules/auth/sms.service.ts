@@ -6,6 +6,11 @@ type SmsProvider = "fast2sms" | "msg91";
 export class SmsService {
   private readonly logger = new Logger("SmsService");
 
+  // Autofill contract: both apps mark their code fields with Android
+  // sms-otp / iOS oneTimeCode, so an arriving SMS fills the code with no
+  // typing. Keep the provider templates OTP-first ("<#> 123456 …") and, for
+  // silent Android autofill via the SMS Retriever API, append each app's
+  // 11-character hash to its template when the production sender is set up.
   async sendOtp(phoneNumber: string, code: string): Promise<boolean> {
     const provider = this.provider();
     try {

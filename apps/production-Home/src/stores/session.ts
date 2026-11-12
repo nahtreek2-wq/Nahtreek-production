@@ -1,5 +1,4 @@
 import {create} from 'zustand';
-import {clearPersistedNavigationState} from '../navigation/navigationPersistence';
 import {secureSession} from '../services/secureSession';
 import {isApiConfigured} from '../services/config';
 import {useCity} from './city';
@@ -22,7 +21,6 @@ interface SessionState {
   storageError: string | null;
   accessToken: string | null;
   refreshToken: string | null;
-  isGuest: boolean;
   needsProfileSetup: boolean;
   isHydrated: boolean;
   user: SessionUser | null;
@@ -32,7 +30,6 @@ interface SessionState {
     user: SessionUser;
   }, options?: {needsProfileSetup?: boolean}) => void;
   completeProfileSetup: () => void;
-  enterGuestMode: () => void;
   hydrateSession: () => Promise<void>;
   updateUser: (patch: Partial<SessionUser>) => void;
   clearSession: () => void;
@@ -70,21 +67,16 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   storageError: null,
   accessToken: null,
   refreshToken: null,
-  isGuest: false,
   needsProfileSetup: false,
   isHydrated: false,
   user: null,
   setSession: ({accessToken, refreshToken, user}, options) => {
     const epoch = get().sessionEpoch + 1;
     useCity.getState().setCity(user.homeCity ?? '', user.state);
-    set({accessToken, refreshToken, isGuest: false, user, needsProfileSetup: options?.needsProfileSetup ?? false, sessionEpoch: epoch, storageError: null});
+    set({accessToken, refreshToken, user, needsProfileSetup: options?.needsProfileSetup ?? false, sessionEpoch: epoch, storageError: null});
     void secureSession.write(JSON.stringify({accessToken, refreshToken, user})).catch(() => {
       if (get().sessionEpoch === epoch) set({storageError: 'Your sign-in could not be saved. You may need to sign in again after closing the app.'});
     });
-  },
-  enterGuestMode: () => {
-    useCity.getState().setCity('');
-    set(state => ({accessToken: null, refreshToken: null, isGuest: true, needsProfileSetup: false, user: null, sessionEpoch: state.sessionEpoch + 1}));
   },
   hydrateSession: async () => {
     const epoch = get().sessionEpoch;
@@ -98,7 +90,6 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         set({
           accessToken: parsed.accessToken,
           refreshToken: parsed.refreshToken,
-          isGuest: false,
           user: parsed.user,
         });
       } else {
@@ -124,9 +115,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   clearSession: () => {
     const epoch = get().sessionEpoch + 1;
     useCity.getState().setCity('');
-    set({accessToken: null, refreshToken: null, isGuest: false, needsProfileSetup: false, user: null, sessionEpoch: epoch, storageError: null});
-    // A signed-out user must never resume into the previous account's screens.
-    void clearPersistedNavigationState();
+    set({accessToken: null, refreshToken: null, needsProfileSetup: false, user: null, sessionEpoch: epoch, storageError: null});
     void secureSession.clear().catch(() => {
       if (get().sessionEpoch === epoch) set({storageError: 'Saved sign-in could not be removed. Unlock your device and try signing out again.'});
     });

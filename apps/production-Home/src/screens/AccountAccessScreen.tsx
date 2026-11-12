@@ -20,16 +20,16 @@ import {ClientColors} from '../design-system/tokens';
 import {useFormKeyboardScroll} from '../hooks/useFormKeyboardScroll';
 import {useSessionStore} from '../stores/session';
 import {
+  isValidEmail,
   loginLocalAccount,
   normalizeMobile,
   registerLocalAccount,
-  resetLocalPassword,
   validateRegistration,
   type ClientRegistration,
 } from '../services/localCredentials';
 import {Colors} from '@nahtreek/design-system';
 
-type Mode = 'login' | 'create' | 'reset';
+type Mode = 'login' | 'create';
 function Input(props: React.ComponentProps<typeof FormInput>) {
   return <FormInput {...props} style={[s.field, props.style]} />;
 }
@@ -42,14 +42,13 @@ const initial: ClientRegistration = {
   postalCode: '',
   phoneNumber: '',
   email: '',
-  password: '',
   acceptedTerms: false,
 };
 type Tokens = Parameters<
   ReturnType<typeof useSessionStore.getState>['setSession']
 >[0];
 const DATA_NOTICE =
-  'We collect your mobile number, email and password to secure your account. After account creation, we ask for your name and city so we can tailor local help. Your password is hashed, not stored as plain text. Exact work locations are requested only when you book. An unconfigured internal build stores a test profile on this device; it does not create a verified online account. Do not enter sensitive identity documents or payment information here.';
+  'We collect your mobile number and email to verify you with a one-time code — there is no password to remember or reset. After account creation, we ask for your name and city so we can tailor local help. Exact work locations are requested only when you book. An unconfigured internal build stores a test profile on this device; it does not create a verified online account. Do not enter sensitive identity documents or payment information here.';
 
 export function AccountAccessScreen({
   initialMode = 'login',
@@ -60,17 +59,14 @@ export function AccountAccessScreen({
   const {width, height} = useWindowDimensions();
   const compact = width < 360 || height < 700;
   const setSession = useSessionStore(s => s.setSession);
-  const guest = useSessionStore(s => s.enterGuestMode);
   const [mode, setMode] = useState<Mode>(initialMode);
   const [step, setStep] = useState<Step>('credentials');
   const [form, setForm] = useState(initial);
   const [identifier, setIdentifier] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [notice, setNotice] = useState(false);
   const [resendAt, setResendAt] = useState(0);
   const pending = useRef(false);
@@ -98,12 +94,10 @@ export function AccountAccessScreen({
     setError('');
     setMessage('');
     setCode('');
-    setConfirm('');
     setForm(initial);
     setIdentifier('');
     setResendAt(0);
     scroll.current?.scrollTo({y: 0, animated: true});
-    setShowPassword(false);
   }
   async function run(operation: () => Promise<void>) {
     if (pending.current) return;
@@ -124,13 +118,7 @@ export function AccountAccessScreen({
       setBusy(false);
     }
   }
-  function checkPassword() {
-    if (form.password.length < 8 || form.password.length > 72)
-      throw new Error('Use a password with 8 to 72 characters');
-    if (form.password !== confirm)
-      throw new Error('The passwords do not match');
-  }
-  async function sendCode(reset: boolean) {
+  async function sendCode() {
     const details = {...form};
     if (!isApiConfigured)
       throw new ApiError(
@@ -138,18 +126,14 @@ export function AccountAccessScreen({
         'Online verification is not connected yet. Please try again later.',
       );
     const phoneNumber =
-      previewEmailOtp && reset ? '' : normalizeMobile(form.phoneNumber);
+      previewEmailOtp && !form.phoneNumber
+        ? ''
+        : normalizeMobile(form.phoneNumber);
     const email = form.email.trim().toLowerCase();
-    if (previewEmailOtp && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    if (!isValidEmail(email))
       throw new Error('Enter a valid email address');
     await api.post(
-      previewEmailOtp
-        ? reset
-          ? '/auth/password-reset/email/request'
-          : '/auth/email-otp/request'
-        : reset
-        ? '/auth/password-reset/request'
-        : '/auth/otp/request',
+      previewEmailOtp ? '/auth/email-otp/request' : '/auth/otp/request',
       previewEmailOtp ? {email} : {phoneNumber},
     );
     setForm(details);
@@ -157,115 +141,107 @@ export function AccountAccessScreen({
     setCode('');
     move('verify');
     setMessage(
-      reset
-        ? `If your account exists, a code has been sent to your ${
-            previewEmailOtp ? 'email' : 'mobile'
-          }.`
-        : `Enter the 6-digit code sent to your ${
-            previewEmailOtp ? 'email' : 'mobile'
-          }.`,
+      `Enter the 6-digit code sent to your ${
+        previewEmailOtp ? 'email' : 'mobile'
+      }.`,
     );
   }
   async function create() {
     const problem = validateRegistration(form);
     if (problem) throw new Error(problem);
-    checkPassword();
     if (local) {
       setSession(await registerLocalAccount(form), {needsProfileSetup: true});
       return;
     }
-    await sendCode(false);
+    await sendCode();
   }
   async function login() {
-    if (!identifier.trim() || !form.password)
-      throw new Error('Enter your mobile/email and password');
+    if (!identifier.trim())
+      throw new Error('Enter your mobile number or email');
     if (local) {
-      setSession(await loginLocalAccount(identifier, form.password));
+      setSession(await loginLocalAccount(identifier));
       return;
     }
-    if (!isApiConfigured)
-      throw new Error('Sign-in is not connected yet. Please try again later.');
-    const payload = identifier.includes('@')
-      ? {email: identifier.trim().toLowerCase(), password: form.password}
-      : {phoneNumber: normalizeMobile(identifier), password: form.password};
-    setSession(await api.post<Tokens>('/auth/login', payload));
+    await sendLoginOtp();
   }
-  async function reset() {
-    checkPassword();
-    if (local) {
-      await resetLocalPassword(form.phoneNumber, form.email, form.password);
-      setMode('login');
-      setStep('credentials');
-      setIdentifier(form.phoneNumber);
-      setForm(initial);
-      setConfirm('');
-      setMessage('Password reset. Sign in with your new password.');
-      return;
+  async function sendLoginOtp() {
+    if (!isApiConfigured)
+      throw new ApiError(
+        0,
+        'Online verification is not connected yet. Please try again later.',
+      );
+    const raw = identifier.trim();
+    if (previewEmailOtp) {
+      if (!isValidEmail(raw))
+        throw new Error('Enter your email address for OTP sign-in');
+      const email = raw.toLowerCase();
+      await api.post('/auth/email-otp/request', {email});
+      setForm({...form, email});
+    } else {
+      const phoneNumber = normalizeMobile(raw);
+      await api.post('/auth/otp/request', {phoneNumber});
+      setForm({...form, phoneNumber: phoneNumber.slice(-10)});
     }
-    await sendCode(true);
+    setResendAt(Date.now() + 30_000);
+    setCode('');
+    move('verify');
+    setMessage(
+      `Enter the 6-digit code sent to your ${
+        previewEmailOtp ? 'email' : 'mobile'
+      }.`,
+    );
   }
   async function verify() {
     if (!/^\d{6}$/.test(code))
       throw new Error('Enter the 6-digit verification code');
     const phoneNumber =
-      previewEmailOtp && mode === 'reset'
+      previewEmailOtp && mode !== 'create'
         ? ''
         : normalizeMobile(form.phoneNumber);
-    if (mode === 'create') {
-      const email = form.email.trim().toLowerCase();
-      const result = await registerWithRecovery(
-        () => api.post<Tokens>('/auth/register', {
-          password: form.password,
-          acceptedTerms: form.acceptedTerms,
-          email,
-          phoneNumber,
-          code,
-        }),
-        () => api.post<Tokens>('/auth/login', {email, password: form.password}),
-      );
-      setSession(result, {needsProfileSetup: true});
-    } else {
-      await api.post(
-        previewEmailOtp
-          ? '/auth/password-reset/email/confirm'
-          : '/auth/password-reset/confirm',
-        previewEmailOtp
-          ? {
-              email: form.email.trim().toLowerCase(),
-              code,
-              password: form.password,
-            }
-          : {phoneNumber, code, password: form.password},
-      );
-      setMode('login');
-      setStep('credentials');
-      setIdentifier(
-        previewEmailOtp ? form.email.trim().toLowerCase() : phoneNumber,
-      );
-      setForm(initial);
-      setCode('');
-      setConfirm('');
-      setMessage('Password reset. Sign in with your new password.');
+    if (mode === 'login') {
+      try {
+        const payload = previewEmailOtp
+          ? {email: form.email.trim().toLowerCase(), code}
+          : {phoneNumber, code};
+        setSession(await api.post<Tokens>('/auth/otp/verify', payload));
+      } catch (issue) {
+        const detail = issue instanceof Error ? issue.message : '';
+        if (detail.includes('Create an account with your client details')) {
+          setMode('create');
+          setStep('credentials');
+          setCode('');
+          setMessage(
+            'No account found — complete your details to create one.',
+          );
+          scroll.current?.scrollTo({y: 0, animated: true});
+          return;
+        }
+        throw issue;
+      }
+      return;
     }
+    const email = form.email.trim().toLowerCase();
+    const verifyPayload = previewEmailOtp ? {email, code} : {phoneNumber, code};
+    // Registration consumes the code; if the response is lost but the
+    // account exists (409), the same code still verifies (the failed
+    // transaction rolls the consumption back).
+    const result = await registerWithRecovery(
+      () => api.post<Tokens>('/auth/register', {
+        acceptedTerms: form.acceptedTerms,
+        email,
+        phoneNumber,
+        code,
+      }),
+      () => api.post<Tokens>('/auth/otp/verify', verifyPayload),
+    );
+    setSession(result, {needsProfileSetup: true});
   }
-  const passwordEye = (
-    <Pressable
-      disabled={busy}
-      accessibilityRole="button"
-      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-      onPress={() => setShowPassword(!showPassword)}
-      style={s.eye}>
-      <Icon name={showPassword ? ICONS.eyeOff : ICONS.eye} size={22} />
-    </Pressable>
-  );
   const title =
     step === 'verify'
       ? `Verify your ${previewEmailOtp ? 'email' : 'mobile'}`
       : mode === 'login'
       ? 'Welcome back'
-      : mode === 'reset'
-      ? 'Reset your password'
-      : 'Secure your account';
+      : 'Create your account';
   return (
     <KeyboardAwareView style={s.root}>
       <ScrollView
@@ -317,14 +293,8 @@ export function AccountAccessScreen({
                 ? `Code sent to ${form.email.trim().toLowerCase()}`
                 : `Mobile ending ${form.phoneNumber.slice(-4)}`
               : mode === 'login'
-              ? 'Sign in to manage your requests and messages.'
-              : mode === 'reset'
-              ? local
-                ? 'Confirm your mobile, email and device lock.'
-                : `Verify your ${
-                    previewEmailOtp ? 'email' : 'mobile'
-                  } to choose a new password.`
-              : 'Contact details and a password.'}
+              ? 'Sign in with a one-time code — no password needed.'
+              : 'Your contact details for code verification.'}
           </Text>
           <View style={s.form}>
             {step === 'verify' ? (
@@ -340,13 +310,15 @@ export function AccountAccessScreen({
                   placeholder="6-digit code"
                   keyboardType="numeric"
                   maxLength={6}
+                  autoComplete="sms-otp"
+                  textContentType="oneTimeCode"
                   onFocus={keyboardScroll.onFocus}
                 />
                 <Button
                   label={
-                    mode === 'create'
-                      ? 'Verify and create account'
-                      : 'Verify and reset password'
+                    mode === 'login'
+                      ? 'Verify and login'
+                      : 'Verify and create account'
                   }
                   loading={busy}
                   disabled={code.length !== 6}
@@ -363,7 +335,7 @@ export function AccountAccessScreen({
                         throw new Error(
                           'Please wait 30 seconds before sending another code',
                         );
-                      await sendCode(mode === 'reset');
+                      await sendCode();
                     })
                   }>
                   <Text style={s.linkText}>Send another code</Text>
@@ -384,15 +356,22 @@ export function AccountAccessScreen({
                 {mode === 'login' ? (
                   <Input
                     key="login-identifier"
-                    label="Mobile number or email"
+                    label={
+                      previewEmailOtp ? 'Email address' : 'Mobile number'
+                    }
                     value={identifier}
                     onChangeText={value => {
                       setIdentifier(value);
                       setError('');
                     }}
-                    placeholder="Mobile number or email"
+                    placeholder={
+                      previewEmailOtp
+                        ? 'you@example.com'
+                        : '10-digit mobile number'
+                    }
                     autoCapitalize="none"
                     maxLength={254}
+                    keyboardType={previewEmailOtp ? 'email-address' : 'phone-pad'}
                     icon={ICONS.profile}
                     onFocus={keyboardScroll.onFocus}
                   />
@@ -433,51 +412,6 @@ export function AccountAccessScreen({
                     ) : null}
                   </>
                 )}
-                <Input
-                  key="account-password"
-                  label={mode === 'reset' ? 'New password' : 'Password'}
-                  value={form.password}
-                  onChangeText={value => field('password', value)}
-                  placeholder={
-                    mode === 'login'
-                      ? 'Enter password'
-                      : 'At least 8 characters'
-                  }
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  secureTextEntry={!showPassword}
-                  maxLength={72}
-                  icon={ICONS.lock}
-                  trailing={passwordEye}
-                  onFocus={keyboardScroll.onFocus}
-                />
-                {mode !== 'login' ? (
-                  <Input
-                    key="account-password-confirmation"
-                    label="Confirm password"
-                    value={confirm}
-                    onChangeText={value => {
-                      setConfirm(value);
-                      setError('');
-                    }}
-                    placeholder="Enter the same password again"
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    maxLength={72}
-                    onFocus={keyboardScroll.onFocus}
-                  />
-                ) : null}
-                {mode === 'login' ? (
-                  <Pressable
-                    style={s.link}
-                    accessibilityRole="link"
-                    accessibilityLabel="Forgot password"
-                    onPress={() => changeMode('reset')}
-                    disabled={busy}>
-                    <Text style={s.linkText}>Forgot password?</Text>
-                  </Pressable>
-                ) : null}
                 {mode === 'create' ? (
                   <View style={s.consent}>
                     <Pressable
@@ -526,10 +460,8 @@ export function AccountAccessScreen({
               <Button
                 label={
                   mode === 'login'
-                    ? 'Login'
-                    : mode === 'reset'
                     ? local
-                      ? 'Confirm device and reset'
+                      ? 'Login'
                       : 'Send verification code'
                     : local
                     ? 'Create account'
@@ -540,33 +472,12 @@ export function AccountAccessScreen({
                 variant="primary"
                 loading={busy}
                 onPress={() =>
-                  void run(
-                    mode === 'login'
-                      ? login
-                      : mode === 'create'
-                      ? create
-                      : reset,
-                  )
+                  void run(mode === 'login' ? login : create)
                 }
-              />
-            ) : null}
-            {mode === 'reset' ? (
-              <Button
-                label="Back to login"
-                variant="secondary"
-                disabled={busy}
-                onPress={() => changeMode('login')}
               />
             ) : null}
           </View>
         </View>
-        <Button
-          label="Explore without an account"
-          variant="secondary"
-          disabled={busy}
-          onPress={guest}
-          style={s.guest}
-        />
       </ScrollView>
       <Modal
         visible={notice}
@@ -701,7 +612,6 @@ const s = StyleSheet.create({
     backgroundColor: ClientColors.white,
   },
   noticeText: {fontSize: 16, lineHeight: 24, color: ClientColors.secondaryText},
-  guest: {marginTop: 16, marginHorizontal: 24},
   welcomeBody: {
     flexGrow: 1,
     paddingHorizontal: 24,
@@ -774,7 +684,7 @@ const s = StyleSheet.create({
   stepLine: {flex: 1, height: 1, backgroundColor: Colors.slate100},
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(7,31,61,0.6)',
+    backgroundColor: 'rgba(17, 31, 53,0.6)',
     justifyContent: 'center',
     padding: 24,
   },

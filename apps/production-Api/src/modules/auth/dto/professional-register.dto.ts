@@ -28,11 +28,6 @@ export class ProfessionalRegisterDto {
   email: string;
 
   @IsString()
-  @MinLength(8)
-  @MaxLength(72)
-  password: string;
-
-  @IsString()
   @Matches(/^\d{6}$/)
   code: string;
 

@@ -5,23 +5,23 @@
 export const Colors = {
   // Primary brand
   navyDeep: '#111F35',
-  navyMid: '#102E52',
-  navyLight: '#214A7C',
+  navyMid: '#111F35',
+  navyLight: '#111F35',
   interactiveBlue: '#2563EB',
   interactiveBluePressed: '#1D4ED8',
   softBlue: '#EAF2FF',
 
   // Brand action colors shared by the Client and Engineer applications.
-  amber: '#E8AD43',
-  amberBright: '#E8AD43',
+  amber: '#C4A639',
+  amberBright: '#C4A639',
   amberPale: '#FFF4D8',
-  amberMuted: '#DCA329',
-  amberDark: '#DCA329',
+  amberMuted: '#C4A639',
+  amberDark: '#C4A639',
 
-  gold: '#E8AD43',
-  goldBright: '#E8AD43',
+  gold: '#C4A639',
+  goldBright: '#C4A639',
   goldPale: '#FFF4D8',
-  goldMuted: '#DCA329',
+  goldMuted: '#C4A639',
 
   // Neutral surfaces
   white: '#FFFFFF',
@@ -49,15 +49,15 @@ export const Colors = {
   info: '#1D4ED8',
   infoBg: '#EAF2FF',
 
-  verifiedBlue: '#0B2D5B',
+  verifiedBlue: '#111F35',
   verifiedBg: '#EEF3FA',
 
-  skyBlue: '#0B2D5B',
+  skyBlue: '#111F35',
   skyBg: '#EEF3FA',
   teal: '#14756C',
   tealBg: '#EAF6F3',
 
-  overlayDark: 'rgba(7, 31, 61, 0.86)',
+  overlayDark: 'rgba(17, 31, 53, 0.86)',
   overlayLight: 'rgba(255, 255, 255, 0.08)',
   glassBorder: 'rgba(230, 234, 240, 0.28)',
   overlayWhite35: 'rgba(255, 255, 255, 0.35)',
@@ -69,18 +69,18 @@ export const Colors = {
 // Content on yellow is always dark navy (white fails AA). Rating stars keep
 // the separate `gold` semantics above — never swap the two.
 export const BrandYellow = {
-  primary: '#F5B82E',
-  pressed: '#D99A12',
+  primary: '#C4A639',
+  pressed: '#C4A639',
   soft: '#FFF5D9',
-  border: '#E8C66F',
+  border: '#C4A639',
   onYellow: '#111F35',
 } as const;
 
 export const Gradients = {
-  navyHero: ['#111F35', '#102E52'],
-  amberShimmer: ['#E8AD43', '#FFF4D8', '#E8AD43'],
-  goldShimmer: ['#E8AD43', '#FFF4D8', '#E8AD43'],
-  cardOverlay: ['transparent', 'rgba(7, 31, 61, 0.9)'],
+  navyHero: ['#111F35', '#111F35'],
+  amberShimmer: ['#C4A639', '#FFF4D8', '#C4A639'],
+  goldShimmer: ['#C4A639', '#FFF4D8', '#C4A639'],
+  cardOverlay: ['transparent', 'rgba(17, 31, 53, 0.9)'],
 };
 
 export const Spacing = {
@@ -115,7 +115,7 @@ export const Shadows = {
   },
   // Standard card elevation
   md: {
-    shadowColor: '#071F3D',
+    shadowColor: '#111F35',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
@@ -123,21 +123,21 @@ export const Shadows = {
   },
   // Hero / featured content
   lg: {
-    shadowColor: '#071F3D',
+    shadowColor: '#111F35',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.14,
     shadowRadius: 24,
     elevation: 8,
   },
   amber: {
-    shadowColor: '#E8AD43',
+    shadowColor: '#C4A639',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 12,
     elevation: 6,
   },
   gold: {
-    shadowColor: '#E8AD43',
+    shadowColor: '#C4A639',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 12,

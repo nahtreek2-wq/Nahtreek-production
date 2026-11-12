@@ -1,8 +1,6 @@
 import { AccountStatus, PrismaClient, Role, VerificationStatus } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
-const seedPassword = process.env.SEED_ENGINEER_PASSWORD ?? 'LocalSeedOnly-ChangeBeforeUse!';
 
 const engineers = [
   {
@@ -72,12 +70,10 @@ const engineers = [
 ];
 
 async function seedEngineer(engineer: (typeof engineers)[number]) {
-  const passwordHash = await bcrypt.hash(seedPassword, 12);
   const user = await prisma.user.upsert({
     where: { phoneNumber: engineer.phoneNumber },
     create: {
       phoneNumber: engineer.phoneNumber,
-      passwordHash,
       status: AccountStatus.ACTIVE,
       isPhoneVerified: true,
       roles: { create: { role: Role.ENGINEER } },

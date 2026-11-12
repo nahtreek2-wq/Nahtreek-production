@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(7,31,61,0.38)',
+    backgroundColor: 'rgba(17, 31, 53,0.38)',
   },
   keyboard: {flex: 1, justifyContent: 'flex-end'},
   sheet: {

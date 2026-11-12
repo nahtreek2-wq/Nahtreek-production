@@ -36,7 +36,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!session)
       throw new UnauthorizedException("Session is no longer active");
     if (session.authVersion !== session.user.authVersion)
-      throw new UnauthorizedException("Password changed. Please sign in again");
+      throw new UnauthorizedException("Session revoked. Please sign in again");
     return {
       ...payload,
       roles: session.user.roles.map(({ role }) => role),

@@ -8,17 +8,11 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { AccountStatus, PenaltyStatus, Prisma, Role, User } from "@prisma/client";
-import * as bcrypt from "bcrypt";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { JwtPayload } from "../../common/strategies/jwt.strategy";
-import { LoginDto } from "./dto/login.dto";
 import { RefreshDto } from "./dto/refresh.dto";
-import {
-  EmailResetPasswordDto,
-  RegisterDto,
-  ResetPasswordDto,
-} from "./dto/register.dto";
+import { RegisterDto } from "./dto/register.dto";
 import { EmailOtpRequestDto, RequestOtpDto } from "./dto/request-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { SmsService } from "./sms.service";
@@ -38,8 +32,9 @@ const SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 30 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
-const BCRYPT_ROUNDS = 12;
-type OtpPurpose = "SIGNUP" | "PASSWORD_RESET";
+// NAHTREEK is OTP-only: one purpose covers account creation, sign-in and
+// step-up verification. There are no passwords anywhere in the system.
+type OtpPurpose = "OTP_AUTH";
 type OtpChannel = "SMS" | "EMAIL";
 
 type AuthUser = User & {
@@ -129,23 +124,20 @@ export class AuthService {
   async register(body: RegisterDto) {
     const phoneNumber = normalizePhone(body.phoneNumber);
     const email = this.normalizeEmail(body.email);
-    this.validatePassword(body.password);
     if (body.acceptedTerms !== true)
       throw new BadRequestException(
         "Complete your client details and accept the data notice"
       );
     const otpIdentifier = this.usePreviewEmailOtp() ? email : phoneNumber;
-    await this.checkOtp(otpIdentifier, body.code, "SIGNUP");
-    const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
+    const {demo} = await this.checkOtp(otpIdentifier, body.code, "OTP_AUTH");
     try {
       const sessionSecret = randomBytes(48).toString("base64url");
       const registration = await this.prisma.$transaction(async (tx) => {
-        await this.consumeOtp(tx, otpIdentifier, body.code, "SIGNUP");
+        await this.consumeOtp(tx, otpIdentifier, body.code, "OTP_AUTH", demo);
         const created = await tx.user.create({
           data: {
             phoneNumber,
             email,
-            passwordHash,
             status: AccountStatus.ACTIVE,
             isPhoneVerified: !this.usePreviewEmailOtp(),
             isEmailVerified: this.usePreviewEmailOtp(),
@@ -207,15 +199,13 @@ export class AuthService {
   async registerProfessional(body: ProfessionalRegisterDto) {
     const phoneNumber = normalizePhone(body.phoneNumber);
     const email = this.normalizeEmail(body.email);
-    this.validatePassword(body.password);
     if (body.acceptedTerms !== true) {
       throw new BadRequestException(
         "Accept the account data notice to continue"
       );
     }
     const otpIdentifier = this.usePreviewEmailOtp() ? email : phoneNumber;
-    await this.checkOtp(otpIdentifier, body.code, "SIGNUP");
-    const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
+    const {demo} = await this.checkOtp(otpIdentifier, body.code, "OTP_AUTH");
     const role =
       body.professionalType === ProfessionalAccountType.CIVIL_ENGINEER
         ? Role.ENGINEER
@@ -223,12 +213,11 @@ export class AuthService {
     try {
       const sessionSecret = randomBytes(48).toString("base64url");
       const registration = await this.prisma.$transaction(async (tx) => {
-        await this.consumeOtp(tx, otpIdentifier, body.code, "SIGNUP");
+        await this.consumeOtp(tx, otpIdentifier, body.code, "OTP_AUTH", demo);
         const created = await tx.user.create({
           data: {
             phoneNumber,
             email,
-            passwordHash,
             status: AccountStatus.ACTIVE,
             isPhoneVerified: !this.usePreviewEmailOtp(),
             isEmailVerified: this.usePreviewEmailOtp(),
@@ -277,76 +266,11 @@ export class AuthService {
     }
   }
 
-  async login(body: LoginDto) {
-    const user = await this.authenticateCredentials(body);
-    return this.issueTokens(user);
-  }
-
-  async loginProfessional(body: LoginDto) {
-    const user = await this.authenticateCredentials(body);
-    if (
-      !user.roles.some(
-        ({ role }) => role === Role.ENGINEER || role === Role.SERVICE_PROVIDER
-      )
-    ) {
-      throw new ForbiddenException(
-        "Use the NAHTREEK Client app for this account"
-      );
-    }
-    return this.issueTokens(user);
-  }
-
-  private async authenticateCredentials(body: LoginDto): Promise<AuthUser> {
-    if (
-      (!body.phoneNumber && !body.email) ||
-      (body.phoneNumber && body.email)
-    ) {
-      throw new BadRequestException("Provide a phone number or email address");
-    }
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          ...(body.phoneNumber
-            ? [{ phoneNumber: normalizePhone(body.phoneNumber) }]
-            : []),
-          ...(body.email ? [{ email: body.email.trim().toLowerCase() }] : []),
-        ],
-      },
-      include: {
-        roles: true,
-        clientProfile: true,
-        professionalProfile: true,
-      },
-    });
-    if (Buffer.byteLength(body.password, "utf8") > 72)
-      throw new BadRequestException("Password is too long");
-    if (
-      !user ||
-      user.deletedAt ||
-      !(await bcrypt.compare(body.password, user.passwordHash))
-    ) {
-      throw new UnauthorizedException("Invalid credentials");
-    }
-    this.assertAccountCanAuthenticate(user.status);
-    if (!user.isPhoneVerified && !user.isEmailVerified)
-      throw new UnauthorizedException(
-        "Verify your email or mobile number using the password reset flow first"
-      );
-    return user;
-  }
-
-  private validatePassword(password: string) {
-    if (password.length < 8 || Buffer.byteLength(password, "utf8") > 72)
-      throw new BadRequestException(
-        "Use a password with at least 8 characters and no more than 72 UTF-8 bytes"
-      );
-  }
-
   private async checkOtp(
     identifier: string,
     code: string,
     purpose: OtpPurpose
-  ) {
+  ): Promise<{demo: boolean}> {
     const challenge = await this.prisma.otpChallenge.findUnique({
       where: { identifier },
     });
@@ -359,6 +283,19 @@ export class AuthService {
       throw new BadRequestException(
         "Code expired or unavailable. Request a new code"
       );
+    // Preview-only demo code: lets the owner sign in to test-domain demo
+    // accounts that cannot receive real SMS/email. Requires APP_ENV=preview
+    // AND an explicitly configured PREVIEW_DEMO_OTP — production and any
+    // environment without the variable can never take this path.
+    const demoCode = process.env.PREVIEW_DEMO_OTP?.trim();
+    if (
+      demoCode &&
+      process.env.APP_ENV === "preview" &&
+      code === demoCode
+    ) {
+      this.logger.warn(`Preview demo-code sign-in for ${identifier}.`);
+      return {demo: true};
+    }
     if (!safelyMatches(challenge.codeHash, hashOtpCode(code))) {
       await this.prisma.otpChallenge.updateMany({
         where: { identifier, codeHash: challenge.codeHash, purpose },
@@ -366,77 +303,36 @@ export class AuthService {
       });
       throw new UnauthorizedException("Incorrect verification code");
     }
+    return {demo: false};
   }
 
   private async consumeOtp(
     tx: Prisma.TransactionClient,
     identifier: string,
     code: string,
-    purpose: OtpPurpose
+    purpose: OtpPurpose,
+    demo = false
   ) {
     const consumed = await tx.otpChallenge.deleteMany({
-      where: {
-        identifier,
-        codeHash: hashOtpCode(code),
-        purpose,
-        expiresAt: { gt: new Date() },
-        attempts: { lt: OTP_MAX_ATTEMPTS },
-      },
+      where: demo
+        ? {
+            identifier,
+            purpose,
+            expiresAt: { gt: new Date() },
+            attempts: { lt: OTP_MAX_ATTEMPTS },
+          }
+        : {
+            identifier,
+            codeHash: hashOtpCode(code),
+            purpose,
+            expiresAt: { gt: new Date() },
+            attempts: { lt: OTP_MAX_ATTEMPTS },
+          },
     });
     if (consumed.count !== 1)
       throw new UnauthorizedException(
         "Code already used or expired. Request a new code"
       );
-  }
-
-  async requestPasswordReset(body: RequestOtpDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { phoneNumber: normalizePhone(body.phoneNumber) },
-    });
-    if (user && user.status === AccountStatus.ACTIVE && !user.deletedAt)
-      await this.createAndSendOtp(
-        normalizePhone(body.phoneNumber),
-        "SMS",
-        "PASSWORD_RESET"
-      );
-    return {
-      message: "If an active account exists, a verification code has been sent",
-      expiresIn: OTP_TTL_MS / 1000,
-    };
-  }
-
-  async resetPassword(body: ResetPasswordDto) {
-    const phoneNumber = normalizePhone(body.phoneNumber);
-    this.validatePassword(body.password);
-    await this.checkOtp(phoneNumber, body.code, "PASSWORD_RESET");
-    const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
-    await this.prisma.$transaction(async (tx) => {
-      await this.consumeOtp(tx, phoneNumber, body.code, "PASSWORD_RESET");
-      const user = await tx.user.findUnique({ where: { phoneNumber } });
-      if (!user || user.status !== AccountStatus.ACTIVE || user.deletedAt)
-        throw new UnauthorizedException("Could not reset this account");
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          passwordHash,
-          isPhoneVerified: true,
-          authVersion: { increment: 1 },
-        },
-      });
-      await tx.session.updateMany({
-        where: { userId: user.id, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      await tx.auditLog.create({
-        data: {
-          userId: user.id,
-          action: "PASSWORD_RESET",
-          entity: "User",
-          entityId: user.id,
-        },
-      });
-    });
-    return { message: "Password reset. Sign in with your new password" };
   }
 
   async refresh(body: RefreshDto) {
@@ -522,7 +418,7 @@ export class AuthService {
 
   async requestOtp(body: RequestOtpDto) {
     const phoneNumber = normalizePhone(body.phoneNumber);
-    return this.createAndSendOtp(phoneNumber, "SMS", "SIGNUP");
+    return this.createAndSendOtp(phoneNumber, "SMS", "OTP_AUTH");
   }
 
   async requestEmailOtp(body: EmailOtpRequestDto) {
@@ -533,7 +429,7 @@ export class AuthService {
     return this.createAndSendOtp(
       this.normalizeEmail(body.email),
       "EMAIL",
-      "SIGNUP"
+      "OTP_AUTH"
     );
   }
 
@@ -600,19 +496,30 @@ export class AuthService {
   }
 
   async verifyOtp(body: VerifyOtpDto) {
-    const phoneNumber = normalizePhone(body.phoneNumber);
-    await this.checkOtp(phoneNumber, body.code, "SIGNUP");
+    // Preview email-OTP mode mirrors registration: the code lives under the
+    // email identifier. Production (and flag-off) stays phone-based.
+    const byEmail = this.usePreviewEmailOtp();
+    if (byEmail && !body.email)
+      throw new BadRequestException("Provide an email address");
+    if (!byEmail && !body.phoneNumber)
+      throw new BadRequestException("Provide a mobile number");
+    const identifier = byEmail
+      ? this.normalizeEmail(body.email!)
+      : normalizePhone(body.phoneNumber!);
+    const {demo} = await this.checkOtp(identifier, body.code, "OTP_AUTH");
     const user = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.user.findUnique({ where: { phoneNumber } });
+      const existing = await tx.user.findUnique({
+        where: byEmail ? { email: identifier } : { phoneNumber: identifier },
+      });
       if (!existing || existing.deletedAt)
         throw new BadRequestException(
           "Create an account with your client details first"
         );
       this.assertAccountCanAuthenticate(existing.status);
-      await this.consumeOtp(tx, phoneNumber, body.code, "SIGNUP");
+      await this.consumeOtp(tx, identifier, body.code, "OTP_AUTH", demo);
       return tx.user.update({
         where: { id: existing.id },
-        data: { isPhoneVerified: true },
+        data: byEmail ? { isEmailVerified: true } : { isPhoneVerified: true },
         include: {
           roles: true,
           clientProfile: true,
@@ -621,57 +528,6 @@ export class AuthService {
       });
     });
     return { ...(await this.issueTokens(user)), isNewUser: false };
-  }
-
-  async requestEmailPasswordReset(body: EmailOtpRequestDto) {
-    if (!this.emailOtpService.isEnabled())
-      throw new BadRequestException(
-        "Preview email verification is not configured yet"
-      );
-    const email = this.normalizeEmail(body.email);
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (user && user.status === AccountStatus.ACTIVE && !user.deletedAt)
-      await this.createAndSendOtp(email, "EMAIL", "PASSWORD_RESET");
-    return {
-      message: "If an active account exists, an email code has been sent",
-      expiresIn: OTP_TTL_MS / 1000,
-    };
-  }
-
-  async resetPasswordByEmail(body: EmailResetPasswordDto) {
-    if (!this.usePreviewEmailOtp())
-      throw new ForbiddenException("Email OTP is available only in Preview");
-    const email = this.normalizeEmail(body.email);
-    this.validatePassword(body.password);
-    await this.checkOtp(email, body.code, "PASSWORD_RESET");
-    const passwordHash = await bcrypt.hash(body.password, BCRYPT_ROUNDS);
-    await this.prisma.$transaction(async (tx) => {
-      await this.consumeOtp(tx, email, body.code, "PASSWORD_RESET");
-      const user = await tx.user.findUnique({ where: { email } });
-      if (!user || user.status !== AccountStatus.ACTIVE || user.deletedAt)
-        throw new UnauthorizedException("Could not reset this account");
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          passwordHash,
-          isEmailVerified: true,
-          authVersion: { increment: 1 },
-        },
-      });
-      await tx.session.updateMany({
-        where: { userId: user.id, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      await tx.auditLog.create({
-        data: {
-          userId: user.id,
-          action: "PASSWORD_RESET_EMAIL",
-          entity: "User",
-          entityId: user.id,
-        },
-      });
-    });
-    return { message: "Password reset. Sign in with your new password" };
   }
 
   async me(userId: string) {
@@ -690,15 +546,25 @@ export class AuthService {
   // Account deletion (App Store / Play requirement for any app with
   // accounts). Soft-delete: the row stays for booking/money history, but
   // login, refresh and sessions stop working immediately (deletedAt +
-  // authVersion guards already enforce this everywhere). Password re-entry
+  // authVersion guards already enforce this everywhere). A fresh OTP code
   // proves presence; pros with unsettled commission dues must settle first
   // so deletion cannot dodge money owed.
-  async deleteAccount(userId: string, password?: string) {
+  async deleteAccount(userId: string, code?: string) {
     const user = await this.prisma.user.findUnique({where: {id: userId},
       include: {professionalProfile: {select: {id: true}}}});
     if (!user || user.deletedAt) throw new UnauthorizedException("Unknown user");
-    if (!password || !(await bcrypt.compare(password, user.passwordHash)))
-      throw new UnauthorizedException("Password did not match");
+    if (!code || !/^\d{6}$/.test(code))
+      throw new BadRequestException("Enter the 6-digit verification code");
+    const byEmail = this.usePreviewEmailOtp();
+    const identifier = byEmail
+      ? this.normalizeEmail(user.email ?? "")
+      : user.phoneNumber;
+    if (!identifier || (byEmail && !user.email))
+      throw new BadRequestException("Request a verification code first");
+    const {demo} = await this.checkOtp(identifier, code, "OTP_AUTH");
+    await this.prisma.$transaction(async (tx) => {
+      await this.consumeOtp(tx, identifier, code, "OTP_AUTH", demo);
+    });
     if (user.professionalProfile) {
       const dues = await this.prisma.payment.aggregate({where: {professionalProfileId: user.professionalProfile.id,
           status: 'COLLECTED_UNSETTLED'}, _sum: {platformFeePaisa: true}}).catch(() => null);

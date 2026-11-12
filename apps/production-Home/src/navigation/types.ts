@@ -13,6 +13,7 @@ export type RootStackParamList = {
   ProviderProfile: {professionalProfileId: string};
   Scan: undefined;
   RequestDetail: {requestId: string};
+  Loan: undefined;
   MapPreview: {latitude?: number; longitude?: number; address: string; requestId?: string};
   Chat: {conversationId: string; title: string; subtitle?: string; avatarUrl?: string};
   Notifications: undefined;
@@ -20,7 +21,7 @@ export type RootStackParamList = {
   Help: undefined;
   Settings: undefined;
   AiPlanner: {conversationId?: string} | undefined;
-  Login: {mode?: 'login' | 'create' | 'reset'} | undefined;
+  Login: {mode?: 'login' | 'create'} | undefined;
 };
 
 export type MainTabParamList = {

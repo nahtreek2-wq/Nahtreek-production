@@ -65,13 +65,16 @@ async function messages(role, kind, id) {
 }
 async function main() {
   assert.equal(process.env.NAHTREEK_PREVIEW_VERIFY, 'yes', 'Set NAHTREEK_PREVIEW_VERIFY=yes explicitly');
-  const credentials = JSON.parse(fs.readFileSync(path.join(root, 'NAHTREEK-preview-demo-credentials.json'), 'utf8'));
+  const demoCode = (process.env.PREVIEW_DEMO_OTP || '').trim();
+  assert.match(demoCode, /^\d{6}$/, 'Set PREVIEW_DEMO_OTP to the preview demo code');
+  const roster = JSON.parse(fs.readFileSync(path.join(root, 'NAHTREEK-preview-demo-credentials.json'), 'utf8'));
   for (const role of ['client', 'engineer', 'provider']) {
     const email = `${role}-01.preview@nahtreek.example`;
-    assert.ok(credentials[email], 'Missing fictional test credential');
-    sessions[role] = await call(null, 'POST', `/auth/${role === 'client' ? 'login' : 'professionals/login'}`, {email, password: credentials[email]});
+    assert.ok(roster[email], 'Missing fictional test account');
+    await call(null, 'POST', '/auth/email-otp/request', {email});
+    sessions[role] = await call(null, 'POST', '/auth/otp/verify', {email, code: demoCode});
     assert.ok(sessions[role].accessToken);
-    record(`${role}: deployed login`, 'PASS');
+    record(`${role}: deployed OTP login`, 'PASS');
   }
   const profiles = {};
   for (const role of ['engineer', 'provider']) {

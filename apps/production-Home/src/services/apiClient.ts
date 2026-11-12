@@ -59,7 +59,7 @@ function timeoutFor(url: string, options: RequestInit): number {
   if (url.includes('/ai/')) return 35_000;
   // Account creation validates an OTP, writes the account and issues a session.
   // Give that one atomic flow room for a cold serverless/database connection.
-  if (/\/auth\/(register|professionals\/register|email-otp\/request|password-reset\/email\/confirm)$/.test(url)) return 45_000;
+  if (/\/auth\/(register|professionals\/register|email-otp\/request|otp\/request|otp\/verify)$/.test(url)) return 45_000;
   if (/\/auth\/(login|professionals\/login|refresh)$/.test(url)) return 35_000;
   return options.method && options.method !== 'GET' ? 25_000 : 12_000;
 }

@@ -115,7 +115,7 @@ describe('membership subscribe', () => {
       await expect(active.service.subscribe('pro')).resolves.toMatchObject({status: 'ACTIVE', shortUrl: null});
       expect(active.provider.createSubscription).not.toHaveBeenCalled();
       const pending = setup({membership: {status: 'PENDING', providerSubscriptionId: 'sub_1'}});
-      pending.provider.fetchSubscription.mockResolvedValue({...remote(), status: 'authenticated', short_url: 'https://rzp.io/i/y'});
+      pending.provider.fetchSubscription.mockResolvedValue({...remote(), status: 'authenticated', short_url: 'https://rzp.io/i/y', plan_id: PLAN_ID});
       await expect(pending.service.subscribe('pro')).resolves.toMatchObject({shortUrl: 'https://rzp.io/i/y'});
       expect(pending.provider.createSubscription).not.toHaveBeenCalled();
     } finally { restore(); }
@@ -439,7 +439,7 @@ describe('subscription cancel and confirm hardening', () => {
     try {
       const {db, provider, service} = setup({provider: aiProvider()});
       db.aiSubscription.findUnique.mockResolvedValue(aiRow({status: 'PENDING', providerSubscriptionId: 'sub_1'}));
-      provider.fetchSubscription.mockResolvedValue({...remote(), id: 'sub_1', status: 'created', short_url: 'https://rzp.io/i/live'});
+      provider.fetchSubscription.mockResolvedValue({...remote(), id: 'sub_1', status: 'created', short_url: 'https://rzp.io/i/live', plan_id: AI_PLAN_ID});
       db.aiSubscription.update.mockImplementation(async ({data}: any) => aiRow({providerSubscriptionId: 'sub_1', ...data}));
       const resumed = await service.aiSubscribe('u');
       expect(provider.createSubscription).not.toHaveBeenCalled();

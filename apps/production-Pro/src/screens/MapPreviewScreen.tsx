@@ -8,13 +8,11 @@ import {
   NativeModules,
   Platform,
   Pressable,
-  requireNativeComponent,
   StyleSheet,
   Text,
   View,
-  type StyleProp,
-  type ViewStyle,
 } from 'react-native';
+import {WebView} from 'react-native-webview';
 import {
   useNavigation,
   useRoute,
@@ -29,18 +27,12 @@ import {ProColors} from '../theme/professionalTheme';
 type Route = RouteProp<RequestsStackParamList, 'MapPreview'>;
 const mapBridge = NativeModules.NahtreekRuntimeConfig as {
   getStaticMapUrl?: (latitude: number, longitude: number) => Promise<string>;
-};
-// The interactive view exists only where the native manager is linked —
-// require it lazily so a missing view degrades to the static map instead of
-// crashing the screen at import.
-let GeoapifyMapView: React.ComponentType<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}> | null = null;
-if (Platform.OS === 'android') {
-  try {
-    GeoapifyMapView = requireNativeComponent<{latitude: number; longitude: number; style: StyleProp<ViewStyle>}>('GeoapifyMapView');
-  } catch {
-    GeoapifyMapView = null;
-  }
-}
+  getMapHtml?: (latitude: number, longitude: number) => Promise<string>;
+} | null;
+// Interactive maps render where the native HTML supplier exists (Android
+// builds with the map module); everywhere else the screen stays on the
+// static image plus Google Maps directions.
+const canInteract = typeof mapBridge?.getMapHtml === 'function';
 
 export function MapPreviewScreen() {
   const navigation =
@@ -58,9 +50,10 @@ export function MapPreviewScreen() {
     ? `${params.latitude},${params.longitude}`
     : params.address;
   const [mapUrl, setMapUrl] = useState<string | null>(null);
+  const [mapHtml, setMapHtml] = useState<string | null>(null);
   const [mapError, setMapError] = useState('');
   const [mapLoading, setMapLoading] = useState(true);
-  const [interactive, setInteractive] = useState(false);
+  const [interactive, setInteractive] = useState(canInteract);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -71,9 +64,10 @@ export function MapPreviewScreen() {
       if (active) {setMapLoading(false); setMapError(known => known || 'Map is taking too long. Check your connection and retry.');}
     }, 15000);
     setMapUrl(null);
+    setMapHtml(null);
     setMapError('');
     setMapLoading(true);
-    setInteractive(false);
+    setInteractive(canInteract);
     if (
       !hasCoordinates ||
       Platform.OS !== 'android' ||
@@ -88,6 +82,17 @@ export function MapPreviewScreen() {
       return () => {
         active = false;
       };
+    }
+    if (canInteract && mapBridge.getMapHtml) {
+      mapBridge
+        .getMapHtml(params.latitude!, params.longitude!)
+        .then(html => {
+          if (active) {clearTimeout(watchdog); setMapHtml(html); setMapLoading(false);}
+        })
+        .catch(() => {
+          // Interactive HTML failed: fall back to the static image below.
+          if (active) setInteractive(false);
+        });
     }
     mapBridge
       .getStaticMapUrl(params.latitude!, params.longitude!)
@@ -130,11 +135,12 @@ export function MapPreviewScreen() {
         onBack={() => navigation.goBack()}
       />
       <View style={styles.map}>
-        {interactive && hasCoordinates && GeoapifyMapView ? (
-          <GeoapifyMapView
-            latitude={params.latitude!}
-            longitude={params.longitude!}
+        {interactive && mapHtml ? (
+          <WebView
+            accessibilityLabel="Interactive job map"
+            source={{html: mapHtml, baseUrl: 'https://nahtreek.local/'}}
             style={styles.mapImage}
+            onShouldStartLoadWithRequest={() => false}
           />
         ) : mapUrl && !mapError ? (
           <>
@@ -153,10 +159,10 @@ export function MapPreviewScreen() {
             ) : null}
           </>
         ) : null}
-        {mapLoading && !mapError && !interactive ? (
+        {mapLoading && !mapError ? (
           <ProLoader size={52} label="Loading map…" />
         ) : null}
-        {!interactive &&
+        {(!interactive || !hasCoordinates) &&
         (mapError || !hasCoordinates || Platform.OS !== 'android') ? (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyText}>
@@ -190,13 +196,13 @@ export function MapPreviewScreen() {
             </Text>
           </View>
         ) : null}
-        {hasCoordinates && GeoapifyMapView ? (
+        {hasCoordinates && canInteract ? (
           <Pressable
             accessibilityRole="button"
             onPress={() => setInteractive(value => !value)}
             style={styles.mapMode}>
             <Text style={styles.mapModeText}>
-              {interactive ? 'Show map' : 'Explore interactive map'}
+              {interactive ? 'Show static map' : 'Explore interactive map'}
             </Text>
           </Pressable>
         ) : null}
@@ -227,7 +233,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 21,
-    backgroundColor: '#1D3B57',
+    backgroundColor: '#111F35',
   },
   backText: {fontSize: 32, lineHeight: 38, color: ProColors.surface},
   heading: {flex: 1},

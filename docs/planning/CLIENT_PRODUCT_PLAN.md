@@ -32,7 +32,7 @@ Use the existing versioned contracts (`/api/v1/auth`, `/clients/me`, `/discovery
 
 ## Design system
 
-Use shared NAHTREEK tokens: navy #0B2D5B, deep navy #071F3D, construction yellow #F2B84B, pressed yellow #DCA329, soft yellow #FFF4D8, light #F7F9FC, text #172033 and secondary text #667085. Yellow is reserved for primary actions, active navigation, progress and highlights; body copy stays navy/slate for readable contrast. Shared buttons, inputs, sheets and states use consistent spacing and at least 44-point touch targets. Avoid fixed content heights for scalable text. Respect reduced motion and screen readers. Real backend verification, ratings and availability are the only basis for trust labels. Service categories must open relevant service information/results.
+Use shared NAHTREEK tokens: navy #111F35, deep navy #111F35, construction yellow #C4A639, pressed yellow #C4A639, soft yellow #FFF4D8, light #F7F9FC, text #172033 and secondary text #667085. Yellow is reserved for primary actions, active navigation, progress and highlights; body copy stays navy/slate for readable contrast. Shared buttons, inputs, sheets and states use consistent spacing and at least 44-point touch targets. Avoid fixed content heights for scalable text. Respect reduced motion and screen readers. Real backend verification, ratings and availability are the only basis for trust labels. Service categories must open relevant service information/results.
 
 ## Authentication and security
 

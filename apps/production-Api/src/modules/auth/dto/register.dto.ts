@@ -18,11 +18,6 @@ export class RegisterDto {
   })
   phoneNumber: string;
 
-  @IsString()
-  @MinLength(8)
-  @MaxLength(72)
-  password: string;
-
   @IsOptional()
   @IsString()
   @MinLength(2)
@@ -60,28 +55,3 @@ export class RegisterDto {
   acceptedTerms: boolean;
 }
 
-export class ResetPasswordDto {
-  @IsString()
-  @Matches(/^\+?\d[\d\s-]{8,14}$/)
-  phoneNumber: string;
-  @IsString()
-  @Matches(/^\d{6}$/)
-  code: string;
-  @IsString()
-  @MinLength(8)
-  @MaxLength(72)
-  password: string;
-}
-
-export class EmailResetPasswordDto {
-  @IsEmail()
-  @MaxLength(254)
-  email: string;
-  @IsString()
-  @Matches(/^\d{6}$/)
-  code: string;
-  @IsString()
-  @MinLength(8)
-  @MaxLength(72)
-  password: string;
-}

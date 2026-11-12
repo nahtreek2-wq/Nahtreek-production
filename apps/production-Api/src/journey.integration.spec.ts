@@ -4,7 +4,6 @@ import {AppModule} from './app.module';
 import {PrismaService} from './common/prisma/prisma.service';
 import {AuthThrottleGuard} from './modules/auth/auth-throttle.guard';
 import {EmailOtpService} from './modules/auth/email-otp.service';
-import {hash} from 'bcrypt';
 import {JourneyService} from './modules/platform/journey.service';
 
 // External delivery/storage have separate checks. Account, authorization, validation,
@@ -21,7 +20,6 @@ const enabled = /^nahtreek_e2e_[a-f0-9]{16}$/.test(process.env.NAHTREEK_E2E_SCHE
   let db: PrismaService;
   let base: string;
   const codes = new Map<string, string>();
-  const password = 'Journey-test-5482!';
   let client: any, admin: any, engineer: any, provider: any;
   let specializationId: string;
   let count = 0;
@@ -42,7 +40,7 @@ const enabled = /^nahtreek_e2e_[a-f0-9]{16}$/.test(process.env.NAHTREEK_E2E_SCHE
     const phoneNumber = '+91999999000' + count;
     await request('POST', '/auth/email-otp/request', {email});
     return request('POST', type ? '/auth/professionals/register' : '/auth/register',
-      {email, phoneNumber, password, code: codes.get(email), acceptedTerms: true, ...(type ? {professionalType: type} : {})});
+      {email, phoneNumber, code: codes.get(email), acceptedTerms: true, ...(type ? {professionalType: type} : {})});
   }
   beforeAll(async () => {
     const module = await Test.createTestingModule({imports: [AppModule]})
@@ -54,8 +52,9 @@ const enabled = /^nahtreek_e2e_[a-f0-9]{16}$/.test(process.env.NAHTREEK_E2E_SCHE
     await app.listen(0, '127.0.0.1');
     base = (await app.getUrl()) + '/api/v1';
     db = app.get(PrismaService);
-    await db.user.create({data: {email: 'admin@example.test', phoneNumber: '+919999990099', passwordHash: await hash(password, 4), status: 'ACTIVE', isEmailVerified: true, roles: {create: {role: 'ADMIN'}}}});
-    admin = await request('POST', '/auth/login', {email: 'admin@example.test', password});
+    await db.user.create({data: {email: 'admin@example.test', phoneNumber: '+919999990099', status: 'ACTIVE', isEmailVerified: true, roles: {create: {role: 'ADMIN'}}}});
+    await request('POST', '/auth/email-otp/request', {email: 'admin@example.test'});
+    admin = await request('POST', '/auth/otp/verify', {email: 'admin@example.test', code: codes.get('admin@example.test')});
     await db.serviceCategory.create({data: {slug: 'plumbing', title: 'Plumbing', group: 'Home Services', description: 'Test category'}});
     specializationId = (await db.specialization.create({data: {name: 'Structural Design', slug: 'structural-design'}})).id;
     client = await register();

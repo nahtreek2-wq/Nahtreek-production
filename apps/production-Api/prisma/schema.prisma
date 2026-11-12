@@ -179,7 +179,6 @@ model User {
   displayName     String?
   email           String?       @unique
   phoneNumber     String        @unique
-  passwordHash    String
   authVersion     Int           @default(0)
   status          AccountStatus @default(PENDING_VERIFICATION)
   isPhoneVerified Boolean       @default(false)

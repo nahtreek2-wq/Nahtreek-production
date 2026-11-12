@@ -1,8 +1,9 @@
 import { AccountStatus, PrismaClient, Role } from "@prisma/client";
-import * as bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
+// OTP-only: the preview admin signs in with an email code (or the preview
+// demo code). No password is created or stored.
 async function main() {
   if (process.env.ALLOW_ADMIN_SEED !== "true") {
     throw new Error(
@@ -12,23 +13,16 @@ async function main() {
   if (process.env.APP_ENV === "production") {
     throw new Error("Preview administrator seeding is forbidden in production");
   }
-  const password = process.env.DEMO_ADMIN_PASSWORD?.trim();
-  if (!password || password.length < 12) {
-    throw new Error("DEMO_ADMIN_PASSWORD must contain at least 12 characters");
-  }
-  const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.upsert({
     where: { email: "admin.demo@nahtreek.example" },
     create: {
       email: "admin.demo@nahtreek.example",
       phoneNumber: "+919999990100",
-      passwordHash,
       status: AccountStatus.ACTIVE,
       isPhoneVerified: true,
       isEmailVerified: true,
     },
     update: {
-      passwordHash,
       status: AccountStatus.ACTIVE,
       isPhoneVerified: true,
       isEmailVerified: true,

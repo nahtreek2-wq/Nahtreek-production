@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#071f3d" />
+    <meta name="theme-color" content="#111F35" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' __NAHTREEK_API_ORIGIN__; img-src 'self' data: https:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests" />
     <title>NAHTREEK Operations Console</title>
     <link rel="icon" href="./assets/nahtreek-logo.png" />
@@ -41,16 +41,21 @@
         <h2 id="login-title">Operations console</h2>
         <p class="muted">Use an authorised NAHTREEK administrator account.</p>
         <form id="login-form">
-          <label>Email address<input id="email" type="email" inputmode="email" autocomplete="username" maxlength="254" required /></label>
-          <label>Password
-            <span class="password-field">
-              <input id="password" type="password" autocomplete="current-password" maxlength="128" required />
-              <button id="password-toggle" class="password-toggle" type="button" aria-pressed="false" aria-label="Show password">Show</button>
-            </span>
-          </label>
-          <p id="caps-warning" class="warning form-message hidden" role="status">Caps Lock is on — passwords are case-sensitive.</p>
-          <p id="login-error" class="error form-message" role="alert"></p>
-          <button id="login-button" class="button primary full-width" type="submit">Sign in securely</button>
+          <div id="login-identifier-step">
+            <label><span id="login-identifier-label">Email address</span><input id="login-identifier" type="text" inputmode="email" autocomplete="username" maxlength="254" required /></label>
+            <p id="login-error" class="error form-message" role="alert"></p>
+            <button id="login-send-code" class="button primary full-width" type="submit">Send verification code</button>
+          </div>
+          <div id="login-code-step" class="hidden">
+            <p class="muted" id="login-code-hint">Enter the 6-digit code.</p>
+            <label>Verification code<input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" required /></label>
+            <p id="login-code-error" class="error form-message" role="alert"></p>
+            <button id="login-verify" class="button primary full-width" type="submit">Verify and sign in</button>
+            <div class="login-links">
+              <button id="login-resend" class="link-button" type="button">Send code again</button>
+              <button id="login-back" class="link-button" type="button">Use a different account</button>
+            </div>
+          </div>
         </form>
       </section>
     </main>

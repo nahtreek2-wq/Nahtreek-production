@@ -526,16 +526,6 @@ export interface LoginResponse {
   >[0]['user'];
 }
 
-export function useLogin() {
-  return useMutation({
-    mutationFn: (payload: {
-      phoneNumber?: string;
-      email?: string;
-      password: string;
-    }) => api.post<LoginResponse>('/auth/login', payload),
-  });
-}
-
 export function useRegister() {
   return useMutation({
     mutationFn: (payload: ClientRegistration & {code: string}) =>
@@ -556,7 +546,8 @@ export function useRequestOtp() {
 export function useVerifyOtp() {
   return useMutation({
     mutationFn: (payload: {
-      phoneNumber: string;
+      phoneNumber?: string;
+      email?: string;
       code: string;
       fullName?: string;
       city?: string;

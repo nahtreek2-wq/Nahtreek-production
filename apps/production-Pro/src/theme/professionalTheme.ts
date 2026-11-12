@@ -9,16 +9,16 @@
  * Tinted soft colors remain for small status badges and info bands.
  */
 export const ProColors = {
-  primary: '#0B2D5B',
-  deep: '#071F3D',
-  rich: '#103665',
+  primary: '#111F35',
+  deep: '#111F35',
+  rich: '#111F35',
   blueSoft: '#EAF2FF',
   // Brand action language shared with the Home app (F-202 BrandYellow ramp,
   // logo-checked). Blue remains for semantic info UI only.
-  accent: '#F5B82E',
-  accentPressed: '#D99A12',
+  accent: '#C4A639',
+  accentPressed: '#C4A639',
   accentSoft: '#FFF5D9',
-  accentBorder: '#E8C66F',
+  accentBorder: '#C4A639',
   accentIcon: '#7A6100',
   accentText: '#7A6100',
   onAccent: '#111F35',

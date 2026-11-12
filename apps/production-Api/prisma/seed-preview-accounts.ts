@@ -4,8 +4,6 @@ import {
   Role,
   VerificationStatus,
 } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
-import {randomBytes} from 'crypto';
 import {readFile, writeFile} from 'fs/promises';
 import {isAbsolute} from 'path';
 import {uploadAsset} from '../src/common/storage';
@@ -64,7 +62,6 @@ type DemoAccount = {
   email: string;
   phoneNumber: string;
   index: number;
-  password: string;
 };
 
 function required(name: string): string {
@@ -102,7 +99,7 @@ function assertPreviewTarget() {
   }
 }
 
-function roster(): Omit<DemoAccount, 'password'>[] {
+function roster(): DemoAccount[] {
   const groups = [
     {role: Role.CLIENT, names: CLIENT_NAMES, key: 'client'},
     {role: Role.ENGINEER, names: ENGINEER_NAMES, key: 'engineer'},
@@ -120,26 +117,25 @@ function roster(): Omit<DemoAccount, 'password'>[] {
   }));
 }
 
+// OTP-only: there are no demo passwords. The output file is the account
+// roster (email -> phone number); sign-in uses the preview demo OTP code.
 async function credentials(): Promise<DemoAccount[]> {
   const path = required('DEMO_CREDENTIALS_OUTPUT');
   if (!isAbsolute(path)) throw new Error('DEMO_CREDENTIALS_OUTPUT must be an absolute path');
   const people = roster();
-  let passwords: Record<string, string>;
+  const rosterFile: Record<string, string> = Object.fromEntries(
+    people.map(person => [person.email, person.phoneNumber]));
   try {
-    passwords = JSON.parse(await readFile(path, 'utf8')) as Record<string, string>;
+    const existing = JSON.parse(await readFile(path, 'utf8')) as Record<string, string>;
+    if (Object.keys(existing).length !== people.length ||
+        people.some(person => existing[person.email] !== person.phoneNumber)) {
+      throw new Error('Credential file does not match the preview roster');
+    }
   } catch (error: any) {
     if (error?.code !== 'ENOENT') throw error;
-    passwords = Object.fromEntries(people.map(person => [
-      person.email,
-      randomBytes(24).toString('base64url'),
-    ]));
-    await writeFile(path, JSON.stringify(passwords, null, 2) + '\n', {flag: 'wx', mode: 0o600});
+    await writeFile(path, JSON.stringify(rosterFile, null, 2) + '\n', {flag: 'wx', mode: 0o600});
   }
-  if (Object.keys(passwords).length !== people.length ||
-      people.some(person => typeof passwords[person.email] !== 'string' || passwords[person.email].length < 20)) {
-    throw new Error('Credential file does not match the preview roster');
-  }
-  return people.map(person => ({...person, password: passwords[person.email]}));
+  return people;
 }
 
 async function avatar(account: DemoAccount): Promise<string> {
@@ -207,13 +203,11 @@ async function main() {
         counts.existing += 1;
         continue;
       }
-      const passwordHash = await bcrypt.hash(account.password, 12);
       await prisma.$transaction(async tx => {
         const user = await tx.user.create({data: {
           email: account.email,
           phoneNumber: account.phoneNumber,
           displayName: marker,
-          passwordHash,
           status: AccountStatus.ACTIVE,
           isEmailVerified: true,
           isPhoneVerified: false,

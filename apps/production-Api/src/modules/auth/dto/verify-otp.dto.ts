@@ -1,4 +1,5 @@
 import {
+  IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -7,12 +8,19 @@ import {
 } from "class-validator";
 
 export class VerifyOtpDto {
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @Matches(/^\+?\d[\d\s-]{8,14}$/, {
     message: "phoneNumber must be a valid Indian mobile number",
   })
-  phoneNumber: string;
+  phoneNumber?: string;
+
+  @IsOptional()
+  @IsEmail()
+  @IsNotEmpty()
+  @MaxLength(254)
+  email?: string;
 
   @IsString()
   @IsNotEmpty()

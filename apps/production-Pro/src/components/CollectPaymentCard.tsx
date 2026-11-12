@@ -1,5 +1,7 @@
 import React, {useState} from 'react';
 import {
+  Image,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -88,6 +90,17 @@ export function CollectPaymentCard({
   const [method, setMethod] = useState<'CASH' | 'UPI'>('CASH');
   const [formOpen, setFormOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const qr = useQuery({
+    queryKey: ['pro-collect-qr', requestId],
+    queryFn: () =>
+      api.get<{qrPng: string; title: string; expectedAmountPaisa?: number | null}>(
+        `/payments/collect-qr?engineerRequestId=${requestId}`,
+      ),
+    enabled: qrOpen,
+    retry: 1,
+    staleTime: 60_000,
+  });
   const status = useQuery({
     queryKey: ['pro-collect-status', requestId],
     queryFn: resolved.loadStatus,
@@ -215,8 +228,8 @@ export function CollectPaymentCard({
           <Text style={styles.body}>
             No payment recorded yet. If the customer paid inside the app it
             appears here automatically — otherwise declare cash or UPI you
-            received directly. Your commission (10%, or 7% for Pro members
-            with the first job each month free) moves to dues.
+            received directly. Your commission moves to dues; members pay
+            the lower member rate — see Dues for the current figures.
           </Text>
           {typeof view?.expectedAmountPaisa === 'number' ? (
             <Text style={styles.feeRef}>
@@ -232,6 +245,14 @@ export function CollectPaymentCard({
             <Text style={styles.linkText}>
               {busy || status.isFetching ? 'Checking…' : 'Check again for an in-app payment'}
             </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show payment QR"
+            disabled={busy}
+            onPress={() => setQrOpen(true)}
+            style={styles.link}>
+            <Text style={styles.linkText}>Show payment QR for customer</Text>
           </Pressable>
           {formOpen ? (
             <View style={styles.gap}>
@@ -298,6 +319,53 @@ export function CollectPaymentCard({
           )}
         </View>
       )}
+      <Modal
+        visible={qrOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQrOpen(false)}>
+        <View style={styles.qrBackdrop}>
+          <View style={styles.qrCard}>
+            <Text style={styles.qrTitle}>Customer scan to pay</Text>
+            {qr.isPending ? (
+              <ProLoader size={34} />
+            ) : qr.isError || !qr.data ? (
+              <View style={styles.gap}>
+                <Text style={styles.body}>
+                  Payment QR could not load. Check your connection.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry payment QR"
+                  onPress={() => void qr.refetch()}
+                  style={styles.link}>
+                  <Text style={styles.linkText}>Try again</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.gap}>
+                <Image
+                  accessibilityRole="image"
+                  accessibilityLabel={`Payment QR for ${qr.data.title}`}
+                  source={{uri: qr.data.qrPng}}
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
+                {typeof qr.data.expectedAmountPaisa === 'number' ? (
+                  <Text style={styles.qrAmount}>
+                    {rupees(qr.data.expectedAmountPaisa)} due
+                  </Text>
+                ) : null}
+                <Text style={styles.hint}>
+                  The customer scans this with the NAHTREEK app and pays
+                  online.
+                </Text>
+              </View>
+            )}
+            <PrimaryButton label="Close" onPress={() => setQrOpen(false)} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -430,5 +498,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: ProColors.primary,
     textDecorationLine: 'underline',
+  },
+  qrBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 31, 53, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: ProSpacing.xl,
+  },
+  qrCard: {
+    backgroundColor: ProColors.surface,
+    borderRadius: ProRadius.card,
+    padding: ProSpacing.xl,
+    gap: ProSpacing.md,
+    alignItems: 'center',
+    width: '100%',
+  },
+  qrTitle: {fontSize: 18, fontWeight: '800', color: ProColors.text},
+  qrImage: {width: 240, height: 240, borderRadius: ProRadius.input},
+  qrAmount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: ProColors.text,
+    textAlign: 'center',
   },
 });

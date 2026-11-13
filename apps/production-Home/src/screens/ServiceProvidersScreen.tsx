@@ -106,7 +106,7 @@ export function ServiceProvidersScreen() {
             accessibilityLabel={bookingServiceAvailable ? 'Book at a new or current address' : 'Booking unavailable while the service is disconnected'}
             disabled={!bookingServiceAvailable}
             onPress={()=>token ? setNearbyOpen(true) : nav.navigate('Login')}>
-            <View style={styles.locationIcon}><Icon name={ICONS.location} size={22} color={ClientColors.accentIcon} /></View>
+            <View style={styles.locationIcon}><Icon name={ICONS.location} size={22} color={Colors.navyDeep} /></View>
             <View style={styles.copy}>
               <Text style={styles.addressTitle}>Where do you need help?</Text>
               <Text style={s.text}>Book at a new or current address</Text>

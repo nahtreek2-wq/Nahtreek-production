@@ -58,6 +58,7 @@ import {iconographyForService} from '../../../../packages/mobile-ui/serviceIcono
 import type {IconName} from '../components/ui/Icon';
 import {DistrictLocationPicker} from '../components/DistrictLocationPicker';
 import {planSheetPrefill, usePlanDraft, usePlanQuoteRequest} from '../services/planQuotes';
+import {LIST_PERF} from '../../../../packages/mobile-ui/listPerformance';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DiscoveryRoute = RouteProp<RootStackParamList, 'EngineerDiscovery'>;
@@ -253,17 +254,18 @@ export function EngineerDiscoveryScreen() {
       />
       {planId ? (
         <View style={styles.planBanner}>
-          <Icon name={ICONS.sparkles} size={16} color={ClientColors.accentText} />
+          <Icon name={ICONS.sparkles} size={16} color={Colors.navyDeep} />
           <Text style={styles.planBannerText} numberOfLines={2}>
             {planDraft ? `Get quotes for “${planDraft.title}” — pick a professional.` : 'Loading your AI plan…'}
           </Text>
         </View>
       ) : null}
       <FlatList
+        {...LIST_PERF}
         onEndReached={mode === 'engineers' ? query.loadMore : undefined}
         onEndReachedThreshold={0.5}
-        refreshing={mode === 'engineers' && query.isRefetching}
-        onRefresh={mode === 'engineers' ? query.refetch : undefined}
+        refreshing={mode === 'engineers' ? query.isRefetching : categories.isRefetching}
+        onRefresh={mode === 'engineers' ? () => void query.refetch() : () => void categories.refetch()}
         data={mode === 'engineers' ? engineers : []}
         keyExtractor={item => item.id}
         contentContainerStyle={[
@@ -546,7 +548,7 @@ export function EngineerDiscoveryScreen() {
             }}>
             <Text style={styles.filterOptionText}>{option}</Text>
             {(filterSheet === 'sort' ? sort : filter) === option ? (
-              <Icon name={ICONS.check} size={20} color={ClientColors.accentIcon} />
+              <Icon name={ICONS.check} size={20} color={Colors.success} />
             ) : null}
           </Pressable>
         ))}
@@ -629,7 +631,7 @@ function EngineerRow({
               <Icon
                 name={saved ? ICONS.heart : ICONS.heartOutline}
                 size={18}
-                color={saved ? ClientColors.accentIcon : Colors.slate400}
+                color={saved ? '#C2415A' : Colors.slate400}
               />
             </TouchableOpacity>
           </View>
@@ -703,7 +705,7 @@ function EngineerRow({
 const styles = StyleSheet.create({
   findHeader: {paddingBottom: 20, paddingRight: Spacing.md},
   planBanner: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, marginHorizontal: Spacing.lg, marginTop: Spacing.sm},
-  planBannerText: {...Typography.caption, color: ClientColors.accentText, fontWeight: '700', flex: 1},
+  planBannerText: {...Typography.caption, color: Colors.navyDeep, fontWeight: '700', flex: 1},
   changeCityButton: {height: 44, minWidth: 116, paddingHorizontal: 12, borderRadius: 22, backgroundColor: ClientColors.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6},
   changeCityText: {fontSize: 12, fontWeight: '700', color: Colors.navyDeep},
   cityOption: {minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.slate200},

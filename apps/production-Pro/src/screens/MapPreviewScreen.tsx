@@ -2,7 +2,6 @@ import {ScreenHeader} from '../components/ScreenHeader';
 import {ProLoader} from '../components/ProLoader';
 import React, {useEffect, useState} from 'react';
 import {
-  Alert,
   Image,
   Linking,
   NativeModules,
@@ -22,6 +21,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {RequestsStackParamList} from '../navigation/types';
 import {Colors} from '@nahtreek/design-system';
+import {confirmDialog} from '../stores/confirm';
 import {ProColors} from '../theme/professionalTheme';
 
 type Route = RouteProp<RequestsStackParamList, 'MapPreview'>;
@@ -120,10 +120,8 @@ export function MapPreviewScreen() {
         destination,
       )}`,
     ).catch(() =>
-      Alert.alert(
-        'Directions unavailable',
-        'Please try again when you are connected.',
-      ),
+      void confirmDialog({title: 'Directions unavailable', message: 'Please try again when you are connected.',
+        confirmLabel: 'OK', cancelLabel: null}),
     );
   };
 

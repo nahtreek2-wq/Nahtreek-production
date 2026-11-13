@@ -3,6 +3,7 @@ import {
   Image,
   ImageBackground,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -132,7 +133,20 @@ export function HomeScreen() {
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{paddingBottom: tabBarHeight + 24}}>
+        contentContainerStyle={{paddingBottom: tabBarHeight + 24}}
+        refreshControl={
+          <RefreshControl
+            refreshing={profile.isRefetching || serviceRequests.isRefetching || favorites.isRefetching || engineers.isRefetching}
+            onRefresh={() => {
+              void profile.refetch();
+              void serviceRequests.refetch();
+              void favorites.refetch();
+              void engineers.refetch();
+            }}
+            tintColor={Colors.navyDeep}
+            colors={[Colors.navyDeep]}
+          />
+        }>
       <LinearGradient
           colors={[NAVY, PRIMARY_NAVY]}
           style={[styles.header, compact && styles.compactHeader, {paddingTop: insets.top + 10}]}>
@@ -150,9 +164,9 @@ export function HomeScreen() {
                   accessibilityLabel={`Change city, current ${city || 'not selected'}`}
                   onPress={() => {setLocationState(selectedState); setLocationOpen(true);}}
                   style={styles.cityRow}>
-                  {!compact && <Icon name={ICONS.location} size={14} color={ClientColors.accent} />}
+                  {!compact && <Icon name={ICONS.location} size={14} color={ClientColors.white} />}
                   <Text numberOfLines={1} style={[styles.city, compact && styles.compactCity]}>{city || 'Choose your city'}</Text>
-                  <Icon name={ICONS.chevronDown} size={compact ? 12 : 14} color={ClientColors.accent} />
+                  <Icon name={ICONS.chevronDown} size={compact ? 12 : 14} color={ClientColors.white} />
                 </Pressable>
               </View>
             </View>
@@ -239,7 +253,6 @@ export function HomeScreen() {
               navigation.navigate('Services', serviceId ? {serviceId} : undefined);
             }}
             onSelectEngineers={openDiscovery}
-            onSelectLoans={() => navigation.navigate('Loan')}
           />
           <BookAgainStrip
             items={bookAgainItems}
@@ -255,7 +268,7 @@ export function HomeScreen() {
                 navigation.navigate(user ? 'ServiceHistory' : 'Login')
               }>
               <View style={styles.workIcon}>
-                <Icon name={ICONS.plumbing} size={22} color={ClientColors.accentIcon} />
+                <Icon name={ICONS.plumbing} size={22} color={ClientColors.primaryNavy} />
               </View>
               <Text numberOfLines={1} adjustsFontSizeToFit style={styles.workTitle}>Services</Text>
             </Pressable>
@@ -349,7 +362,7 @@ export function HomeScreen() {
                   style={({pressed}) => [styles.actionCard, pressed && styles.actionCardPressed]}
                   onPress={() => navigation.navigate('Login', {mode: 'create'})}>
                   <View style={styles.actionIcon}>
-                    <Icon name={ICONS.profile} size={24} color={ClientColors.accentIcon} />
+                    <Icon name={ICONS.profile} size={24} color={ClientColors.primaryNavy} />
                   </View>
                   <View style={styles.actionCopy}>
                     <Text style={styles.actionTitle}>Create your account</Text>
@@ -416,7 +429,7 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: PAPER},
   header: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },

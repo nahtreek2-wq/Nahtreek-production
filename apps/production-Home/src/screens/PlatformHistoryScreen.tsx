@@ -11,6 +11,7 @@ import {
 } from '../services/platformQueries';
 import type {RootStackParamList} from '../navigation/types';
 import {ClientColors} from '../design-system/tokens';
+import {LIST_PERF} from '../../../../packages/mobile-ui/listPerformance';
 export const platformStyles = StyleSheet.create({
   root: {flex: 1, backgroundColor: ClientColors.lightBackground},
   body: {padding: 20, paddingBottom: 36},
@@ -41,6 +42,7 @@ export function PlatformHistoryScreen({
         onBack={() => nav.goBack()}
       />
       <FlatList
+        {...LIST_PERF}
         contentContainerStyle={platformStyles.body}
         data={history.data?.pages.flatMap(page => page.data) ?? []}
         keyExtractor={item => item.id}

@@ -1,10 +1,10 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import {Alert} from 'react-native';
 
 jest.mock('react-native-image-picker', () => ({launchImageLibrary: jest.fn()}));
 jest.mock('../src/services/apiClient', () => ({api: {post: jest.fn(), delete: jest.fn()}}));
 jest.mock('../src/stores/proToast', () => ({useProToast: () => jest.fn()}));
+import {__resetConfirmForTests, useConfirmStore} from '../src/stores/confirm';
 
 import {launchImageLibrary} from 'react-native-image-picker';
 import {api} from '../src/services/apiClient';
@@ -31,7 +31,7 @@ function setup(refresh = jest.fn().mockResolvedValue(undefined)) {
   return {render, done, hook: () => ref.current as HookReturn, refresh};
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => { jest.clearAllMocks(); __resetConfirmForTests(); });
 
 it('rejects short titles without opening the picker', async () => {
   const t = setup();
@@ -78,21 +78,37 @@ it('rejects oversized photos before upload', async () => {
 });
 
 it('removes after confirm and refreshes', async () => {
-  const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(((...args: unknown[]) => {
-    const buttons = args[2] as {text: string; onPress?: () => void}[];
-    buttons.find(button => button.text === 'Remove')?.onPress?.();
-  }) as never);
   mockedApi.delete.mockResolvedValue({});
   const t = setup();
   await t.render();
   await renderer.act(async () => {
     t.hook().removePhoto('p1', 'Kitchen slab');
   });
+  expect(useConfirmStore.getState().current).toMatchObject({title: 'Remove work photo?'});
   await renderer.act(async () => {
-    await Promise.resolve();
+    useConfirmStore.getState().answer(true);
+  });
+  await renderer.act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 20));
   });
   expect(mockedApi.delete).toHaveBeenCalledWith('/professionals/me/portfolio/p1');
   expect(t.refresh).toHaveBeenCalled();
-  alertSpy.mockRestore();
+  t.done();
+});
+
+it('keeps the photo when the dialog is dismissed', async () => {
+  const t = setup();
+  await t.render();
+  await renderer.act(async () => {
+    t.hook().removePhoto('p1', 'Kitchen slab');
+  });
+  await renderer.act(async () => {
+    useConfirmStore.getState().answer(false);
+  });
+  await renderer.act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 20));
+  });
+  expect(mockedApi.delete).not.toHaveBeenCalled();
+  expect(t.refresh).not.toHaveBeenCalled();
   t.done();
 });

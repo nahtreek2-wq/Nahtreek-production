@@ -11,6 +11,7 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {AppErrorBoundary} from './AppErrorBoundary';
 import {AppNavigator} from '../navigation/AppNavigator';
 import {Toast} from '../components/ui/Toast';
+import {ConfirmDialog} from '../components/ui/ConfirmDialog';
 import {OfflineBanner} from '../components/ui/OfflineBanner';
 import {useCity} from '../stores/city';
 import {Colors} from '@nahtreek/design-system';
@@ -59,6 +60,7 @@ export function AppProviders() {
         conversations: [['conversations'], ['messages']],
         notifications: [['notifications']],
         profile: [['client-profile'], ['ai-billing']],
+        'ai-billing': [['ai-billing'], ['plus-subscription'], ['plus-plan']],
       };
       (keys[resource] ?? []).forEach(queryKey => {
         void queryClient.invalidateQueries({queryKey});
@@ -111,6 +113,7 @@ export function AppProviders() {
           <AppNavigator />
         </AppErrorBoundary>
         <Toast />
+        <ConfirmDialog />
       </QueryClientProvider>
     </SafeAreaProvider>
   );

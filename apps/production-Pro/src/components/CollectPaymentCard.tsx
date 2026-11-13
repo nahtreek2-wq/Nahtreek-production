@@ -11,7 +11,7 @@ import {
 import {ProLoader} from './ProLoader';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {ProIconChip} from './ProIconChip';
+import {ProIcon} from './ProIcon';
 import {api} from '../services/apiClient';
 import {useProToast} from '../stores/proToast';
 import {PrimaryButton} from '../components/PrimaryButton';
@@ -197,7 +197,7 @@ export function CollectPaymentCard({
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <ProIconChip name="hand-coin" size={50} iconSize={27} />
+        <ProIcon name="hand-coin" size={50} iconSize={27} />
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Payment for this job</Text>
           <Text style={styles.hint}>Cash or UPI collected at the customer&apos;s home</Text>
@@ -381,7 +381,7 @@ function RecordedState({
     const settled = view.status === 'SETTLED';
     return (
       <View style={styles.stateRow}>
-        <ProIconChip name={settled ? 'check-circle' : 'hand-coin'} tone={settled ? 'green' : 'navy'} size={46} iconSize={25} />
+        <ProIcon name={settled ? 'check-circle' : 'hand-coin'} tone={settled ? 'green' : 'navy'} size={46} iconSize={25} />
         <View style={styles.gapFlex}>
           <Text style={styles.body}>
             {settled
@@ -406,7 +406,7 @@ function RecordedState({
   if (view.status === 'RELEASED') {
     return (
       <View style={styles.stateRow}>
-        <ProIconChip name="bank-check" tone="green" size={46} iconSize={25} />
+        <ProIcon name="bank-check" tone="green" size={46} iconSize={25} />
         <Text style={[styles.body, styles.gapFlex]}>
           Paid online {rupees(view.amountPaisa)} — your{' '}
           {rupees(view.professionalAmountPaisa)} share was released to your
@@ -418,7 +418,7 @@ function RecordedState({
   if (view.status === 'DISPUTED') {
     return (
       <View style={styles.stateRow}>
-        <ProIconChip name="magnify" tone="red" size={46} iconSize={25} />
+        <ProIcon name="magnify" tone="red" size={46} iconSize={25} />
         <Text style={[styles.body, styles.gapFlex]}>
           Paid online {rupees(view.amountPaisa)} — under review. The amount stays
           frozen until support resolves the customer&apos;s report.
@@ -430,7 +430,7 @@ function RecordedState({
     const pending = view.status === 'REFUND_PENDING';
     return (
       <View style={styles.stateRow}>
-        <ProIconChip name="cash-refund" size={46} iconSize={25} />
+        <ProIcon name="cash-refund" size={46} iconSize={25} />
         <Text style={[styles.body, styles.gapFlex]}>
           Paid online {rupees(view.amountPaisa)} —{' '}
           {pending ? 'refund in progress.' : 'refunded in full to the customer.'}{' '}
@@ -441,7 +441,7 @@ function RecordedState({
   }
   return (
     <View style={styles.stateRow}>
-      <ProIconChip name="credit-card-check" size={46} iconSize={25} />
+      <ProIcon name="credit-card-check" size={46} iconSize={25} />
       <Text style={[styles.body, styles.gapFlex]}>
         Paid online {rupees(view.amountPaisa)} — your{' '}
         {rupees(view.professionalAmountPaisa)} share releases after review.

@@ -70,7 +70,7 @@ export function NotificationsScreen() {
     initialPageParam: 1,
     queryFn: ({pageParam}) => api.get<NotificationPage>(`/notifications?limit=50&page=${pageParam}`),
     getNextPageParam: lastPage => nextPage(lastPage.meta),
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
   const refresh = () =>

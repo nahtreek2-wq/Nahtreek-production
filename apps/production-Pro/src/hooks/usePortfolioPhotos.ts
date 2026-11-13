@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {Alert} from 'react-native';
+import {confirmDialog} from '../stores/confirm';
 import {launchImageLibrary} from 'react-native-image-picker';
 import {api} from '../services/apiClient';
 import {useProToast} from '../stores/proToast';
@@ -54,22 +54,17 @@ export function usePortfolioPhotos(refresh: () => Promise<unknown>) {
   }
 
   function removePhoto(id: string, title: string) {
-    Alert.alert('Remove work photo?', `"${title}" will no longer appear on your public profile.`, [
-      {text: 'Cancel', style: 'cancel'},
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.delete(`/professionals/me/portfolio/${id}`);
-            await refresh();
-            toast('Photo removed.', 'success');
-          } catch (error) {
-            setUploadError(error instanceof Error ? error.message : 'Could not remove this photo.');
-          }
-        },
-      },
-    ]);
+    void confirmDialog({title: 'Remove work photo?', message: `"${title}" will no longer appear on your public profile.`,
+      confirmLabel: 'Remove', cancelLabel: 'Cancel', destructive: true}).then(async ok => {
+      if (!ok) return;
+      try {
+        await api.delete(`/professionals/me/portfolio/${id}`);
+        await refresh();
+        toast('Photo removed.', 'success');
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : 'Could not remove this photo.');
+      }
+    });
   }
 
   return {photoTitle, setPhotoTitle, uploading, uploadError, addWorkPhoto, removePhoto};

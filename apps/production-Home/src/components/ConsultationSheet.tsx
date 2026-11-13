@@ -181,7 +181,7 @@ export function ConsultationSheet({
       }}>
       {planPrefill ? (
         <View style={styles.planBanner}>
-          <Icon name={ICONS.sparkles} size={16} color={ClientColors.accentText} />
+          <Icon name={ICONS.sparkles} size={16} color={Colors.navyDeep} />
           <Text style={styles.planBannerText} numberOfLines={2}>
             From your AI plan: {planPrefill.title}
           </Text>
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 8,
   },
-  planBannerText: {...Typography.caption, color: ClientColors.accentText, fontWeight: '700', flex: 1},
+  planBannerText: {...Typography.caption, color: Colors.navyDeep, fontWeight: '700', flex: 1},
   progressHeader: {
     flexDirection: 'row',
     alignItems: 'center',

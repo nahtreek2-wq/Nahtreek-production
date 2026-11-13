@@ -3,13 +3,14 @@ import {
   View,
   Text,
   ScrollView,
+  RefreshControl,
   TouchableOpacity,
   StyleSheet,
   TextInput,
 } from 'react-native';
 import {launchImageLibrary} from 'react-native-image-picker';
 import {useQueryClient} from '@tanstack/react-query';
-import {useNavigation} from '@react-navigation/native';
+import {useIsFocused, useNavigation} from '@react-navigation/native';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -239,10 +240,11 @@ export function ProfileScreen() {
   };
 
   const [aiBilling, setAiBilling] = useState<AiSubscriptionView | null>(null);
+  const profileFocused = useIsFocused();
   useEffect(() => {
-    if (!isApiConfigured) return;
+    if (!isApiConfigured || !profileFocused) return;
     fetchAiSubscription().then(setAiBilling).catch(() => undefined);
-  }, []);
+  }, [profileFocused]);
 
   const groups: {title: string; rows: Row[]}[] = [
     {
@@ -250,9 +252,9 @@ export function ProfileScreen() {
       rows: [
         {
           icon: ICONS.ai,
-          label: 'NAHTREEK AI Pro',
+          label: 'NAHTREEK Plus',
           value: aiBilling?.effective ? 'Active' : aiBilling ? inrMonth(aiBilling.feePaisa) : 'View plans',
-          onPress: () => navigation.navigate('AiPlanner'),
+          onPress: () => navigation.navigate('Plus'),
         },
         {
           icon: ICONS.location,
@@ -265,6 +267,12 @@ export function ProfileScreen() {
           label: 'Personal details',
           value: 'Edit',
           onPress: openEdit,
+        },
+        {
+          icon: ICONS.loans,
+          label: 'Home Loans',
+          value: 'Callback',
+          onPress: () => navigation.navigate('Loan'),
         },
       ],
     },
@@ -332,7 +340,18 @@ export function ProfileScreen() {
     <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{paddingBottom: tabBarHeight + 24}}>
+        contentContainerStyle={{paddingBottom: tabBarHeight + 24}}
+        refreshControl={
+          <RefreshControl
+            refreshing={clientProfile.isRefetching}
+            onRefresh={() => {
+              void clientProfile.refetch();
+              if (isApiConfigured) fetchAiSubscription().then(setAiBilling).catch(() => undefined);
+            }}
+            tintColor={Colors.navyDeep}
+            colors={[Colors.navyDeep]}
+          />
+        }>
         <View style={[styles.header, {paddingTop: insets.top + Spacing.md}]}>
           <View style={styles.headerTopRow}>
             <View style={styles.profileHero}>
@@ -344,7 +363,7 @@ export function ProfileScreen() {
                 style={styles.avatarAction}>
                 <Avatar name={profileName} size={76} light uri={profileAvatar} />
                 <View style={styles.avatarCamera}>
-                  <Icon name={ICONS.camera} size={13} color={ClientColors.onAccent} />
+                  <Icon name={ICONS.camera} size={13} color={ClientColors.white} />
                 </View>
               </TouchableOpacity>
               <View style={styles.headerMeta}>
@@ -571,7 +590,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avatarAction: {width: 76, height: 76, borderRadius: 38},
-  avatarCamera: {position: 'absolute', right: 0, bottom: 0, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: ClientColors.accent, borderWidth: 2, borderColor: Colors.navyDeep},
+  avatarCamera: {position: 'absolute', right: 0, bottom: 0, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: ClientColors.primaryNavy, borderWidth: 2, borderColor: Colors.offWhite},
   name: {
     ...Typography.h1,
     color: Colors.white,

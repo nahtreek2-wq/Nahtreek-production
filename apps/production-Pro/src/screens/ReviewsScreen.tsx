@@ -1,5 +1,5 @@
 import React from 'react';
-import {Animated, StyleSheet, Text, View} from 'react-native';
+import {Animated, RefreshControl, StyleSheet, Text, View} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
 import {useQuery} from '@tanstack/react-query';
@@ -60,14 +60,22 @@ export function ReviewsScreen() {
         </View>
       ) : null}
       {query.isSuccess ? (
-        <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} contentContainerStyle={styles.content}>
+        <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={query.isRefetching}
+              onRefresh={() => void query.refetch()}
+              tintColor={Colors.navyDeep}
+              colors={[Colors.navyDeep]}
+            />
+          }>
           <MotionReveal>
             <View style={styles.summary}>
               <View style={styles.scoreBlock}>
                 <Text style={styles.score}>{profile?.totalReviewsCount ? profile.averageRating.toFixed(1) : '—'}</Text>
                 <View style={styles.stars} accessibilityLabel={`${profile?.totalReviewsCount ? profile.averageRating.toFixed(1) : 'No'} out of 5 stars`}>
                   {[1, 2, 3, 4, 5].map(star => (
-                    <MaterialCommunityIcons key={star} name={averageRating >= star ? 'star' : 'star-outline'} size={18} color={Colors.amberMuted} />
+                    <MaterialCommunityIcons key={star} name={averageRating >= star ? 'star' : 'star-outline'} size={18} color={Colors.navyDeep} />
                   ))}
                 </View>
                 <Text style={styles.scoreCaption}>{profile?.totalReviewsCount ?? 0} client reviews</Text>
@@ -77,7 +85,7 @@ export function ReviewsScreen() {
                 {counts.map(item => (
                   <View key={item.value} style={styles.distributionRow}>
                     <Text style={styles.distributionLabel}>{item.value}</Text>
-                    <MaterialCommunityIcons name="star" size={13} color={Colors.amberMuted} />
+                    <MaterialCommunityIcons name="star" size={13} color={Colors.navyDeep} />
                     <View style={styles.barTrack}>
                       <View style={[styles.barFill, {width: `${(item.count / maxCount) * 100}%`}]} />
                     </View>
@@ -104,7 +112,7 @@ export function ReviewsScreen() {
                     <Text style={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric'})}</Text>
                   </View>
                   <View style={styles.ratingPill}>
-                    <MaterialCommunityIcons name="star" size={15} color={Colors.amberMuted} />
+                    <MaterialCommunityIcons name="star" size={15} color={Colors.navyDeep} />
                     <Text style={styles.ratingValue}>{review.rating}.0</Text>
                   </View>
                 </View>
@@ -135,7 +143,7 @@ const styles = StyleSheet.create({
   distributionRow: {flexDirection: 'row', alignItems: 'center', gap: 3},
   distributionLabel: {width: 12, color: Colors.slate700, fontSize: 12, textAlign: 'right'},
   barTrack: {height: 7, flex: 1, borderRadius: 4, backgroundColor: Colors.slate100, overflow: 'hidden', marginHorizontal: 4},
-  barFill: {height: '100%', borderRadius: 4, backgroundColor: Colors.amber},
+  barFill: {height: '100%', borderRadius: 4, backgroundColor: Colors.navyDeep},
   distributionCount: {width: 20, color: Colors.slate500, fontSize: 11, textAlign: 'right'},
   workNote: {minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, borderRadius: 14, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.slate200},
   workNoteText: {fontSize: 14, fontWeight: '700', color: Colors.navyDeep},

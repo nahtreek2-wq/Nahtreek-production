@@ -53,9 +53,9 @@ export function ScreenHeader({title, subtitle, avatarUrl, onAvatarPress, onBack,
                   hitSlop={10}
                   onPress={onCityPress}
                   style={styles.cityRow}>
-                  {!compact ? <MaterialCommunityIcons name="map-marker" size={14} color={ProColors.accent} /> : null}
+                  {!compact ? <MaterialCommunityIcons name="map-marker" size={14} color={Colors.white} /> : null}
                   <Text numberOfLines={1} style={[styles.city, compact && styles.compactCity]}>{city || 'Set work area'}</Text>
-                  <MaterialCommunityIcons name="chevron-down" size={compact ? 12 : 14} color={ProColors.accent} />
+                  <MaterialCommunityIcons name="chevron-down" size={compact ? 12 : 14} color={Colors.white} />
                 </Pressable>
               ) : null}
             </View>
@@ -101,7 +101,7 @@ export function ScreenHeader({title, subtitle, avatarUrl, onAvatarPress, onBack,
 
 const styles = StyleSheet.create({
   homeRoot: {
-    paddingBottom: ProSpacing.lg,
+    paddingBottom: ProSpacing.md,
   },
   homeBrandLine: {minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: ProSpacing.sm},
   homeLogoFrame: {width: 46, height: 46, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', alignSelf: 'center', flexShrink: 0},

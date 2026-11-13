@@ -1,9 +1,9 @@
 import React, {useEffect, useState} from 'react';
 import {
-  Alert,
   Animated,
   Image,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +18,7 @@ import {ScrollMotionBar, useScrollMotion} from '../components/ScrollMotionBar';
 import {useProfessionalDraft} from '../stores/professional';
 import {useSessionStore} from '../stores/session';
 import {useProToast} from '../stores/proToast';
+import {confirmDialog} from '../stores/confirm';
 import {api} from '../services/apiClient';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -26,7 +27,7 @@ import type {ProfileStackParamList} from '../navigation/types';
 import {mediaUrl, saveProfessionalPhoto} from '../services/media';
 import {useQueryClient} from '@tanstack/react-query';
 import {MotionReveal} from '../components/MotionReveal';
-import {ProIconChip, type IconChipTone} from '../components/ProIconChip';
+import {ProIcon, type IconTone} from '../components/ProIcon';
 import {ProLoader} from '../components/ProLoader';
 import {WorkVisual} from '../components/WorkVisual';
 import {ProColors, ProSpacing, ProType} from '../theme/professionalTheme';
@@ -57,7 +58,7 @@ type ProfileActionRowProps = {
   title: string;
   description: string;
   last?: boolean;
-  tone?: IconChipTone;
+  tone?: IconTone;
   onPress: () => void;
 };
 
@@ -81,7 +82,7 @@ function ProfileActionRow({
         last && styles.actionRowLast,
         pressed && (reducedMotion ? styles.rowPressed : styles.actionRowPressed),
       ]}>
-      <ProIconChip name={icon} tone={tone} size={44} iconSize={23} />
+      <ProIcon name={icon} tone={tone} size={44} iconSize={23} />
       <View style={styles.flex}>
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowText}>{description}</Text>
@@ -134,26 +135,25 @@ export function ProfileScreen() {
   };
   const deleteAccount = () => {
     if (!canDelete) return;
-    Alert.alert('Delete account?', 'This signs you out on all devices and closes your NAHTREEK account. Settle any commission dues first — deletion is blocked while money is owed.', [
-      {text: 'Keep account', style: 'cancel'},
-      {text: 'Delete', style: 'destructive', onPress: () => {
-        setDeleting(true);
-        setDeleteError('');
-        api.delete<{deleted: boolean}>('/auth/me', {code: deleteCode})
-          .then(() => clear())
-          .catch(error => {
-            setDeleting(false);
-            setDeleteError(error instanceof Error ? error.message : 'Could not delete the account.');
-          });
-      }},
-    ]);
+    void confirmDialog({title: 'Delete account?', message: 'This signs you out on all devices and closes your NAHTREEK account. Settle any commission dues first — deletion is blocked while money is owed.',
+      confirmLabel: 'Delete', cancelLabel: 'Keep account', destructive: true}).then(ok => {
+      if (!ok) return;
+      setDeleting(true);
+      setDeleteError('');
+      api.delete<{deleted: boolean}>('/auth/me', {code: deleteCode})
+        .then(() => clear())
+        .catch(error => {
+          setDeleting(false);
+          setDeleteError(error instanceof Error ? error.message : 'Could not delete the account.');
+        });
+    });
   };
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const profile = useQuery({
     queryKey: ['professional-profile'],
     queryFn: () => api.get<ProfileResponse>('/professionals/me'),
-    refetchInterval: 30000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
   });
   const role = (
@@ -273,7 +273,15 @@ export function ProfileScreen() {
       <Animated.ScrollView
         onScroll={scrollMotion.onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={[styles.content, {paddingBottom: tabBarHeight + ProSpacing.xxl}]}>
+        contentContainerStyle={[styles.content, {paddingBottom: tabBarHeight + ProSpacing.xxl}]}
+        refreshControl={
+          <RefreshControl
+            refreshing={profile.isRefetching}
+            onRefresh={() => void profile.refetch()}
+            tintColor={ProColors.primary}
+            colors={[ProColors.primary]}
+          />
+        }>
         <MotionReveal>
           <View style={styles.identity}>
             <View style={styles.identityTop}>
@@ -307,7 +315,7 @@ export function ProfileScreen() {
                     <MaterialCommunityIcons
                       name="camera"
                       size={15}
-                      color={ProColors.deep}
+                      color={ProColors.surface}
                     />
                   </View>
                 )}
@@ -529,7 +537,7 @@ export function ProfileScreen() {
             />
             <ProfileActionRow
               icon="crown-outline"
-              tone="amber"
+              tone="navy"
               title="Pro membership"
               description="Lower commission, top discovery, member badge"
               onPress={() => navigation.navigate('Membership')}
@@ -630,7 +638,7 @@ export function ProfileScreen() {
           disabled={signingOut}
           onPress={signOut}
           style={({pressed}) => [styles.signOut, pressed && styles.rowPressed]}>
-          <ProIconChip name="logout-variant" tone="red" size={38} iconSize={20} />
+          <ProIcon name="logout-variant" tone="red" size={38} iconSize={20} />
           <Text style={styles.signOutText}>
             {signingOut ? 'Signing out…' : 'Sign out'}
           </Text>
@@ -650,7 +658,7 @@ const styles = StyleSheet.create({
   avatarPressed: {opacity: 0.82, transform: [{scale: 0.96}]},
   avatarInitial: {fontSize: 28, lineHeight: 34, fontWeight: '700', color: Colors.white},
   avatarImage: {width: '100%', height: '100%', borderRadius: 36},
-  camera: {position: 'absolute', right: -2, bottom: -2, width: 25, height: 25, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: ProColors.accent, borderWidth: 2, borderColor: ProColors.surface},
+  camera: {position: 'absolute', right: -2, bottom: -2, width: 25, height: 25, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: ProColors.primary, borderWidth: 2, borderColor: ProColors.surface},
   photoBusy: {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(17, 31, 53,0.65)'},
   name: {...ProType.section, color: ProColors.text},
   identityMeta: {flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0},

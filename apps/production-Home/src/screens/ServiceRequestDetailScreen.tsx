@@ -3,7 +3,7 @@ import {JourneyPanel} from '../../../../packages/mobile-booking/JourneyPanel';
 import {openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
 import type {CreatedOrder, PaymentStatusView} from '../../../../packages/mobile-booking/PaymentSection';
 import {api} from '../services/apiClient';
-import {Alert, ScrollView, StyleSheet, Text, TextInput, Pressable, View} from 'react-native';
+import {RefreshControl, ScrollView, StyleSheet, Text, TextInput, Pressable, View} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {AppHeader, Avatar, Button, StatusBadge} from '../components/ui';
@@ -13,6 +13,7 @@ import {
   useCancelServiceRequest,
 } from '../services/platformQueries';
 import {useToast} from '../stores/toast';
+import {confirmDialog} from '../stores/confirm';
 import {cleanReviewComment} from '../utils/format';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {fetchAiSubscription} from '../services/aiBilling';
@@ -94,7 +95,15 @@ export function ServiceRequestDetailScreen() {
   return (
     <KeyboardAwareView style={s.root}>
       <AppHeader title="Service request" onBack={() => nav.goBack()} />
-      <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={query.isRefetching}
+            onRefresh={() => void query.refetch()}
+            tintColor={Colors.navyDeep}
+            colors={[Colors.navyDeep]}
+          />
+        }>
         {item ? (
           <View style={[s.card, styles.detailCard]}>
             <Text style={s.title}>{item.category.title}</Text>
@@ -198,13 +207,14 @@ export function ServiceRequestDetailScreen() {
                 label="Cancel request"
                 variant="secondary"
                 loading={cancel.isPending}
-                onPress={() => Alert.alert('Cancel this request?', `${item.provider.fullName} will be notified.`, [
-                  {text: 'Keep request', style: 'cancel'},
-                  {text: 'Cancel request', style: 'destructive', onPress: () => cancel.mutate(item.id, {
+                onPress={() => void confirmDialog({title: 'Cancel this request?', message: `${item.provider.fullName} will be notified.`,
+                  confirmLabel: 'Cancel request', cancelLabel: 'Keep request', destructive: true}).then(ok => {
+                  if (!ok) return;
+                  cancel.mutate(item.id, {
                     onSuccess: () => toast('Request cancelled', 'success'),
                     onError: error => toast(error.message, 'error'),
-                  })},
-                ])}
+                  });
+                })}
               />
             ) : null}
           </View>
@@ -232,7 +242,7 @@ const styles = StyleSheet.create({
   ratingRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center'},
   ratingButton: {minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center'},
   ratingStar: {fontSize: 32, color: Colors.slate300},
-  ratingStarSelected: {color: Colors.amberMuted},
+  ratingStarSelected: {color: Colors.navyDeep},
   reviewInput: {minHeight: 92, padding: 12, borderWidth: 1, borderColor: Colors.slate200, borderRadius: 12, color: Colors.slate900, textAlignVertical: 'top'},
   reviewSummary: {fontSize: 15, lineHeight: 22, color: Colors.slate800},
   detailCard: {borderWidth: 1, borderColor: Colors.slate100},

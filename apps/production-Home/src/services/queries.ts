@@ -286,7 +286,8 @@ export function useConversationsList() {
 
 export function useMessagesList(conversationId: string) {
   return useQuery<MessageDto[]>({
-    refetchInterval: 5000,
+    // The chat socket pushes new messages live; polling is only a fallback.
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     queryKey: queryKeys.messages(conversationId),
     queryFn: () =>
@@ -642,7 +643,8 @@ export type RequestDetail = EngineerRequestDto & {
 export function useRequestDetail(id: string) {
   const q = useQuery({
     queryKey: ['request-detail', id],
-    refetchInterval: 15000,
+    // Status transitions arrive over the socket; polling is only a fallback.
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     queryFn: () =>
       readWithOfflineFallback(
@@ -672,7 +674,7 @@ function usePagedList<T>(
   const q = useInfiniteQuery({
     queryKey: key,
     enabled: path.startsWith('/discovery/') || signedIn,
-    refetchInterval: path.startsWith('/discovery/') ? 30_000 : path === '/conversations' || path === '/engineer-requests' || path === '/notifications' ? 15000 : false,
+    refetchInterval: path.startsWith('/discovery/') ? 60_000 : path === '/conversations' || path === '/engineer-requests' || path === '/notifications' ? 30_000 : false,
     refetchIntervalInBackground: false,
     refetchOnMount: path.startsWith('/discovery/') ? 'always' : undefined,
     initialPageParam: 1,

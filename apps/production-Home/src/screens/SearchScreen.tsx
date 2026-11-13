@@ -39,6 +39,7 @@ import {portraitFor} from '../assets/imagery';
 import type {RootStackParamList} from '../navigation/types';
 import type {EngineerProfileDto} from '@nahtreek/types';
 import {useCity} from '../stores/city';
+import {LIST_PERF} from '../../../../packages/mobile-ui/listPerformance';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SearchRoute = RouteProp<RootStackParamList, 'Search'>;
@@ -182,6 +183,7 @@ export function SearchScreen() {
           </View>
         ) : results.length ? (
           <FlatList
+            {...LIST_PERF}
             data={results}
             keyExtractor={item => item.id}
             renderItem={renderResult}
@@ -206,6 +208,7 @@ export function SearchScreen() {
         )
       ) : (
         <FlatList
+          {...LIST_PERF}
           data={[]}
           renderItem={() => null}
           contentContainerStyle={styles.discovery}
@@ -272,7 +275,7 @@ export function SearchScreen() {
                   <Icon
                     name={ICONS.engineers}
                     size={20}
-                    color={ClientColors.accentIcon}
+                    color={Colors.navyDeep}
                   />
                 </View>
                 <View style={styles.helperCopy}>

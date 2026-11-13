@@ -183,7 +183,7 @@ export function RequestsScreen() {
   const requests = useInfiniteQuery({
     queryKey: ['professional-requests', hasEngineer, hasService],
     initialPageParam: 1,
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
     queryFn: async ({pageParam}) => {
       const [engineering, services] = await Promise.all([
         hasEngineer

@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Image, Pressable, ScrollView, Share, StyleSheet, Text, View} from 'react-native';
+import {Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useNavigation} from '@react-navigation/native';
 import {useQuery} from '@tanstack/react-query';
@@ -52,7 +52,15 @@ export function MyQrScreen({load = () => api.get<ReviewQrView>('/professionals/m
     {query.isPending && !cached ? <ScreenLoading label="Preparing your QR…" /> : query.isError || !view ? (
       <EmptyState title="Could not load your QR" message="Check your connection and try again." actionLabel={query.isFetching ? 'Checking…' : 'Try again'} onAction={() => void query.refetch()} />
     ) : (
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body}
+        refreshControl={
+          <RefreshControl
+            refreshing={query.isRefetching}
+            onRefresh={() => void query.refetch()}
+            tintColor={ProColors.primary}
+            colors={[ProColors.primary]}
+          />
+        }>
         {showingCached ? (
           <View style={styles.staleBanner}>
             <MaterialCommunityIcons name="cloud-off-outline" size={16} color={ProColors.warning} />

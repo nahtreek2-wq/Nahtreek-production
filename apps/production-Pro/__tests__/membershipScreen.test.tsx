@@ -1,11 +1,20 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import {Alert, Text} from 'react-native';
+import {Text} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {MembershipScreen} from '../src/screens/MembershipScreen';
 import type {MembershipHooks, MembershipView} from '../src/screens/MembershipScreen';
 import {CheckoutCancelledError} from '../../../packages/mobile-booking/razorpayGateway';
+import {__resetConfirmForTests, useConfirmStore} from '../src/stores/confirm';
+
+beforeEach(__resetConfirmForTests);
+
+// The branded dialog lives outside the screen: tests answer it through the store.
+async function answerConfirm(value: boolean) {
+  await renderer.act(async () => { useConfirmStore.getState().answer(value); });
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+}
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
@@ -106,20 +115,14 @@ it('shows active benefits and cancels with confirmation', async () => {
     cancel: jest.fn().mockResolvedValue({...active, status: 'CANCELLED', cancelAtPeriodEnd: true}),
     checkout: jest.fn(),
   };
-  const alert = jest.spyOn(Alert, 'alert').mockImplementation(((...args: any[]) => {
-    const buttons = args[2] as {text: string; onPress?: () => void}[];
-    buttons.find(button => button.text === 'Cancel membership')?.onPress?.();
-  }) as any);
-  try {
-    const t = setup(hooks);
-    await t.render();
-    expect(t.texts()).toContain('PRO MEMBER');
-    await t.press('Cancel membership');
-    expect(hooks.cancel).toHaveBeenCalledTimes(1);
-    t.done();
-  } finally {
-    alert.mockRestore();
-  }
+  const t = setup(hooks);
+  await t.render();
+  expect(t.texts()).toContain('PRO MEMBER');
+  await t.press('Cancel membership');
+  expect(useConfirmStore.getState().current).toMatchObject({title: 'Cancel membership?'});
+  await answerConfirm(true);
+  expect(hooks.cancel).toHaveBeenCalledTimes(1);
+  t.done();
 });
 
 it('proves lifetime savings to active members', async () => {
@@ -158,20 +161,14 @@ it('cancels a stuck pending checkout', async () => {
     cancel: jest.fn().mockResolvedValue(none),
     checkout: jest.fn(),
   };
-  const alert = jest.spyOn(Alert, 'alert').mockImplementation(((...args: any[]) => {
-    const buttons = args[2] as {text: string; onPress?: () => void}[];
-    buttons.find(button => button.text === 'Cancel checkout')?.onPress?.();
-  }) as any);
-  try {
-    const t = setup(hooks);
-    await t.render();
-    expect(t.texts()).toContain('Complete authorization');
-    await t.press('Cancel this checkout');
-    expect(hooks.cancel).toHaveBeenCalledTimes(1);
-    t.done();
-  } finally {
-    alert.mockRestore();
-  }
+  const t = setup(hooks);
+  await t.render();
+  expect(t.texts()).toContain('Complete authorization');
+  await t.press('Cancel this checkout');
+  expect(useConfirmStore.getState().current).toMatchObject({title: 'Cancel this checkout?'});
+  await answerConfirm(true);
+  expect(hooks.cancel).toHaveBeenCalledTimes(1);
+  t.done();
 });
 
 it('skips checkout when the server replays an effective membership', async () => {

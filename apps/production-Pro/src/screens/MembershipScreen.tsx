@@ -1,15 +1,16 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {ProIconChip, type IconChipTone} from '../components/ProIconChip';
+import {ProIcon, type IconTone} from '../components/ProIcon';
 import {ScreenHeader} from '../components/ScreenHeader';
 import {ProLoader} from '../components/ProLoader';
 import {ScreenLoading} from '../components/ScreenLoading';
 import {EmptyState} from '../components/EmptyState';
 import {api} from '../services/apiClient';
 import {useProToast} from '../stores/proToast';
+import {confirmDialog} from '../stores/confirm';
 import {ProColors, ProRadius, ProSpacing, ProType} from '../theme/professionalTheme';
 import {CheckoutCancelledError, GatewayUnavailableError, checkoutContact, checkoutEmail, openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
 import type {CheckoutInput, CheckoutResult} from '../../../../packages/mobile-booking/razorpayGateway';
@@ -45,17 +46,17 @@ const pct = (bps: number) => `${bps / 100}%`;
 
 // Every figure below renders from server terms — the plan price, rates and
 // dues room change on the backend without an app release.
-function benefitsFor(terms: MembershipTerms): {title: string; body: string; icon: string; tone: IconChipTone}[] {
+function benefitsFor(terms: MembershipTerms): {title: string; body: string; icon: string; tone: IconTone}[] {
   const free = terms.freeJobsPerMonth;
   return [
     {title: free === 1 ? 'First job every month at 0% commission' : `${free} jobs every month at 0% commission`,
-      body: 'Your first booking each calendar month keeps the full amount.', icon: 'gift', tone: 'amber'},
+      body: 'Your first booking each calendar month keeps the full amount.', icon: 'gift', tone: 'navy'},
     {title: `${pct(terms.memberFeeBps)} commission, not ${pct(terms.standardFeeBps)}`,
       body: 'Keep more of every other job while your membership is active.', icon: 'percent', tone: 'green'},
     {title: `${inr(terms.memberDuesBlockPaisa)} dues room, not ${inr(terms.standardDuesBlockPaisa)}`,
       body: `New jobs pause only after ${inr(terms.memberDuesBlockPaisa)} unsettled instead of ${inr(terms.standardDuesBlockPaisa)}.`, icon: 'cash-multiple', tone: 'blue'},
     {title: 'Top of discovery', body: 'Members rank above non-members in client search results.', icon: 'arrow-up-bold-circle', tone: 'navy'},
-    {title: 'Pro member badge', body: 'A PRO badge on your profile and discovery cards, next to the Verified identity badge.', icon: 'medal', tone: 'amber'},
+    {title: 'Pro member badge', body: 'A PRO badge on your profile and discovery cards, next to the Verified identity badge.', icon: 'medal', tone: 'navy'},
   ];
 }
 
@@ -250,11 +251,15 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
     },
     onError: error => setFailed(messageFor(error))});
 
-  const startCancel = (pending: boolean) => Alert.alert(pending ? 'Cancel this checkout?' : 'Cancel membership?',
-    pending ? 'The started payment will be stopped. Nothing is charged until the Razorpay authorization completes.'
-      : 'Your benefits continue until the paid period ends. You can resubscribe anytime.',
-    pending ? [{text: 'Keep checkout', style: 'cancel'}, {text: 'Cancel checkout', style: 'destructive', onPress: () => cancel.mutate()}]
-      : [{text: 'Keep membership', style: 'cancel'}, {text: 'Cancel membership', style: 'destructive', onPress: () => cancel.mutate()}]);
+  const startCancel = (pending: boolean) => {
+    void confirmDialog({title: pending ? 'Cancel this checkout?' : 'Cancel membership?',
+      message: pending ? 'The started payment will be stopped. Nothing is charged until the Razorpay authorization completes.'
+        : 'Your benefits continue until the paid period ends. You can resubscribe anytime.',
+      confirmLabel: pending ? 'Cancel checkout' : 'Cancel membership',
+      cancelLabel: pending ? 'Keep checkout' : 'Keep membership', destructive: true}).then(ok => {
+      if (ok) cancel.mutate();
+    });
+  };
 
   // Last-resort recovery for a lost checkout result: if the user is back on
   // this screen with the subscribe promise still pending, the result never
@@ -292,7 +297,15 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
 
   return <View style={styles.root}>
     <ScreenHeader title="Pro membership" subtitle="Lower fees and higher visibility" onBack={() => navigation.goBack()} />
-    <ScrollView contentContainerStyle={styles.body}>
+    <ScrollView contentContainerStyle={styles.body}
+      refreshControl={
+        <RefreshControl
+          refreshing={query.isRefetching}
+          onRefresh={() => void refresh()}
+          tintColor={ProColors.primary}
+          colors={[ProColors.primary]}
+        />
+      }>
       {query.isPending ? <ScreenLoading label="Loading your membership…" /> : null}
       {query.isError ? <>
         <EmptyState icon="cloud-off-outline" title="Membership could not load" message="Check your connection and try again." />
@@ -303,12 +316,12 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
       {view && !view.effective ? <View style={styles.card}>
         <Image source={require('../assets/professionals/engineer-work-banner-v1.jpg')} style={styles.heroImage} resizeMode="cover" accessibilityLabel="Professional at work on a home site" />
         <View style={styles.heroRow}>
-          <ProIconChip name="crown" tone="amber" size={58} iconSize={30} />
+          <ProIcon name="crown" tone="navy" size={58} iconSize={30} />
           <Text style={styles.price}>{inr(view.feePaisa)}<Text style={styles.perMonth}>/month</Text></Text>
         </View>
         {view.status === 'PAST_DUE' ? <Text style={styles.warning}>Your last membership payment failed. Subscribe again to restore benefits with a fresh month.</Text> : null}
         {benefitsFor(terms).map(benefit => <View key={benefit.title} style={styles.benefit}>
-          <ProIconChip name={benefit.icon} tone={benefit.tone} size={44} iconSize={23} />
+          <ProIcon name={benefit.icon} tone={benefit.tone} size={44} iconSize={23} />
           <View style={styles.benefitCopy}>
             <Text style={styles.benefitTitle}>{benefit.title}</Text>
             <Text style={styles.text}>{benefit.body}</Text>
@@ -347,7 +360,7 @@ export function MembershipScreen({hooks = defaultHooks}: {hooks?: MembershipHook
       {view?.effective ? <View style={styles.card}>
         <View style={styles.activeBadge}><Text style={styles.activeBadgeText}>PRO MEMBER</Text></View>
         <View style={styles.heroRow}>
-          <ProIconChip name="check-decagram" tone="green" size={52} iconSize={28} />
+          <ProIcon name="check-decagram" tone="green" size={52} iconSize={28} />
           <Text style={[styles.heading, styles.flex]}>Your Pro benefits are active</Text>
         </View>
         <Text style={styles.text}>First job each month free, {pct(terms.memberFeeBps)} commission after that, {inr(terms.memberDuesBlockPaisa)} dues room, top discovery placement and the member badge{endDate ? ` through ${endDate}` : ''}.</Text>

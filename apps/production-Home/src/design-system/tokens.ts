@@ -1,9 +1,9 @@
 import {BrandYellow, Colors} from '@nahtreek/design-system';
 
 // Client (Home) accent: the shared BrandYellow ramp (F-202), logo-checked.
-// Yellow is fill-only with navy content (white fails AA on yellow); small
-// text/icons on light surfaces use the dark-yellow variants. Icons and text
-// on navy are white or accent, never boxed. Rating stars stay gold (semantic).
+// Yellow is fill-only on action buttons with navy content (white fails AA on
+// yellow). Icons are plain natural glyphs with no background: navy on light
+// surfaces, white on navy, semantic colors only for status meanings.
 export const ClientColors = {
   primaryNavy: '#111F35',
   deepNavy: '#111F35',

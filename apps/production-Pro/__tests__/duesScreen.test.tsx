@@ -1,11 +1,12 @@
 import React from 'react';
 import renderer from 'react-test-renderer';
-import {Alert, Text} from 'react-native';
+import {Text} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {DuesScreen} from '../src/screens/DuesScreen';
 import type {DuesHooks, DuesView} from '../src/screens/DuesScreen';
 import {CheckoutCancelledError} from '../../../packages/mobile-booking/razorpayGateway';
+import {__resetConfirmForTests, useConfirmStore} from '../src/stores/confirm';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
@@ -13,9 +14,14 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('@react-navigation/bottom-tabs', () => ({
   useBottomTabBarHeight: () => 0,
 }));
-jest.spyOn(Alert, 'alert').mockImplementation(((title: string, message?: string, buttons?: {text: string; onPress?: () => void}[]) => {
-  buttons?.find(b => b.text.startsWith('Pay'))?.onPress?.();
-}) as any);
+
+beforeEach(__resetConfirmForTests);
+
+// The branded dialog lives outside the screen: settle tests answer it here.
+async function answerConfirm(value: boolean) {
+  await renderer.act(async () => { useConfirmStore.getState().answer(value); });
+  await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+}
 
 const terms = {memberFeeBps: 700, standardFeeBps: 1000, memberDuesBlockPaisa: 200000,
   standardDuesBlockPaisa: 50000, freeJobsPerMonth: 1};
@@ -39,10 +45,14 @@ function setup(hooks: DuesHooks) {
   };
   const texts = () => screen.root.findAllByType(Text)
     .map(t => (Array.isArray(t.props.children) ? t.props.children.join('') : (t.props.children ?? '')).toString()).join('\n');
-  const pressPay = async () => {
+  const pressPayRaw = async () => {
     const button = screen.root.findByProps({accessibilityLabel: 'Settle dues'});
     await renderer.act(async () => { button.props.onPress(); });
     await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  };
+  const pressPay = async () => {
+    await pressPayRaw();
+    await answerConfirm(true);
   };
   const press = async (label: string) => {
     const button = screen.root.findByProps({accessibilityLabel: label});
@@ -50,7 +60,7 @@ function setup(hooks: DuesHooks) {
     await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
   };
   const done = () => renderer.act(() => screen.unmount());
-  return {render, texts, pressPay, press, done};
+  return {render, texts, pressPay, pressPayRaw, press, done};
 }
 
 const order = {settlementId: 'stl', keyId: 'k', orderId: 'o', amountPaisa: 25000, currency: 'INR'};
@@ -189,6 +199,8 @@ it('polls verify while Razorpay capture lags instead of failing', async () => {
       screen.root.findByProps({accessibilityLabel: 'Settle dues'}).props.onPress();
     });
     await flush();
+    await renderer.act(async () => { useConfirmStore.getState().answer(true); });
+    await flush();
     const texts = () => screen.root.findAllByType(Text)
       .map(t => (Array.isArray(t.props.children) ? t.props.children.join('') : (t.props.children ?? '')).toString()).join('\n');
     expect(texts()).toContain('Payment received — confirming with Razorpay');
@@ -248,15 +260,13 @@ it('quotes the fresh order total in confirm, not a stale screen total', async ()
   const t = setup(hooks);
   await t.render();
   expect(t.texts()).toContain('Settle ₹250');
-  // The Alert mock is file-scoped: only calls from this test count.
-  const alertsBefore = (Alert.alert as unknown as jest.Mock).mock.calls.length;
-  await t.pressPay();
+  await t.pressPayRaw();
+  const settle = useConfirmStore.getState().current;
+  expect(settle).toMatchObject({title: 'Settle commission dues?'});
+  expect(settle?.message).toContain('₹300');
+  expect(settle?.confirmLabel).toBe('Pay ₹300');
+  await answerConfirm(true);
   await renderer.act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
-  const settle = (Alert.alert as unknown as jest.Mock).mock.calls
-    .slice(alertsBefore)
-    .find(call => call[0] === 'Settle commission dues?');
-  expect(settle[1]).toContain('₹300');
-  expect(settle[2].find((b: {text: string}) => b.text.startsWith('Pay')).text).toBe('Pay ₹300');
   expect(hooks.checkout).toHaveBeenCalledWith(expect.objectContaining({amountPaisa: 30000}));
   expect(t.texts()).toContain('Nothing was charged');
   t.done();

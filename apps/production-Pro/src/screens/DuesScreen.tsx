@@ -1,16 +1,17 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
 import {useBottomTabBarHeight, type BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
 import type {MainTabParamList} from '../navigation/types';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {ProIconChip} from '../components/ProIconChip';
+import {ProIcon} from '../components/ProIcon';
 import {ScreenHeader} from '../components/ScreenHeader';
 import {ScreenLoading} from '../components/ScreenLoading';
 import {EmptyState} from '../components/EmptyState';
 import {api} from '../services/apiClient';
 import {useProToast} from '../stores/proToast';
+import {confirmDialog} from '../stores/confirm';
 import {ProColors, ProRadius, ProSpacing, ProType} from '../theme/professionalTheme';
 import {CheckoutCancelledError, GatewayUnavailableError, checkoutContact, checkoutEmail, openCheckout} from '../../../../packages/mobile-booking/razorpayGateway';
 import type {CheckoutInput, CheckoutResult} from '../../../../packages/mobile-booking/razorpayGateway';
@@ -263,13 +264,13 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
         // An abandoned confirm leaves an ORDER_CREATED settlement behind;
         // the server reuses it when the total still matches, fails it
         // otherwise — cancelling here is always safe.
-        Alert.alert('Settle commission dues?',
-          `${rupees(order.amountPaisa)} will be charged securely to NAHTREEK for your pay-at-home jobs.`,
-          [{text: 'Not now', style: 'cancel'}, {text: `Pay ${rupees(order.amountPaisa)}`, onPress: () => {
-            setCheckoutStalled(false);
-            setCheckoutAttempt(attempt => attempt + 1);
-            pay.mutate(order);
-          }}]);
+        const ok = await confirmDialog({title: 'Settle commission dues?',
+          message: `${rupees(order.amountPaisa)} will be charged securely to NAHTREEK for your pay-at-home jobs.`,
+          confirmLabel: `Pay ${rupees(order.amountPaisa)}`, cancelLabel: 'Not now'});
+        if (!ok) return;
+        setCheckoutStalled(false);
+        setCheckoutAttempt(attempt => attempt + 1);
+        pay.mutate(order);
       } catch (error) {
         setPreparing(false);
         setCancelled(false);
@@ -289,10 +290,18 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
       <EmptyState title="Could not load dues" message="Check your connection and try again." actionLabel={query.isFetching ? 'Checking…' : 'Try again'} onAction={() => void query.refetch()} />
     ) : (
       <>
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body}
+        refreshControl={
+          <RefreshControl
+            refreshing={query.isRefetching}
+            onRefresh={() => void refresh()}
+            tintColor={ProColors.primary}
+            colors={[ProColors.primary]}
+          />
+        }>
         <View style={styles.totalCard}>
           <View style={styles.heroRow}>
-            <ProIconChip name="cash-multiple" size={58} iconSize={30} />
+            <ProIcon name="cash-multiple" size={58} iconSize={30} />
             <View style={styles.heroCopy}>
               <Text style={styles.totalLabel}>Total due</Text>
               <Text style={styles.total}>{rupees(view.duesPaisa)}</Text>
@@ -304,6 +313,9 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
           </View>
           <Text style={styles.hint}>{rupees(view.duesPaisa)} of {rupees(view.blockThresholdPaisa)} limit{view.blocked ? ' — over the limit, new jobs paused' : ' — new jobs pause above the limit'}.</Text>
           <Text style={styles.hint}>{terms.standardFeeBps / 100}% of each pay-at-home job. Pro members pay {terms.memberFeeBps / 100}%, get the first job each month free, and are blocked only above {rupees(terms.memberDuesBlockPaisa)}. You collected the full amount from the customer; this is NAHTREEK&apos;s share.</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="View payout account" onPress={() => (navigation as {navigate: (route: string) => void}).navigate('Payout')} style={styles.savingsLink}>
+            <Text style={styles.savingsLinkText}>Online earnings land in your payout account</Text>
+          </Pressable>
           {view.isMember && (view.memberSavingsPaisa ?? 0) > 0 ? (
             <View style={styles.savings}>
               <Text style={styles.savingsTitle}>Membership saved you {rupees(view.memberSavingsPaisa ?? 0)}</Text>
@@ -322,7 +334,7 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
         </View>
         {view.blocked ? (
           <View accessibilityRole="alert" style={styles.blocked}>
-            <ProIconChip name="pause-octagon" tone="red" size={46} iconSize={26} />
+            <ProIcon name="pause-octagon" tone="red" size={46} iconSize={26} />
             <View style={styles.blockedCopy}>
               <Text style={styles.blockedTitle}>New jobs are paused</Text>
               <Text style={styles.blockedBody}>Dues above {rupees(view.blockThresholdPaisa)} block new accepts. Settle below the limit to unlock Jobs, Time and Chat requests.</Text>
@@ -333,7 +345,7 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
           <EmptyState title="No dues" message="Nothing to settle. Dues appear here after pay-at-home jobs." actionLabel="Browse jobs" onAction={goToJobs} />
         ) : view.jobs.map(job => (
           <View key={job.id} style={styles.job}>
-            <ProIconChip name={job.engineerRequestId ? 'hard-hat' : 'tools'} tone={job.engineerRequestId ? 'navy' : 'blue'} size={46} iconSize={24} />
+            <ProIcon name={job.engineerRequestId ? 'hard-hat' : 'tools'} tone={job.engineerRequestId ? 'navy' : 'blue'} size={46} iconSize={24} />
             <View style={styles.jobCopy}>
               <View style={styles.jobRow}>
                 <Text style={styles.jobAmount}>{rupees(job.platformFeePaisa)}</Text>
@@ -345,7 +357,7 @@ export function DuesScreen({hooks = defaultHooks}: {hooks?: DuesHooks}) {
         ))}
         {(view.penalties ?? []).map(penalty => (
           <View key={penalty.id} style={styles.penalty}>
-            <ProIconChip name="alert-circle" tone="red" size={46} iconSize={26} />
+            <ProIcon name="alert-circle" tone="red" size={46} iconSize={26} />
             <View style={styles.jobCopy}>
               <View style={styles.jobRow}>
                 <Text style={styles.penaltyAmount}>{rupees(penalty.amountPaisa)} penalty</Text>

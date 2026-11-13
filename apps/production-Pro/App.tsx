@@ -12,6 +12,7 @@ import {linking} from './src/navigation/linking';
 import {navigationRef} from './src/navigation/navRef';
 import {useProPushNavigation} from './src/navigation/usePushNavigation';
 import {ProToast} from './src/components/ProToast';
+import {ConfirmDialog} from './src/components/ConfirmDialog';
 import {AppErrorBoundary} from './src/app/AppErrorBoundary';
 import {useSessionStore} from './src/stores/session';
 import {ConnectivityNotice} from './src/components/ConnectivityNotice';
@@ -46,11 +47,13 @@ export default function App() {
     if (!socket) return;
     const refresh = (event?: {resource?: string}) => {
       const keys: Record<string, string[][]> = {
-        requests: [['professional-requests'], ['professional-request-summary'], ['professional-request-detail']],
-        'service-requests': [['professional-requests'], ['professional-request-summary'], ['professional-request-detail'], ['service-journey']],
-        notifications: [['professional-notifications']],
+        requests: [['professional-requests'], ['professional-request-summary'], ['professional-request-detail'], ['pro-dues']],
+        'service-requests': [['professional-requests'], ['professional-request-summary'], ['professional-request-detail'], ['service-journey'], ['pro-dues']],
+        notifications: [['professional-notifications'], ['professional-profile']],
         conversations: [['professional-conversations'], ['professional-messages']],
         profile: [['professional-profile']],
+        membership: [['membership'], ['pro-dues'], ['professional-profile']],
+        dues: [['pro-dues']],
       };
       const relevant = event?.resource ? keys[event.resource] : undefined;
       if (!relevant) {void queryClient.invalidateQueries(); return;}
@@ -88,6 +91,7 @@ export default function App() {
         <StatusBar barStyle="light-content" backgroundColor={Colors.navyDeep} />
         <AppErrorBoundary><ConnectivityNotice />{hydrated ? (<NavigationContainer ref={navigationRef} linking={linking}><RootNavigator /></NavigationContainer>) : null}</AppErrorBoundary>
         <ProToast />
+        <ConfirmDialog />
       </QueryClientProvider>
     </SafeAreaProvider>
   );

@@ -89,7 +89,7 @@ function MainTabs() {
         tabBarIcon: ({color, focused}) => (
           <NavigationIcon
             name={icons[route.name]}
-            color={focused ? ProColors.accent : color}
+            color={color}
             focused={focused}
           />
         ),

@@ -1,10 +1,11 @@
 # Production Android builds
 
-Staged test builds (NOT store releases, 11 Nov):
-`Nahtreek-Home-v62.apk` + `Nahtreek-Pro-v35.apk` — `.internal`
-packages, vCodes 62/35, versionName `1.0`, preview API baked in,
-secret scan clean. Built from this tree for parity testing with
-the same-numbered preview builds.
+Staged test builds (NOT store releases, 13 Nov):
+`Nahtreek-Home-v70.apk` + `Nahtreek-Pro-v43.apk` — `.internal`
+packages, vCodes 70/43, versionName `1.0.0-v70`/`1.0.0-v43`, preview API
+baked in, secret scan clean. Built from this tree for parity testing
+with the same-numbered preview builds (byte-identical sizes confirm
+source parity).
 
 Store releases are still built by the deploy team (signed AAB/APK,
 see `../../../PRODUCTION_DEPLOY_GUIDE.md`):

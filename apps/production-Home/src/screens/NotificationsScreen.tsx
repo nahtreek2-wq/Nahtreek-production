@@ -28,6 +28,7 @@ import {useToast} from '../stores/toast';
 import type {NotificationDto} from '@nahtreek/types';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/types';
+import {LIST_PERF} from '../../../../packages/mobile-ui/listPerformance';
 
 const KIND_STYLE: Record<string, {icon: IconName; bg: string; fg: string}> = {
   request: {icon: ICONS.requests, bg: 'transparent', fg: Colors.info},
@@ -110,8 +111,11 @@ export function NotificationsScreen() {
         />
       ) : (
         <FlatList
+          {...LIST_PERF}
           onEndReached={query.loadMore}
           onEndReachedThreshold={0.5}
+          refreshing={query.isRefetching}
+          onRefresh={() => void query.refetch()}
           data={items}
           keyExtractor={item => item.id}
           contentContainerStyle={[

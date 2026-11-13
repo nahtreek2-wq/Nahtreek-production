@@ -13,7 +13,6 @@ type Tile = {
   label: string;
   photo: number;
   engineers?: boolean;
-  loans?: boolean;
 };
 
 const TILES: Tile[] = [
@@ -25,7 +24,6 @@ const TILES: Tile[] = [
   {key: 'ac', label: 'AC Service', photo: workPhotoFor('ac')},
   {key: 'cleaning', label: 'Cleaning', photo: workPhotoFor('cleaning')},
   {key: 'engineers', label: 'Engineers', photo: HERO_PHOTOS.planning, engineers: true},
-  {key: 'loans', label: 'Home Loans', photo: HERO_PHOTOS.services, loans: true},
 ];
 
 export const CATEGORY_SERVICE_IDS: Record<string, string> = {
@@ -41,10 +39,9 @@ export const CATEGORY_SERVICE_IDS: Record<string, string> = {
 type Props = {
   onSelectService: (serviceKey: string) => void;
   onSelectEngineers: () => void;
-  onSelectLoans: () => void;
 };
 
-export function CategoryGrid({onSelectService, onSelectEngineers, onSelectLoans}: Props) {
+export function CategoryGrid({onSelectService, onSelectEngineers}: Props) {
   const {width: screenWidth} = useWindowDimensions();
   const tileWidth = Math.floor((screenWidth - 40) / 4) - 6;
   const photoSize = tileWidth;
@@ -57,13 +54,7 @@ export function CategoryGrid({onSelectService, onSelectEngineers, onSelectLoans}
             key={tile.key}
             accessibilityRole="button"
             accessibilityLabel={tile.label}
-            onPress={
-              tile.engineers
-                ? onSelectEngineers
-                : tile.loans
-                ? onSelectLoans
-                : () => onSelectService(tile.key)
-            }
+            onPress={tile.engineers ? onSelectEngineers : () => onSelectService(tile.key)}
             style={({pressed}) => [styles.tile, {width: tileWidth}, pressed && styles.tilePressed]}>
             <Image
               source={tile.photo}

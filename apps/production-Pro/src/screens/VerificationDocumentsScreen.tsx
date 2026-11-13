@@ -4,6 +4,7 @@ import React, {useMemo, useState} from 'react';
 import {
   Animated,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -189,7 +190,15 @@ export function VerificationDocumentsScreen() {
         onBack={() => navigation.goBack()}
       />
       <ScrollMotionBar offset={scrollMotion.offset} reducedMotion={scrollMotion.reducedMotion} />
-      <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} contentContainerStyle={styles.content}>
+      <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={documents.isRefetching || profile.isRefetching}
+            onRefresh={() => { void documents.refetch(); void profile.refetch(); }}
+            tintColor={Colors.navyDeep}
+            colors={[Colors.navyDeep]}
+          />
+        }>
         <View style={styles.intro}>
           <View style={styles.introIcon}>
             <MaterialCommunityIcons

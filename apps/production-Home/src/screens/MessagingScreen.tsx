@@ -11,6 +11,7 @@ import {AppHeader, Avatar, Icon, ICONS, OfflineBanner} from '../components/ui';
 import {MessageRowSkeleton} from '../components/SkeletonLoader';
 import {useConversationsList} from '../services/queries';
 import type {RootStackParamList} from '../navigation/types';
+import {LIST_PERF} from '../../../../packages/mobile-ui/listPerformance';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -38,6 +39,7 @@ export function MessagingScreen() {
         </View>
       ) : (
       <FlatList
+        {...LIST_PERF}
         onEndReached={query.loadMore}
         onEndReachedThreshold={0.5}
         data={query.data ?? []}
@@ -100,7 +102,7 @@ export function MessagingScreen() {
               </Text>
               <View style={styles.footerActions}>
                 <TouchableOpacity accessibilityRole="button" style={styles.footerBtn} onPress={() => navigation.navigate('Services')}>
-                  <Icon name={ICONS.serviceHero} size={20} color={ClientColors.accentIcon} />
+                  <Icon name={ICONS.serviceHero} size={20} color={Colors.navyDeep} />
                   <Text style={styles.linkLabel}>Browse services</Text>
                   <Icon name={ICONS.chevronRight} size={18} color={Colors.navyDeep} />
                 </TouchableOpacity>

@@ -6,6 +6,7 @@ import {
   Image,
   TextInput,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -155,7 +156,15 @@ export function PublicProfilePreviewScreen() {
         }
       />
       <ScrollMotionBar offset={scrollMotion.offset} reducedMotion={scrollMotion.reducedMotion} />
-      <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+      <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={query.isRefetching}
+            onRefresh={() => void query.refetch()}
+            tintColor={ProColors.primary}
+            colors={[ProColors.primary]}
+          />
+        }>
         <View style={styles.cover}>
           <View style={styles.coverShade}>
             <Text style={styles.coverLabel}>

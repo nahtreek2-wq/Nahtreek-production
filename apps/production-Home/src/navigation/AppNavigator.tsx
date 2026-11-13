@@ -39,6 +39,7 @@ import {ProfileScreen} from '../features/profile';
 import {SearchScreen} from '../features/search';
 import {RequestDetailScreen} from '../screens/RequestDetailScreen';
 import {LoanScreen} from '../screens/LoanScreen';
+import {PlusScreen} from '../screens/PlusScreen';
 import {SettingsScreen} from '../screens/SettingsScreen';
 import {AiPlannerScreen} from '../screens/AiPlannerScreen';
 import {ProfileSetupModal} from '../components/ProfileSetupModal';
@@ -164,7 +165,7 @@ function MainTabs() {
         tabBarIcon: ({color, focused}) => (
           <NavigationIcon
             name={TAB_ICONS[route.name as keyof MainTabParamList]}
-            color={focused ? ClientColors.accent : color}
+            color={color}
             focused={focused}
           />
         ),
@@ -260,6 +261,7 @@ export function AppNavigator() {
         <Stack.Screen name="Login" component={LoginRoute} />
         <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
         <Stack.Screen name="Loan" component={LoanScreen} />
+        <Stack.Screen name="Plus" component={PlusScreen} />
         <Stack.Screen name="MapPreview" component={MapPreviewScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen

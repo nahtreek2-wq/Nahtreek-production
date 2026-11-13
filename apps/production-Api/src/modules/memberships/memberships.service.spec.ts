@@ -64,7 +64,7 @@ function setup(over: {membership?: any; none?: boolean; provider?: any; event?: 
   db.membership.findMany = jest.fn().mockResolvedValue([]);
   db.membership.count = jest.fn().mockResolvedValue(0);
   const service = new MembershipsService(db, provider, push as any, realtime as any);
-  return {db, provider, service};
+  return {db, provider, realtime, service};
 }
 
 const AI_PLAN_ID = 'plan_test_ai_home';
@@ -100,12 +100,14 @@ describe('membership subscribe', () => {
   it('creates a verified plan subscription and returns the checkout link', async () => {
     const restore = withEnv();
     try {
-      const {provider, service} = setup({none: true});
+      const {db, provider, service} = setup({none: true});
       const result = await service.subscribe('pro');
       expect(provider.fetchPlan).toHaveBeenCalledWith(PLAN_ID);
       expect(provider.createSubscription).toHaveBeenCalledWith({planId: PLAN_ID, totalCount: 120,
         notes: expect.objectContaining({professionalProfileId: 'prof'})});
       expect(result).toMatchObject({status: 'PENDING', keyId: 'rzp_test', subscriptionId: 'sub_1', shortUrl: 'https://rzp.io/i/x'});
+      expect(db.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({action: 'MEMBERSHIP_SUBSCRIBED', metadata: {providerSubscriptionId: 'sub_1'}})}));
     } finally { restore(); }
   });
   it('replays effective memberships and resumes live pending attempts', async () => {
@@ -158,8 +160,10 @@ describe('membership confirm and cancel', () => {
       const cancelled = await active.service.cancel('pro', {});
       expect(cancelled).toMatchObject({status: 'CANCELLED', effective: true, cancelAtPeriodEnd: true});
       expect(active.provider.cancelSubscription).toHaveBeenCalledWith('sub_1');
+      expect(active.realtime.emitUserUpdate).toHaveBeenCalledWith('pro', 'membership');
       const pending = setup({membership: {status: 'PENDING', providerSubscriptionId: 'sub_1'}});
       await expect(pending.service.cancel('pro', {})).resolves.toMatchObject({status: 'NONE'});
+      expect(pending.realtime.emitUserUpdate).toHaveBeenCalledWith('pro', 'membership');
       const done = setup({membership: {status: 'CANCELLED', providerSubscriptionId: 'sub_1', currentPeriodEnd: future()}});
       await expect(done.service.cancel('pro', {})).resolves.toMatchObject({status: 'CANCELLED'});
       expect(done.provider.cancelSubscription).not.toHaveBeenCalled();
@@ -308,14 +312,16 @@ describe('home AI subscription', () => {
   });
 
   it('confirms an authenticated checkout and cancels at period end', async () => {
-    const {db, service} = setup();
+    const {db, realtime, service} = setup();
     db.aiSubscription.findUnique.mockResolvedValue(aiRow({providerSubscriptionId: 'sub_ai'}));
     db.aiSubscription.update.mockImplementation(async ({data}: any) => aiRow({providerSubscriptionId: 'sub_ai', ...data}));
     const confirmed = await service.aiConfirm('u');
     expect(confirmed).toMatchObject({status: 'ACTIVE'});
+    expect(realtime.emitUserUpdate).toHaveBeenCalledWith('u', 'ai-billing');
     db.aiSubscription.findUnique.mockResolvedValue(aiRow({providerSubscriptionId: 'sub_ai', status: 'ACTIVE', currentPeriodEnd: future()}));
     const cancelled = await service.aiCancel('u', {});
     expect(cancelled).toMatchObject({cancelAtPeriodEnd: true});
+    expect(realtime.emitUserUpdate).toHaveBeenCalledWith('u', 'ai-billing');
   });
 
   it('activates on subscription webhooks and dedupes replays', async () => {

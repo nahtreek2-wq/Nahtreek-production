@@ -397,6 +397,7 @@ export class PaymentsService {
         await this.db.auditLog.create({data: {userId: request.provider.userId, entity: 'ProfessionalPenalty',
           entityId: row.id, action: 'PENALTY_POSTED', metadata: {serviceRequestId, reason, amountPaisa}}});
         this.realtime.emitUserUpdate(request.provider.userId, 'notifications');
+        this.realtime.emitUserUpdate(request.provider.userId, 'dues');
       }
       return row;
     } catch (error) {
@@ -1180,6 +1181,7 @@ export class PaymentsService {
     await this.db.auditLog.create({data: {userId: profile.userId, entity: 'CommissionSettlement', entityId: settlement.id,
       action: 'DUES_SETTLED', metadata: {amountPaisa: settlement.amountPaisa, jobs: memberIds.length, penalties: cleared.count}}});
     this.realtime.emitUserUpdate(profile.userId, 'notifications');
+    this.realtime.emitUserUpdate(profile.userId, 'dues');
     const settledAmount = `₹${(settlement.amountPaisa / 100).toLocaleString('en-IN')}`;
     await this.receipt(profile.userId, `Commission dues settled · ${settledAmount}`,
       [`Settled: ${settledAmount} for ${memberIds.length} job(s).`,

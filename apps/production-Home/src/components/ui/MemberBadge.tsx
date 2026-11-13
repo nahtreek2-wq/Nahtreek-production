@@ -10,7 +10,7 @@ import {Icon, ICONS} from './Icon';
 export function MemberBadge() {
   return (
     <View style={styles.badge} accessibilityLabel="Pro member">
-      <Icon name={ICONS.star} size={11} color={ClientColors.accentIcon} />
+      <Icon name={ICONS.star} size={11} color={ClientColors.white} />
       <Text style={styles.label}>PRO</Text>
     </View>
   );
@@ -21,16 +21,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: ClientColors.accentSoft,
+    backgroundColor: ClientColors.primaryNavy,
     borderRadius: BorderRadius.full,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: ClientColors.accent,
   },
   label: {
     ...Typography.badge,
-    color: ClientColors.accentText,
+    color: ClientColors.white,
     fontWeight: '800',
   },
 });

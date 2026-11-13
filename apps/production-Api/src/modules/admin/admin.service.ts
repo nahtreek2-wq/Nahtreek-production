@@ -14,6 +14,8 @@ import { signedAssetUrl } from "../../common/storage";
 import { normalizePlace } from "../../common/place";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { pagination } from "../platform/platform.service";
+import { PushService } from "../notifications/push.service";
+import { ChatGateway } from "../chat/chat.gateway";
 import {
   AdminProfileDto,
   AdminUpdateUserDto,
@@ -54,7 +56,15 @@ const userInclude = {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly push: PushService,
+    private readonly realtime: ChatGateway) {}
+
+  // A verification decision must reach the pro's phone now, not on the next
+  // poll: push the notification row and wake every open app surface.
+  private async notifyPro(userId: string) {
+    await this.push.dispatch().catch(() => undefined);
+    this.realtime.emitUserUpdate(userId, 'notifications');
+  }
 
   async adminProfile(adminId: string) {
     const admin = await this.prisma.user.findFirst({
@@ -454,12 +464,15 @@ export class AdminService {
     if (dto.status === "REJECTED" && !dto.reason?.trim()) {
       throw new BadRequestException("Give a reason for rejecting the document");
     }
-    return this.prisma.$transaction(async (tx) => {
+    let notifyUserId: string | null = null;
+    let wroteNotification = false;
+    const result = await this.prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "ProfessionalProfile" WHERE "id" = ${profileId} FOR UPDATE`;
     const document = await tx.verificationDocument.findFirst({
       where: { id: documentId, professionalProfileId: profileId },
       include: { profile: true },
     });
+    notifyUserId = document?.profile.userId ?? null;
     if (!document)
       throw new NotFoundException("Verification document not found");
       const updated = await tx.verificationDocument.update({
@@ -476,6 +489,7 @@ export class AdminService {
         await tx.professionalProfile.update({where: {id: profileId}, data: {verificationStatus: 'REJECTED', onboardingStep: 'REVIEW', isAvailable: false}});
         await tx.providerPresence.updateMany({where: {professionalProfileId: profileId}, data: {online: false}});
         await tx.notification.create({data: {userId: document.profile.userId, kind: NotificationKind.verification, title: 'Verification needs attention', body: dto.reason!.trim(), data: {professionalProfileId: profileId}}});
+        wroteNotification = true;
       }
       await tx.auditLog.create({
         data: {
@@ -488,6 +502,8 @@ export class AdminService {
       });
       return updated;
     });
+    if (notifyUserId && wroteNotification) await this.notifyPro(notifyUserId);
+    return result;
   }
 
   async reviewProfile(
@@ -498,7 +514,8 @@ export class AdminService {
     if (dto.status === "REJECTED" && !dto.reason?.trim()) {
       throw new BadRequestException("Give a reason for rejecting the profile");
     }
-    return this.prisma.$transaction(async (tx) => {
+    let notifyUserId: string | null = null;
+    const result = await this.prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "ProfessionalProfile" WHERE "id" = ${profileId} FOR UPDATE`;
     const profile = await tx.professionalProfile.findUnique({
       where: { id: profileId },
@@ -508,6 +525,7 @@ export class AdminService {
       },
     });
     if (!profile) throw new NotFoundException("Verification request not found");
+    notifyUserId = profile.userId;
     const allowed: Record<VerificationStatus, VerificationStatus[]> = {
       NOT_SUBMITTED: [],
       PENDING: [VerificationStatus.UNDER_REVIEW, VerificationStatus.REJECTED],
@@ -578,6 +596,8 @@ export class AdminService {
       });
       return updated;
     });
+    if (notifyUserId) await this.notifyPro(notifyUserId);
+    return result;
   }
 
   private serializeUser(

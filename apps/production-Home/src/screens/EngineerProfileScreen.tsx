@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  RefreshControl,
   TouchableOpacity,
   StyleSheet,
   Image,
@@ -64,6 +65,7 @@ export function EngineerProfileScreen() {
     data: engineer,
     isLoading,
     isOffline,
+    isRefetching,
     refetch,
   } = useEngineerDetail(route.params.engineerId);
   const [sheet, setSheet] = useState(false);
@@ -180,7 +182,15 @@ export function EngineerProfileScreen() {
           styles.body,
           {paddingBottom: insets.bottom + 90},
         ]}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            tintColor={Colors.navyDeep}
+            colors={[Colors.navyDeep]}
+          />
+        }>
         <View style={styles.cover}>
           <RemoteImg
             uri={engineer.coverUrl}

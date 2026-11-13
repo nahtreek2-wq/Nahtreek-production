@@ -1,8 +1,8 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
+  RefreshControl,
   PermissionsAndroid,
   Platform,
   Pressable,
@@ -18,7 +18,7 @@ import {Motion, stagger} from '../../../../packages/mobile-ui/motion';
 import {useQueryClient} from '@tanstack/react-query';
 import {launchImageLibrary} from 'react-native-image-picker';
 import Voice from '@react-native-voice/voice';
-import {useNavigation, useRoute} from '@react-navigation/native';
+import {useIsFocused, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   BorderRadius,
@@ -45,6 +45,7 @@ import {
   type AiSubscriptionView,
 } from '../services/aiBilling';
 import {inr, inrMonth} from '../utils/format';
+import {confirmDialog} from '../stores/confirm';
 import {CheckoutCancelledError, checkoutContact, checkoutEmail} from '../../../../packages/mobile-booking/razorpayGateway';
 import {useCheckoutWatchdog} from '../../../../packages/mobile-booking/useCheckoutWatchdog';
 import {setAiBookingPrefill} from '../services/aiBookingPrefill';
@@ -292,10 +293,18 @@ export function AiPlannerScreen() {
     }
   };
 
+  const screenFocused = useIsFocused();
+  const [pullRefreshing, setPullRefreshing] = useState(false);
   useEffect(() => {
-    void refreshBilling();
+    if (screenFocused) void refreshBilling();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, screenFocused]);
+  const onPullRefresh = () => {
+    setPullRefreshing(true);
+    void refreshBilling().finally(() => {
+      if (screenMounted.current) setPullRefreshing(false);
+    });
+  };
 
   useEffect(() => {
     Voice.onSpeechPartialResults = (event: {value?: string[]}) => {
@@ -522,19 +531,15 @@ export function AiPlannerScreen() {
   };
 
   const cancel = () => {
-    Alert.alert('Cancel AI subscription?', 'You keep unlimited AI until the paid period ends.', [
-      {text: 'Keep it', style: 'cancel'},
-      {
-        text: 'Cancel',
-        style: 'destructive',
-        onPress: () =>
-          cancelAiSubscription()
-            .then(view => applyBilling(view))
-            .catch(cause =>
-              setError(cause instanceof Error ? cause.message : 'Could not cancel the subscription.'),
-            ),
-      },
-    ]);
+    void confirmDialog({title: 'Cancel AI subscription?', message: 'You keep unlimited AI until the paid period ends.',
+      confirmLabel: 'Cancel', cancelLabel: 'Keep it', destructive: true}).then(ok => {
+      if (!ok) return;
+      cancelAiSubscription()
+        .then(view => applyBilling(view))
+        .catch(cause =>
+          setError(cause instanceof Error ? cause.message : 'Could not cancel the subscription.'),
+        );
+    });
   };
 
   const start = async (type: ProjectType) => {
@@ -821,7 +826,15 @@ export function AiPlannerScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={keyboardScroll.keyboardDismissMode}
-        automaticallyAdjustKeyboardInsets>
+        automaticallyAdjustKeyboardInsets
+        refreshControl={
+          <RefreshControl
+            refreshing={pullRefreshing}
+            onRefresh={onPullRefresh}
+            tintColor={Colors.navyDeep}
+            colors={[Colors.navyDeep]}
+          />
+        }>
         {activating ? (
           <View style={styles.activatingBox}>
             <View style={styles.billingRow}>
@@ -851,6 +864,9 @@ export function AiPlannerScreen() {
                 <Text style={styles.billingCancel}>Cancel</Text>
               </Pressable>
             )}
+            <Pressable accessibilityRole="button" accessibilityLabel="Manage Plus membership" onPress={() => navigation.navigate('Plus')} hitSlop={8}>
+              <Text style={styles.billingCancel}>Manage</Text>
+            </Pressable>
           </View>
         ) : quota ? (
           <View style={styles.billingRow}>

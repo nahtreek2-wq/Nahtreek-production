@@ -36,6 +36,7 @@ import {useProToast} from '../stores/proToast';
 import {EmptyState} from '../components/EmptyState';
 import {ScreenLoading} from '../components/ScreenLoading';
 import {JobContextVisual} from '../components/JobContextVisual';
+import {LIST_PERF} from '../../../../packages/mobile-ui/listPerformance';
 
 type Props = NativeStackScreenProps<MessagesStackParamList, 'Chat'>;
 type Message = {
@@ -328,9 +329,12 @@ export function ChatScreen() {
         ) : feed.length ? (
           <View style={styles.flex}>
             <FlatList
+              {...LIST_PERF}
               ref={listRef}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
+              refreshing={messages.isRefetching}
+              onRefresh={() => void messages.refetch()}
               data={feed}
               keyExtractor={item => item.key}
               contentContainerStyle={styles.list}

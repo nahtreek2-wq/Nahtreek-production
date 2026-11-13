@@ -114,6 +114,7 @@ export class MembershipsService {
     await this.db.auditLog.create({data: {userId, entity: 'Membership', entityId: membershipId, action, metadata: {title}}});
     await this.push.dispatch().catch(() => undefined);
     this.realtime.emitUserUpdate(userId, 'notifications');
+    this.realtime.emitUserUpdate(userId, 'membership');
   }
 
   private async syncPriority(professionalProfileId: string) {
@@ -198,6 +199,12 @@ export class MembershipsService {
         }
       }
       const updated = await this.db.membership.findUniqueOrThrow({where: {id: m.id}});
+      // The mandate id must survive in our own ledger: without it a wrong-
+      // amount checkout (live incident: ₹5 sheet on a ₹399 plan) leaves no
+      // trace once the row is cancelled back to NONE.
+      await this.db.auditLog.create({data: {userId, entity: 'Membership', entityId: m.id,
+        action: tail ? 'MEMBERSHIP_RESUBSCRIBE_STARTED' : 'MEMBERSHIP_SUBSCRIBED',
+        metadata: {providerSubscriptionId: sub.id}}});
       return {...this.viewOf(updated), keyId: this.provider.keyId, subscriptionId: sub.id, shortUrl: sub.short_url ?? null};
     } catch (error) {
       if (error instanceof ServiceUnavailableException || error instanceof BadRequestException) throw error;
@@ -229,7 +236,11 @@ export class MembershipsService {
     const m = await this.db.membership.findUnique({where: {professionalProfileId: profile.id}});
     if (!m?.providerSubscriptionId) throw new ConflictException('No membership checkout to confirm');
     const remote = await this.fetchSubscriptionSettled(m.providerSubscriptionId);
-    if (remote.status === 'active') return this.viewOf(await this.applyRemote(m, remote));
+    if (remote.status === 'active') {
+      const confirmed = await this.applyRemote(m, remote);
+      this.realtime.emitUserUpdate(profile.userId, 'membership');
+      return this.viewOf(confirmed);
+    }
     // A live tail with no pending mandate has nothing to confirm; a pending
     // mandate (fresh checkout or resubscribe) must poll, never early-return.
     if (this.isEffective(m) && !['created', 'authenticated', 'pending'].includes(remote.status))
@@ -271,6 +282,7 @@ export class MembershipsService {
         data: {providerSubscriptionId: null, status: MembershipStatus.NONE, cancelAtPeriodEnd: false}});
       await this.db.auditLog.create({data: {userId, entity: 'Membership', entityId: m.id,
         action: 'MEMBERSHIP_CHECKOUT_CANCELLED', metadata: {reason: dto.reason ?? null}}});
+      this.realtime.emitUserUpdate(userId, 'membership');
       return this.viewOf(updated);
     }
     try {
@@ -409,6 +421,7 @@ export class MembershipsService {
     await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: aiSubscriptionId, action, metadata: {title}}});
     await this.push.dispatch().catch(() => undefined);
     this.realtime.emitUserUpdate(userId, 'notifications');
+    this.realtime.emitUserUpdate(userId, 'ai-billing');
   }
 
   private async applyRemote(m: Row, remote: RazorpaySubscription, charged = false) {
@@ -684,6 +697,7 @@ export class MembershipsService {
     const updated = await this.db.aiSubscription.update({where: {userId}, data: {status: 'ACTIVE', cancelAtPeriodEnd: false,
       currentPeriodStart: sub.current_start ? new Date(sub.current_start * 1000) : null,
       currentPeriodEnd: sub.current_end ? new Date(sub.current_end * 1000) : null, lastChargeAt: new Date()}});
+    this.realtime.emitUserUpdate(userId, 'ai-billing');
     await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: row.id,
       action: 'AI_SUBSCRIPTION_CONFIRMED', metadata: {providerSubscriptionId: row.providerSubscriptionId}}});
     return {...this.aiViewOf(updated), freeUsed: await this.aiFreeUsed(userId), freeQuota: AI_FREE_MESSAGES};
@@ -704,6 +718,7 @@ export class MembershipsService {
     const updated = await this.db.aiSubscription.update({where: {userId}, data: {status: MembershipStatus.ACTIVE,
       currentPeriodStart: now, currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
       cancelAtPeriodEnd: false}});
+    this.realtime.emitUserUpdate(userId, 'ai-billing');
     await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: row.id,
       action: 'AI_SUBSCRIPTION_DEMO_ACTIVATED', metadata: {demo: true}}});
     return {...this.aiViewOf(updated), freeUsed: await this.aiFreeUsed(userId), freeQuota: AI_FREE_MESSAGES};
@@ -724,6 +739,7 @@ export class MembershipsService {
         status: MembershipStatus.NONE, cancelAtPeriodEnd: false, currentPeriodStart: null, currentPeriodEnd: null}});
       await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: row.id,
         action: 'AI_SUBSCRIPTION_CHECKOUT_CANCELLED', metadata: {reason: dto.reason ?? null}}});
+      this.realtime.emitUserUpdate(userId, 'ai-billing');
       return {...this.aiViewOf(cleared), ...quota};
     }
     if (row.providerSubscriptionId) {
@@ -746,6 +762,7 @@ export class MembershipsService {
       }
     }
     const updated = await this.db.aiSubscription.update({where: {userId}, data: {cancelAtPeriodEnd: true}});
+    this.realtime.emitUserUpdate(userId, 'ai-billing');
     await this.db.auditLog.create({data: {userId, entity: 'AiSubscription', entityId: row.id,
       action: 'AI_SUBSCRIPTION_CANCELLED', metadata: {reason: dto.reason ?? null}}});
     await this.tellAi(userId, 'AI subscription will not renew', 'You keep unlimited AI until the paid period ends.',

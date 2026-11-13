@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useNavigation} from '@react-navigation/native';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
@@ -65,7 +65,15 @@ export function SupportScreen() {
   return (
     <View style={styles.root}>
       <ScreenHeader title="Help & support" subtitle="Payments, dues and account issues" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body}
+        refreshControl={
+          <RefreshControl
+            refreshing={tickets.isRefetching}
+            onRefresh={() => void tickets.refetch()}
+            tintColor={ProColors.primary}
+            colors={[ProColors.primary]}
+          />
+        }>
         <Text style={styles.section}>Contact support</Text>
         <View style={styles.card}>
           <Text style={styles.label}>Subject</Text>

@@ -4,6 +4,7 @@ export * from './BottomSheet';
 export * from './Button';
 export * from './Card';
 export * from './Chip';
+export * from './ConfirmDialog';
 export * from './EmptyState';
 export * from './Icon';
 export * from './Input';

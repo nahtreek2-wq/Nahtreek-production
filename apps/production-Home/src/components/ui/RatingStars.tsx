@@ -11,7 +11,7 @@ interface RatingStarsProps {
 export function RatingStars({rating, count}: RatingStarsProps) {
   return (
     <View style={styles.row}>
-      <Icon name={ICONS.star} size={14} color={Colors.amber} />
+      <Icon name={ICONS.star} size={14} color={Colors.navyDeep} />
       <Text style={styles.value}>{rating.toFixed(1)}</Text>
       {typeof count === 'number' && (
         <Text style={styles.count}>

@@ -1,5 +1,5 @@
 import React, {useMemo, useState} from 'react';
-import {Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {KeyboardAwareView} from '../../../../packages/mobile-ui/KeyboardAwareView';
 import {DateTimeField} from '../../../../packages/mobile-ui/DateTimeField';
 import {PaymentSection} from '../../../../packages/mobile-booking/PaymentSection';
@@ -43,6 +43,7 @@ import {
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {fetchAiPlan, fetchAiSubscription} from '../services/aiBilling';
 import {useToast} from '../stores/toast';
+import {confirmDialog} from '../stores/confirm';
 import {cleanReviewComment, inr} from '../utils/format';
 import type {EngineerRequestDto} from '@nahtreek/types';
 import type {RootStackParamList} from '../navigation/types';
@@ -211,28 +212,25 @@ export function RequestDetailScreen() {
 
   const cancel = () => {
     if (!request) return;
-    Alert.alert(
-      'Cancel this request?',
-      'The engineer will be notified and the request will close. If you already paid, the held amount is refunded automatically. You can send a new request anytime.',
-      [
-        {text: 'Keep request', style: 'cancel'},
-        {
-          text: 'Cancel request',
-          style: 'destructive',
-          onPress: () =>
-            cancelRequest.mutate(request.id, {
-              onSuccess: () => toast('Request cancelled', 'info'),
-              onError: error =>
-                toast(
-                  error instanceof Error
-                    ? error.message
-                    : 'Could not cancel the request',
-                  'error',
-                ),
-            }),
-        },
-      ],
-    );
+    void confirmDialog({
+      title: 'Cancel this request?',
+      message: 'The engineer will be notified and the request will close. If you already paid, the held amount is refunded automatically. You can send a new request anytime.',
+      confirmLabel: 'Cancel request',
+      cancelLabel: 'Keep request',
+      destructive: true,
+    }).then(ok => {
+      if (!ok) return;
+      cancelRequest.mutate(request.id, {
+        onSuccess: () => toast('Request cancelled', 'info'),
+        onError: error =>
+          toast(
+            error instanceof Error
+              ? error.message
+              : 'Could not cancel the request',
+            'error',
+          ),
+      });
+    });
   };
 
   if (requests.isLoading && !request) {
@@ -293,7 +291,15 @@ export function RequestDetailScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}>
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={requests.isRefetching}
+            onRefresh={() => void requests.refetch()}
+            tintColor={Colors.navyDeep}
+            colors={[Colors.navyDeep]}
+          />
+        }>
         <Card style={styles.summaryCard}>
           <Text style={styles.eyebrow}>REQUEST SUMMARY</Text>
           <Text style={styles.title}>{request.projectTitle}</Text>
@@ -609,11 +615,11 @@ const styles = StyleSheet.create({
   reviewCard: {gap: Spacing.sm},
   reviewTitle: {...Typography.subtitle, color: Colors.slate900, fontWeight: '700'},
   reviewHint: {...Typography.caption, color: Colors.slate600, lineHeight: 18},
-  reviewStars: {fontSize: 22, color: Colors.amber, letterSpacing: 2},
+  reviewStars: {fontSize: 22, color: Colors.navyDeep, letterSpacing: 2},
   reviewComment: {...Typography.body, color: Colors.slate800, lineHeight: 21},
   starRow: {flexDirection: 'row', gap: Spacing.xs},
   star: {fontSize: 30, color: Colors.slate300},
-  starActive: {color: Colors.amber},
+  starActive: {color: Colors.navyDeep},
   reviewInput: {
     ...Typography.body,
     color: Colors.slate900,

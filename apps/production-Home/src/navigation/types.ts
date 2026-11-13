@@ -14,6 +14,7 @@ export type RootStackParamList = {
   Scan: undefined;
   RequestDetail: {requestId: string};
   Loan: undefined;
+  Plus: undefined;
   MapPreview: {latitude?: number; longitude?: number; address: string; requestId?: string};
   Chat: {conversationId: string; title: string; subtitle?: string; avatarUrl?: string};
   Notifications: undefined;

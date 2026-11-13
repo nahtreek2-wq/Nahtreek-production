@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {NotificationPreferences} from '../../../../packages/mobile-push/NotificationPreferences';
 import {api} from '../services/apiClient';
 import {useNavigation} from '@react-navigation/native';
@@ -11,6 +11,7 @@ import {
 } from '@nahtreek/design-system';
 import {AppHeader, Button, Card, Icon, ICONS} from '../components/ui';
 import {useSessionStore} from '../stores/session';
+import {confirmDialog} from '../stores/confirm';
 import type {RootStackParamList} from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -48,19 +49,18 @@ export function SettingsScreen() {
   };
   const deleteAccount = () => {
     if (!canDelete) return;
-    Alert.alert('Delete account?', 'This signs you out on all devices and closes your NAHTREEK account. Bookings and payment history are kept for records.', [
-      {text: 'Keep account', style: 'cancel'},
-      {text: 'Delete', style: 'destructive', onPress: () => {
-        setDeleting(true);
-        setDeleteError('');
-        api.delete<{deleted: boolean}>('/auth/me', {code: deleteCode})
-          .then(() => clearSession())
-          .catch(error => {
-            setDeleting(false);
-            setDeleteError(error instanceof Error ? error.message : 'Could not delete the account.');
-          });
-      }},
-    ]);
+    void confirmDialog({title: 'Delete account?', message: 'This signs you out on all devices and closes your NAHTREEK account. Bookings and payment history are kept for records.',
+      confirmLabel: 'Delete', cancelLabel: 'Keep account', destructive: true}).then(ok => {
+      if (!ok) return;
+      setDeleting(true);
+      setDeleteError('');
+      api.delete<{deleted: boolean}>('/auth/me', {code: deleteCode})
+        .then(() => clearSession())
+        .catch(error => {
+          setDeleting(false);
+          setDeleteError(error instanceof Error ? error.message : 'Could not delete the account.');
+        });
+    });
   };
   return (
     <View style={styles.container}>

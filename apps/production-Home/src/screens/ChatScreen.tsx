@@ -17,6 +17,7 @@ import {useQueryClient} from '@tanstack/react-query';
 import {queryKeys} from '../services/queries';
 import {isApiConfigured} from '../services/config';
 import {ClientColors} from '../design-system/tokens';
+import {LIST_PERF} from '../../../../packages/mobile-ui/listPerformance';
 
 type ChatRoute = RouteProp<RootStackParamList, 'Chat'>;
 
@@ -134,12 +135,15 @@ export function ChatScreen() {
           <EmptyState icon={UICONS.messages} title="No messages yet" message="Say hello to start the conversation." />
         ) : (
         <FlatList
+          {...LIST_PERF}
           ref={listRef}
           data={messages}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          refreshing={msgsQuery.isRefetching}
+          onRefresh={() => void msgsQuery.refetch()}
           onContentSizeChange={() => listRef.current?.scrollToEnd({animated: false})}
           onLayout={() => listRef.current?.scrollToEnd({animated: false})}
           renderItem={({item}) => {

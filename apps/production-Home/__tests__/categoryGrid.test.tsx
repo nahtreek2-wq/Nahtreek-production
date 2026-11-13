@@ -6,7 +6,6 @@ import {CATEGORY_SERVICE_IDS, CategoryGrid} from '../src/components/home/Categor
 function renderGrid(
   onSelectService = jest.fn(),
   onSelectEngineers = jest.fn(),
-  onSelectLoans = jest.fn(),
 ) {
   let screen!: renderer.ReactTestRenderer;
   renderer.act(() => {
@@ -14,11 +13,10 @@ function renderGrid(
       <CategoryGrid
         onSelectService={onSelectService}
         onSelectEngineers={onSelectEngineers}
-        onSelectLoans={onSelectLoans}
       />,
     );
   });
-  return {screen, onSelectService, onSelectEngineers, onSelectLoans};
+  return {screen, onSelectService, onSelectEngineers};
 }
 
 afterEach(() => jest.restoreAllMocks());
@@ -53,15 +51,12 @@ it('Routes the engineers tile to discovery instead of services', () => {
   }
 });
 
-it('Routes the loans tile to the loan desk instead of services', () => {
-  const {screen, onSelectService, onSelectLoans} = renderGrid();
+it('renders exactly 8 tiles so no row is left half empty', () => {
+  const {screen} = renderGrid();
   try {
-    const loans = screen.root
-      .findAllByType(Pressable)
-      .find(tile => tile.props.accessibilityLabel === 'Home Loans')!;
-    renderer.act(() => loans.props.onPress());
-    expect(onSelectLoans).toHaveBeenCalledTimes(1);
-    expect(onSelectService).not.toHaveBeenCalled();
+    const tiles = screen.root.findAllByType(Pressable);
+    expect(tiles).toHaveLength(8);
+    expect(tiles.some(tile => tile.props.accessibilityLabel === 'Home Loans')).toBe(false);
   } finally {
     renderer.act(() => screen.unmount());
   }

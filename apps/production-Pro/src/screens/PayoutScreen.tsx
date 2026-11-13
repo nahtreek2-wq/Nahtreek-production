@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {KeyboardAwareView} from '../../../../packages/mobile-ui/KeyboardAwareView';
@@ -76,7 +76,15 @@ export function PayoutScreen({hooks = defaultHooks}: {hooks?: PayoutHooks}) {
     <View style={styles.root}>
       <ScreenHeader title="Payout account" subtitle="Where your earnings land" onBack={() => navigation.goBack()} />
       <KeyboardAwareView style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={query.isRefetching}
+              onRefresh={() => void refresh()}
+              tintColor={ProColors.primary}
+              colors={[ProColors.primary]}
+            />
+          }>
           {query.isPending ? <ScreenLoading label="Loading payout details…" /> : query.isError || !view ? (
             <EmptyState title="Could not load payout details" message="Check your connection and try again."
               actionLabel={query.isFetching ? 'Checking…' : 'Try again'} onAction={() => void query.refetch()} />

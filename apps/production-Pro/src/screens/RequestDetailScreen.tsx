@@ -7,9 +7,9 @@ import {publishCurrentLocation, startJourneyLocationSharing, stopJourneyLocation
 import {currentLocation} from '../services/location';
 import {
   Animated,
-  Alert,
   NativeModules,
   Platform,
+  RefreshControl,
   Pressable,
   StyleSheet,
   Text,
@@ -39,13 +39,14 @@ import {PrimaryButton} from '../components/PrimaryButton';
 import {EmptyState} from '../components/EmptyState';
 import {useSessionStore} from '../stores/session';
 import {useProToast} from '../stores/proToast';
+import {confirmDialog} from '../stores/confirm';
 import {ScrollMotionBar, useScrollMotion} from '../components/ScrollMotionBar';
 import {JobContextVisual} from '../components/JobContextVisual';
 import {ClientAvatar} from '../components/ClientAvatar';
 import {ProLoader} from '../components/ProLoader';
 import {TravelToJobCard} from '../components/TravelToJobCard';
-import {ProIconChip} from '../components/ProIconChip';
-import type {IconChipTone} from '../components/ProIconChip';
+import {ProIcon} from '../components/ProIcon';
+import type {IconTone} from '../components/ProIcon';
 import {ProColors, ProRadius, ProType} from '../theme/professionalTheme';
 
 type Props = NativeStackScreenProps<RequestsStackParamList, 'RequestDetail'>;
@@ -167,7 +168,7 @@ export function RequestDetailScreen() {
   const [code, setCode] = useState('');
   const detail = useQuery({
     queryKey: ['professional-request-detail', kind, id],
-    refetchInterval: 3000,
+    refetchInterval: 15_000,
     refetchIntervalInBackground: false,
     queryFn: async () => {
       if (kind === 'engineering') {
@@ -277,10 +278,10 @@ export function RequestDetailScreen() {
     },
   });
   const onCancelJob = () => {
-    Alert.alert('Cancel request', 'Cancel this job? The customer will be notified and any payment is refunded automatically.', [
-      {text: 'Keep job', style: 'cancel'},
-      {text: 'Cancel request', style: 'destructive', onPress: () => cancelJob.mutate()},
-    ]);
+    void confirmDialog({title: 'Cancel request', message: 'Cancel this job? The customer will be notified and any payment is refunded automatically.',
+      confirmLabel: 'Cancel request', cancelLabel: 'Keep job', destructive: true}).then(ok => {
+      if (ok) cancelJob.mutate();
+    });
   };
   const conversation = useMutation({
     mutationFn: () =>
@@ -325,14 +326,10 @@ export function RequestDetailScreen() {
         : status === 'COMPLETED'
         ? 'Use this only after all agreed work is finished.'
         : 'The customer will be told that you cannot take this job.';
-    Alert.alert(label, confirmation, [
-      {text: 'Not now', style: 'cancel'},
-      {
-        text: label,
-        style: status === 'DECLINED' ? 'destructive' : 'default',
-        onPress: () => transition.mutate({status}),
-      },
-    ]);
+    void confirmDialog({title: label, message: confirmation, confirmLabel: label, cancelLabel: 'Not now',
+      destructive: status === 'DECLINED'}).then(ok => {
+      if (ok) transition.mutate({status});
+    });
   };
   const confirmCompletion = () => {
     const trimmed = code.trim();
@@ -416,6 +413,8 @@ export function RequestDetailScreen() {
             setCodeEntry(false);
             setCode('');
           }}
+          refreshing={detail.isRefetching}
+          onRefresh={() => void detail.refetch()}
         />
       ) : null}
     </KeyboardAwareView>
@@ -442,6 +441,8 @@ function RequestContent({
   onCodeChange,
   onConfirmCode,
   onCancelCode,
+  refreshing,
+  onRefresh,
 }: {
   request: Detail;
   busy: boolean;
@@ -462,6 +463,8 @@ function RequestContent({
   onCodeChange: (value: string) => void;
   onConfirmCode: () => void;
   onCancelCode: () => void;
+  refreshing: boolean;
+  onRefresh: () => void;
 }) {
   const scrollMotion = useScrollMotion();
   const primary =
@@ -498,7 +501,15 @@ function RequestContent({
   return (
     <View style={styles.flex}>
     <ScrollMotionBar offset={scrollMotion.offset} reducedMotion={scrollMotion.reducedMotion} />
-    <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+    <Animated.ScrollView onScroll={scrollMotion.onScroll} scrollEventThrottle={16} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={ProColors.primary}
+          colors={[ProColors.primary]}
+        />
+      }>
       <View style={styles.jobOverview}>
         <JobContextVisual kind={serviceProvider ? 'service' : 'engineering'} title={request.title} seed={request.id} size={64} />
         <View style={styles.flex}>
@@ -627,7 +638,7 @@ function RequestContent({
       {codeEntry ? (
         <View style={styles.codeCard}>
           <View style={styles.sectionHeading}>
-            <ProIconChip name="key-variant" tone="amber" size={42} iconSize={23} />
+            <ProIcon name="key-variant" tone="navy" size={42} iconSize={23} />
             <Text style={styles.codeTitle}>Enter the completion code</Text>
           </View>
           <Text style={styles.codeHint}>
@@ -868,11 +879,11 @@ function ServiceProgress({status}: {status: Status}) {
   );
 }
 
-function Section({title, icon, tone = 'navy', children}: React.PropsWithChildren<{title: string; icon: string; tone?: IconChipTone}>) {
+function Section({title, icon, tone = 'navy', children}: React.PropsWithChildren<{title: string; icon: string; tone?: IconTone}>) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeading}>
-        <ProIconChip name={icon} tone={tone} size={38} iconSize={20} />
+        <ProIcon name={icon} tone={tone} size={38} iconSize={20} />
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
       <View style={styles.sectionBody}>{children}</View>

@@ -139,7 +139,7 @@ export function useServiceProviders(city: string, serviceId?: string, state?: st
   return useInfiniteQuery({
     queryKey: ['providers', city, state ?? 'all', serviceId ?? 'all'],
     initialPageParam: 1,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     queryFn: ({pageParam}) =>
       isApiConfigured
@@ -158,7 +158,8 @@ export function usePlatformHistory(kind: 'service-requests' | 'history/me') {
   const userId = useSessionStore(s => s.user?.id);
   return useInfiniteQuery({
     queryKey: [kind, userId],
-    refetchInterval: kind === 'service-requests' ? 15000 : 30000,
+    // Job transitions arrive over the socket; polling is only a fallback.
+    refetchInterval: kind === 'service-requests' ? 30_000 : 60_000,
     refetchIntervalInBackground: false,
     enabled: Boolean(userId),
     initialPageParam: 1,
@@ -178,7 +179,7 @@ export function useServiceRequest(id: string) {
   const userId = useSessionStore(s => s.user?.id);
   return useQuery({
     queryKey: ['service-request', userId, id],
-    refetchInterval: 3000,
+    refetchInterval: 15_000,
     refetchIntervalInBackground: false,
     enabled: Boolean(userId && isApiConfigured),
     queryFn: () =>

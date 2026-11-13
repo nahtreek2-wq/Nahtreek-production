@@ -1,5 +1,6 @@
-import {Alert, NativeModules} from 'react-native';
+import {NativeModules} from 'react-native';
 import {runtimeConfig} from '../config/runtime';
+import {confirmDialog} from '../stores/confirm';
 
 // Warn only on production runtimes: developers and testers routinely run
 // debug builds on rooted devices and emulators, which would false-positive.
@@ -15,9 +16,7 @@ export function warnForCompromiseOnce(): void {
   const native = NativeModules.NahtreekRuntimeConfig as {deviceCompromised?: unknown} | undefined;
   if (!shouldWarnForCompromise(native?.deviceCompromised, runtimeConfig.environment)) return;
   warned = true;
-  Alert.alert(
-    'Device security warning',
-    'This device looks rooted or jailbroken. You can keep working, but be extra careful with payments and client data on this device.',
-    [{text: 'Understood'}],
-  );
+  void confirmDialog({title: 'Device security warning',
+    message: 'This device looks rooted or jailbroken. You can keep working, but be extra careful with payments and client data on this device.',
+    confirmLabel: 'Understood', cancelLabel: null});
 }

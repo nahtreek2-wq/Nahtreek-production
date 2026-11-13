@@ -1,6 +1,5 @@
 import React, {useMemo, useState} from 'react';
 import {
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -32,6 +31,7 @@ import {
 } from '../components/ui';
 import {ProviderCardSkeleton} from '../components/SkeletonLoader';
 import {useToast} from '../stores/toast';
+import {confirmDialog} from '../stores/confirm';
 import {useListFilters} from '../stores/listFilters';
 import {
   queryKeys,
@@ -44,6 +44,7 @@ import {
 import {useQueryClient} from '@tanstack/react-query';
 import type {EngineerRequestDto} from '@nahtreek/types';
 import type {RootStackParamList} from '../navigation/types';
+import {LIST_PERF} from '../../../../packages/mobile-ui/listPerformance';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 const STEPS = ['Pending', 'Accepted', 'Ongoing', 'Done'];
@@ -122,28 +123,25 @@ export function RequestsScreen() {
   };
 
   const cancel = (request: EngineerRequestDto) => {
-    Alert.alert(
-      'Cancel this request?',
-      'The engineer will be notified. This cannot be undone.',
-      [
-        {text: 'Keep request', style: 'cancel'},
-        {
-          text: 'Cancel request',
-          style: 'destructive',
-          onPress: () =>
-            cancelRequest.mutate(request.id, {
-              onSuccess: () => toast('Request cancelled', 'info'),
-              onError: error =>
-                toast(
-                  error instanceof Error
-                    ? error.message
-                    : 'Could not cancel the request',
-                  'error',
-                ),
-            }),
-        },
-      ],
-    );
+    void confirmDialog({
+      title: 'Cancel this request?',
+      message: 'The engineer will be notified. This cannot be undone.',
+      confirmLabel: 'Cancel request',
+      cancelLabel: 'Keep request',
+      destructive: true,
+    }).then(ok => {
+      if (!ok) return;
+      cancelRequest.mutate(request.id, {
+        onSuccess: () => toast('Request cancelled', 'info'),
+        onError: error =>
+          toast(
+            error instanceof Error
+              ? error.message
+              : 'Could not cancel the request',
+            'error',
+          ),
+      });
+    });
   };
 
   const queryClient = useQueryClient();
@@ -176,7 +174,7 @@ export function RequestsScreen() {
       />
       <Pressable style={styles.serviceLink} accessibilityRole="button"
         onPress={() => navigation.navigate('ServiceHistory')}>
-        <View style={styles.serviceIcon}><Icon name={ICONS.serviceHero} size={20} color={ClientColors.accentIcon} /></View>
+        <View style={styles.serviceIcon}><Icon name={ICONS.serviceHero} size={20} color={Colors.navyDeep} /></View>
         <View style={styles.serviceCopy}>
           <Text style={styles.serviceTitle}>Home service requests</Text>
           <Text style={styles.meta}>Repairs, maintenance and visits</Text>
@@ -199,6 +197,7 @@ export function RequestsScreen() {
       ) : null}
       {!requestsQ.isLoading ? (
         <FlatList
+          {...LIST_PERF}
           onEndReached={requestsQ.loadMore}
           onEndReachedThreshold={0.5}
           data={filteredRequests}
@@ -455,6 +454,6 @@ const styles = StyleSheet.create({
     backgroundColor: ClientColors.accentSoft,
     paddingHorizontal: Spacing.md,
   },
-  ratedStars: {fontSize: 16, color: Colors.amber, includeFontPadding: false},
+  ratedStars: {fontSize: 16, color: Colors.navyDeep, includeFontPadding: false},
   ratedText: {...Typography.caption, fontWeight: '700', color: Colors.slate700},
 });

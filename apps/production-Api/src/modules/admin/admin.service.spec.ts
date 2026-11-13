@@ -12,7 +12,7 @@ describe("AdminService", () => {
         ]),
       },
     };
-    const result = await new AdminService(prisma as any).summary();
+    const result = await new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).summary();
     expect(result).toMatchObject({ UNDER_REVIEW: 3, VERIFIED: 7, REJECTED: 0 });
   });
 
@@ -33,7 +33,7 @@ describe("AdminService", () => {
       },
     };
     await expect(
-      new AdminService(prisma as any).reviewProfile("profile", "admin", {
+      new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).reviewProfile("profile", "admin", {
         status: "VERIFIED",
       })
     ).rejects.toThrow(BadRequestException);
@@ -64,7 +64,9 @@ describe("AdminService", () => {
       professionalProfile: { findUnique: jest.fn().mockResolvedValue(profile) },
       $transaction: (callback: (value: typeof tx) => unknown) => callback(tx),
     };
-    await new AdminService(prisma as any).reviewProfile("profile", "admin", {
+    const push = {dispatch: jest.fn().mockResolvedValue({})};
+    const realtime = {emitUserUpdate: jest.fn()};
+    await new AdminService(prisma as any, push as any, realtime as any).reviewProfile("profile", "admin", {
       status: "VERIFIED",
     });
     expect(tx.notification.create).toHaveBeenCalledWith(
@@ -73,6 +75,8 @@ describe("AdminService", () => {
       })
     );
     expect(tx.auditLog.createMany.mock.calls[0][0].data).toHaveLength(2);
+    expect(push.dispatch).toHaveBeenCalledTimes(1);
+    expect(realtime.emitUserUpdate).toHaveBeenCalledWith("professional", "notifications");
   });
 
   it("does not let the verification desk modify a verified profile", async () => {
@@ -90,7 +94,7 @@ describe("AdminService", () => {
       },
     };
     await expect(
-      new AdminService(prisma as any).reviewProfile("profile", "admin", {
+      new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).reviewProfile("profile", "admin", {
         status: "REJECTED",
         reason: "Attempted review change",
       })
@@ -102,7 +106,7 @@ describe("AdminService", () => {
       verificationDocument: {findFirst: jest.fn().mockResolvedValue({profile: {userId: 'owner', verificationStatus: 'VERIFIED'}}), update: jest.fn()},
       professionalProfile: {update: jest.fn()}, providerPresence: {updateMany: jest.fn()}, notification: {create: jest.fn()}, auditLog: {create: jest.fn()}};
     const prisma = {$transaction: (fn: any) => fn(tx)};
-    await new AdminService(prisma as any).reviewDocument('profile', 'document', 'admin', {status: 'REJECTED', reason: 'Document expired'});
+    await new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).reviewDocument('profile', 'document', 'admin', {status: 'REJECTED', reason: 'Document expired'});
     expect(tx.professionalProfile.update).toHaveBeenCalledWith({where: {id: 'profile'}, data: {verificationStatus: 'REJECTED', onboardingStep: 'REVIEW', isAvailable: false}});
     expect(tx.providerPresence.updateMany).toHaveBeenCalledWith({where: {professionalProfileId: 'profile'}, data: {online: false}});
     expect(tx.notification.create.mock.calls[0][0].data.userId).toBe('owner');
@@ -126,7 +130,7 @@ describe("AdminService", () => {
       auditLog: {createMany: jest.fn()},
     };
     const prisma = {$transaction: (callback: (value: typeof tx) => unknown) => callback(tx)};
-    await new AdminService(prisma as any).reviewProfile('profile', 'admin', {
+    await new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).reviewProfile('profile', 'admin', {
       status: 'REJECTED',
       reason: 'Documents need correction',
     });
@@ -165,7 +169,7 @@ describe("AdminService", () => {
       user: { findUnique: jest.fn().mockResolvedValue(user) },
       $transaction: (callback: (value: typeof tx) => unknown) => callback(tx),
     };
-    const result = await new AdminService(prisma as any).changeUserStatus(
+    const result = await new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).changeUserStatus(
       "client-user",
       "admin-user",
       { status: AccountStatus.DEACTIVATED, reason: "Requested by operations" }
@@ -186,7 +190,7 @@ describe("AdminService", () => {
       },
     };
     await expect(
-      new AdminService(prisma as any).changeUserStatus(
+      new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).changeUserStatus(
         "another-admin",
         "admin-user",
         { status: AccountStatus.SUSPENDED, reason: "Invalid test" }
@@ -211,7 +215,7 @@ describe("AdminService", () => {
       user: { findFirst: jest.fn().mockResolvedValue({ id: "admin-user" }) },
       $transaction: (callback: (value: typeof tx) => unknown) => callback(tx),
     };
-    const result = await new AdminService(prisma as any).updateAdminProfile(
+    const result = await new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).updateAdminProfile(
       "admin-user",
       { displayName: " Operations Lead " }
     );
@@ -252,7 +256,7 @@ describe("AdminService", () => {
       user: { findFirst: jest.fn().mockResolvedValue(user) },
       $transaction: (callback: (value: typeof tx) => unknown) => callback(tx),
     };
-    const result = await new AdminService(prisma as any).updateUserDetails(
+    const result = await new AdminService(prisma as any, {dispatch: jest.fn().mockResolvedValue({})} as any, {emitUserUpdate: jest.fn()} as any).updateUserDetails(
       "client-user",
       "admin-user",
       { fullName: "New Name", city: "Coimbatore", state: "Tamil Nadu" }

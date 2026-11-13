@@ -1,7 +1,6 @@
 import React, {useState} from 'react';
 import {
   Animated,
-  Alert,
   NativeModules,
   Platform,
   Pressable,
@@ -33,6 +32,7 @@ import {MotionReveal} from '../components/MotionReveal';
 import {ScrollMotionBar, useScrollMotion} from '../components/ScrollMotionBar';
 import {useSessionStore} from '../stores/session';
 import {useProToast} from '../stores/proToast';
+import {confirmDialog} from '../stores/confirm';
 import {ProColors, ProType} from '../theme/professionalTheme';
 
 type Slot = {
@@ -312,29 +312,21 @@ export function ScheduleScreen() {
                 accessibilityLabel="Remove all available times"
                 disabled={remove.isPending}
                 onPress={() =>
-                  Alert.alert(
-                    'Remove all available times?',
-                    'Every upcoming slot will be removed. Existing bookings stay untouched.',
-                    [
-                      {text: 'Keep them', style: 'cancel'},
-                      {
-                        text: 'Remove all',
-                        style: 'destructive',
-                        onPress: async () => {
-                          try {
-                            for (const slot of availability.data?.slots ?? []) {
-                              await api.delete(`/professionals/me/availability/${slot.id}`);
-                            }
-                            toast('All available times removed.', 'success');
-                          } catch {
-                            toast('Some slots could not be removed.', 'error');
-                          } finally {
-                            refresh();
-                          }
-                        },
-                      },
-                    ],
-                  )
+                  void confirmDialog({title: 'Remove all available times?',
+                    message: 'Every upcoming slot will be removed. Existing bookings stay untouched.',
+                    confirmLabel: 'Remove all', cancelLabel: 'Keep them', destructive: true}).then(async ok => {
+                    if (!ok) return;
+                    try {
+                      for (const slot of availability.data?.slots ?? []) {
+                        await api.delete(`/professionals/me/availability/${slot.id}`);
+                      }
+                      toast('All available times removed.', 'success');
+                    } catch {
+                      toast('Some slots could not be removed.', 'error');
+                    } finally {
+                      refresh();
+                    }
+                  })
                 }
                 style={styles.clearAll}>
                 <Text style={styles.clearAllText}>{remove.isPending ? 'Removing…' : 'Clear all'}</Text>
@@ -349,18 +341,11 @@ export function ScheduleScreen() {
                   slot={slot}
                   removing={remove.isPending}
                   onRemove={() =>
-                    Alert.alert(
-                      'Remove available time?',
-                      'This time will no longer be offered for scheduling.',
-                      [
-                        {text: 'Keep it', style: 'cancel'},
-                        {
-                          text: 'Remove',
-                          style: 'destructive',
-                          onPress: () => remove.mutate(slot.id),
-                        },
-                      ],
-                    )
+                    void confirmDialog({title: 'Remove available time?',
+                      message: 'This time will no longer be offered for scheduling.',
+                      confirmLabel: 'Remove', cancelLabel: 'Keep it', destructive: true}).then(ok => {
+                      if (ok) remove.mutate(slot.id);
+                    })
                   }
                 />
               ))}

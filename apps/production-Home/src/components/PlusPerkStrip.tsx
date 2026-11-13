@@ -30,9 +30,9 @@ function PlusPerkStripInner({plan, consultFeePaisa}: {plan: AiPlanView; consultF
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="View NAHTREEK Plus benefits"
-      onPress={() => navigation.navigate('AiPlanner')}
+      onPress={() => navigation.navigate('Plus')}
       style={({pressed}) => [styles.strip, pressed && styles.pressed]}>
-      <Icon name={ICONS.star} size={20} color={Colors.amber} />
+      <Icon name={ICONS.star} size={20} color={Colors.navyDeep} />
       <View style={styles.copy}>
         <Text style={styles.title}>
           Plus members{consultFeePaisa != null && savings > 0 ? ` save ${inr(savings)} on this booking` : ' skip the wait'}
@@ -47,7 +47,7 @@ function PlusPerkStripInner({plan, consultFeePaisa}: {plan: AiPlanView; consultF
 }
 
 const styles = StyleSheet.create({
-  strip: {flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: ClientColors.accentSoft, borderWidth: 1, borderColor: ClientColors.accentBorder},
+  strip: {flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.navyDeep},
   pressed: {opacity: 0.85},
   copy: {flex: 1, gap: 2},
   title: {fontSize: 14, fontWeight: '700', color: Colors.navyDeep},

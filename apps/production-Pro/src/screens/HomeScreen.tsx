@@ -127,7 +127,7 @@ export function HomeScreen() {
       ].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
       return {data, meta: {total: (engineering?.meta.total ?? 0) + (services?.meta.total ?? 0)}};
     },
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
   const availability = useQuery({
@@ -137,7 +137,7 @@ export function HomeScreen() {
   const conversations = useQuery({
     queryKey: ['professional-conversations'],
     queryFn: () => api.get<ConversationPage>('/conversations?limit=50'),
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
   const dues = useQuery({
@@ -350,7 +350,7 @@ export function HomeScreen() {
           {attention.length ? attention.map(item => (
             <Pressable key={item.key} accessibilityRole="button" accessibilityLabel={`${item.title}. ${item.action}`} onPress={item.onPress} style={({pressed}) => [styles.attentionRow, pressed && styles.pressed]}>
               <View style={styles.attentionIcon}>
-                <MaterialCommunityIcons name={item.icon} size={22} color={item.tone === 'error' ? ProColors.error : item.tone === 'warning' ? ProColors.accentText : ProColors.primary} />
+                <MaterialCommunityIcons name={item.icon} size={22} color={item.tone === 'error' ? ProColors.error : item.tone === 'warning' ? ProColors.warning : ProColors.primary} />
               </View>
               <View style={styles.flex}><Text style={styles.attentionTitle}>{item.title}</Text><Text style={styles.attentionDetail}>{item.detail}</Text><Text numberOfLines={2} style={styles.attentionAction}>{item.action} →</Text></View>
             </Pressable>
@@ -544,7 +544,7 @@ function PriorityJobCard({job, onPress}: {job: HomeRequest; onPress: () => void}
 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: Colors.offWhite},
-  content: {padding: ProSpacing.xl, paddingBottom: Spacing.xxl},
+  content: {paddingHorizontal: ProSpacing.xl, paddingTop: ProSpacing.md, paddingBottom: Spacing.xxl},
   flex: {flex: 1, minWidth: 0},
   todayHeader: {flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 12},
   todayTitle: {...ProType.screen, color: ProColors.text},
@@ -566,7 +566,8 @@ const styles = StyleSheet.create({
   introImage: {position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, width: '100%', height: '100%'},
   introShade: {position: 'absolute', left: 0, right: 0, top: 0, bottom: 0},
   introCopy: {padding: 16, paddingTop: 20},
-  introEyebrow: {...Typography.badge, color: ProColors.accent, marginBottom: 6},
+  introEyebrow: {...Typography.badge, color: ProColors.surface, marginBottom: 6,
+    textShadowColor: 'rgba(17, 31, 53,0.9)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 3},
   introTitle: {...Typography.h2, color: Colors.white, marginBottom: 6},
   introBody: {...Typography.caption, color: Colors.slate200, lineHeight: 20},
   introButton: {alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: ProColors.accent, borderRadius: 14, paddingHorizontal: 14, minHeight: 52, marginTop: 14},

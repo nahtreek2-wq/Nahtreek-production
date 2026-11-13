@@ -101,7 +101,7 @@ export function MessagesScreen() {
   const conversations = useQuery({
     queryKey: ['professional-conversations'],
     queryFn: () => api.get<ConversationPage>('/conversations?limit=50'),
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
   const profile = useQuery({

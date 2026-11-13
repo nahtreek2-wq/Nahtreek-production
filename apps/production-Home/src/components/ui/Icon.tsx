@@ -67,6 +67,7 @@ export const ICONS = {
   checklist: 'format-list-checks',
   mic: 'microphone-outline',
   currency: 'currency-inr',
+  loans: 'bank-outline',
 } as const;
 
 export type IconName = (typeof ICONS)[keyof typeof ICONS];

@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {ActivityIndicator, Alert, Image, Linking, NativeModules, Pressable, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Image, Linking, NativeModules, Pressable, StyleSheet, Text, View} from 'react-native';
 import {WebView} from 'react-native-webview';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -11,6 +11,7 @@ import {ClientColors} from '../design-system/tokens';
 import {Icon, ICONS} from '../components/ui';
 import {headerStyles} from '../../../../packages/mobile-ui/headerStyles';
 import {api} from '../services/apiClient';
+import {confirmDialog} from '../stores/confirm';
 
 type Route = RouteProp<RootStackParamList, 'MapPreview'>;
 const mapBridge = NativeModules.NahtreekRuntimeConfig as {
@@ -121,7 +122,8 @@ export function MapPreviewScreen() {
 
   const openDirections = () => {
     void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`)
-      .catch(() => Alert.alert('Directions unavailable', 'Please try again when you are connected.'));
+      .catch(() => void confirmDialog({title: 'Directions unavailable', message: 'Please try again when you are connected.',
+        confirmLabel: 'OK', cancelLabel: null}));
   };
   const retry = () => {
     setAttempt(value => value + 1);
@@ -176,7 +178,7 @@ export function MapPreviewScreen() {
         ) : mapUrl && !mapError ? <><Image source={{uri: mapUrl}} style={styles.mapImage} resizeMode="cover"
           onLoad={() => setMapLoading(false)} onError={() => {setMapLoading(false); setMapError('Map image could not load. Use directions below.');}} />
           {!mapLoading ? <View style={[styles.pin, liveTracking && styles.livePin]} accessibilityLabel={liveTracking ? 'Professional live location' : 'Pinned location'} /> : null}</> : null}
-        {mapLoading && !mapError ? <ActivityIndicator size="large" color={ClientColors.accentIcon} /> : null}
+        {mapLoading && !mapError ? <ActivityIndicator size="large" color={ClientColors.primaryNavy} /> : null}
         {(!interactive || !centerHasCoordinates) && (mapError || !centerHasCoordinates) ? <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>
             {mapError || 'A map pin is not available for this address yet.'}

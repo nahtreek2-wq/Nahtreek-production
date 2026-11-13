@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Pressable, TouchableOpacity, View, Text, ScrollView, StyleSheet} from 'react-native';
+import {Pressable, TouchableOpacity, View, Text, ScrollView, RefreshControl, StyleSheet} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -72,7 +72,15 @@ export function ProviderProfileScreen() {
       <ErrorState title="Could not load this professional" message="Check your connection and try again."
         actionLabel={detail.isFetching ? 'Checking…' : 'Try again'} onAction={() => void detail.refetch()} />
     ) : (
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body}
+        refreshControl={
+          <RefreshControl
+            refreshing={detail.isRefetching}
+            onRefresh={() => void detail.refetch()}
+            tintColor={Colors.navyDeep}
+            colors={[Colors.navyDeep]}
+          />
+        }>
         <Card>
           <View style={styles.head}>
             <Avatar uri={pro.avatarUrl ?? undefined} name={pro.fullName} size={64} />
